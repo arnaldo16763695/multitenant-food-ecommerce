@@ -56,26 +56,17 @@ type AdminNavigationItem = {
 
 type SidebarNavItemProps = {
   readonly item: AdminNavigationItem
-  readonly baseAdminPath: string
-  readonly currentHash: string
   readonly pathname: string
 }
 
-function buildAdminHref(baseAdminPath: string, href: string) {
-  return `${baseAdminPath}${href}`
+function isPathActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-function isAnchorActive(currentHash: string, href: string) {
-  return currentHash === href || (!currentHash && href === "#overview")
-}
-
-function SidebarNavItem({ item, baseAdminPath, currentHash, pathname }: SidebarNavItemProps) {
+function SidebarNavItem({ item, pathname }: SidebarNavItemProps) {
   const hasChildren = Boolean(item.children?.length)
-  const isCurrentPage = pathname === baseAdminPath
-  const isParentActive = isCurrentPage && isAnchorActive(currentHash, item.href)
-  const hasActiveChild =
-    isCurrentPage &&
-    item.children?.some((child) => isAnchorActive(currentHash, child.href))
+  const isParentActive = isPathActive(pathname, item.href)
+  const hasActiveChild = Boolean(item.children?.some((child) => isPathActive(pathname, child.href)))
 
   const [isOpen, setIsOpen] = React.useState(Boolean(hasActiveChild))
 
@@ -89,7 +80,7 @@ function SidebarNavItem({ item, baseAdminPath, currentHash, pathname }: SidebarN
     return (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isParentActive}>
-          <Link href={buildAdminHref(baseAdminPath, item.href)}>
+          <Link href={item.href}>
             <item.icon />
             <span>{item.title}</span>
           </Link>
@@ -112,12 +103,12 @@ function SidebarNavItem({ item, baseAdminPath, currentHash, pathname }: SidebarN
         <CollapsibleContent>
           <SidebarMenuSub>
             {item.children?.map((child) => {
-              const isChildActive = isCurrentPage && isAnchorActive(currentHash, child.href)
+              const isChildActive = isPathActive(pathname, child.href)
 
               return (
                 <SidebarMenuSubItem key={child.title}>
                   <SidebarMenuSubButton asChild isActive={isChildActive}>
-                    <Link href={buildAdminHref(baseAdminPath, child.href)}>{child.title}</Link>
+                    <Link href={child.href}>{child.title}</Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               )
@@ -132,36 +123,36 @@ function SidebarNavItem({ item, baseAdminPath, currentHash, pathname }: SidebarN
 const adminNavigation: readonly AdminNavigationItem[] = [
   {
     title: "Resumen",
-    href: "#overview",
+    href: "/overview",
     icon: LayoutDashboard,
   },
   {
     title: "Catalogo",
-    href: "#catalog",
+    href: "/catalog",
     icon: Store,
     children: [
-      { title: "Productos", href: "#catalog" },
-      { title: "Categorias", href: "#catalog" },
-      { title: "Modificadores", href: "#catalog" },
+      { title: "Productos", href: "/catalog" },
+      { title: "Categorias", href: "/catalog" },
+      { title: "Modificadores", href: "/catalog" },
     ],
   },
   {
     title: "Pedidos",
-    href: "#orders",
+    href: "/orders",
     icon: ListOrdered,
     children: [
-      { title: "Activos", href: "#orders" },
-      { title: "Incidencias", href: "#orders" },
+      { title: "Activos", href: "/orders" },
+      { title: "Incidencias", href: "/orders" },
     ],
   },
   {
     title: "Sucursales",
-    href: "#settings",
+    href: "/branches",
     icon: MapPinned,
   },
   {
     title: "Configuracion",
-    href: "#settings",
+    href: "/settings",
     icon: Settings2,
   },
 ] as const
@@ -173,19 +164,10 @@ type AppSidebarProps = {
 export function AppSidebar({ tenantSlug }: AppSidebarProps) {
   const baseAdminPath = `/app/${tenantSlug}/admin`
   const pathname = usePathname()
-  const [currentHash, setCurrentHash] = React.useState("")
 
-  React.useEffect(() => {
-    // Hash-based navigation keeps the current admin shell simple until each module gets its own route.
-    const syncHash = () => {
-      setCurrentHash(window.location.hash || "")
-    }
-
-    syncHash()
-    window.addEventListener("hashchange", syncHash)
-
-    return () => window.removeEventListener("hashchange", syncHash)
-  }, [])
+  function buildAdminHref(href: string) {
+    return `${baseAdminPath}${href === "/overview" ? "" : href}`
+  }
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -225,9 +207,11 @@ export function AppSidebar({ tenantSlug }: AppSidebarProps) {
               {adminNavigation.map((item) => (
                 <SidebarNavItem
                   key={item.title}
-                  item={item}
-                  baseAdminPath={baseAdminPath}
-                  currentHash={currentHash}
+                  item={{
+                    ...item,
+                    href: buildAdminHref(item.href),
+                    children: item.children?.map((child) => ({ ...child, href: buildAdminHref(child.href) })),
+                  }}
                   pathname={pathname}
                 />
               ))}
@@ -240,24 +224,24 @@ export function AppSidebar({ tenantSlug }: AppSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#catalog")}>
-                  <Link href={buildAdminHref(baseAdminPath, "#catalog")}>
+                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
+                  <Link href={buildAdminHref("/catalog")}>
                     <Tag />
                     <span>Promociones</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#settings")}>
-                  <Link href={buildAdminHref(baseAdminPath, "#settings")}>
+                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/settings"))}>
+                  <Link href={buildAdminHref("/settings")}>
                     <Users />
                     <span>Staff</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#catalog")}>
-                  <Link href={buildAdminHref(baseAdminPath, "#catalog")}>
+                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
+                  <Link href={buildAdminHref("/catalog")}>
                     <Package2 />
                     <span>Inventario</span>
                   </Link>

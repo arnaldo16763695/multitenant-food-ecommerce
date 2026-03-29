@@ -1,4 +1,4 @@
-import { AdminDashboard } from "@/components/admin/admin-dashboard"
+import { redirect } from "next/navigation"
 
 type AdminPageProps = {
   readonly params: Promise<{
@@ -9,5 +9,5 @@ type AdminPageProps = {
 export default async function AdminPage({ params }: AdminPageProps) {
   const { tenantSlug } = await params
 
-  return <AdminDashboard tenantSlug={tenantSlug} />
+  redirect(`/app/${tenantSlug}/admin/overview`)
 }
