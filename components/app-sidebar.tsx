@@ -1,7 +1,8 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
   ChevronDown,
@@ -41,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { NavUser } from "./nav-user"
 
 type AdminNavigationItem = {
   readonly title: string
@@ -50,6 +52,81 @@ type AdminNavigationItem = {
     readonly title: string
     readonly href: string
   }[]
+}
+
+type SidebarNavItemProps = {
+  readonly item: AdminNavigationItem
+  readonly baseAdminPath: string
+  readonly currentHash: string
+  readonly pathname: string
+}
+
+function buildAdminHref(baseAdminPath: string, href: string) {
+  return `${baseAdminPath}${href}`
+}
+
+function isAnchorActive(currentHash: string, href: string) {
+  return currentHash === href || (!currentHash && href === "#overview")
+}
+
+function SidebarNavItem({ item, baseAdminPath, currentHash, pathname }: SidebarNavItemProps) {
+  const hasChildren = Boolean(item.children?.length)
+  const isCurrentPage = pathname === baseAdminPath
+  const isParentActive = isCurrentPage && isAnchorActive(currentHash, item.href)
+  const hasActiveChild =
+    isCurrentPage &&
+    item.children?.some((child) => isAnchorActive(currentHash, child.href))
+
+  const [isOpen, setIsOpen] = React.useState(Boolean(hasActiveChild))
+
+  React.useEffect(() => {
+    if (hasActiveChild) {
+      setIsOpen(true)
+    }
+  }, [hasActiveChild])
+
+  if (!hasChildren) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild isActive={isParentActive}>
+          <Link href={buildAdminHref(baseAdminPath, item.href)}>
+            <item.icon />
+            <span>{item.title}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
+  }
+
+  return (
+    <Collapsible asChild className="group/collapsible" open={isOpen} onOpenChange={setIsOpen}>
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton isActive={Boolean(isParentActive || hasActiveChild)}>
+            <item.icon />
+            <span>{item.title}</span>
+            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {item.children?.map((child) => {
+              const isChildActive = isCurrentPage && isAnchorActive(currentHash, child.href)
+
+              return (
+                <SidebarMenuSubItem key={child.title}>
+                  <SidebarMenuSubButton asChild isActive={isChildActive}>
+                    <Link href={buildAdminHref(baseAdminPath, child.href)}>{child.title}</Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              )
+            })}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  )
 }
 
 const adminNavigation: readonly AdminNavigationItem[] = [
@@ -89,10 +166,26 @@ const adminNavigation: readonly AdminNavigationItem[] = [
   },
 ] as const
 
-export function AppSidebar() {
-  const params = useParams<{ tenantSlug: string }>()
-  const tenantSlug = params.tenantSlug ?? "demo-brand"
+type AppSidebarProps = {
+  readonly tenantSlug: string
+}
+
+export function AppSidebar({ tenantSlug }: AppSidebarProps) {
   const baseAdminPath = `/app/${tenantSlug}/admin`
+  const pathname = usePathname()
+  const [currentHash, setCurrentHash] = React.useState("")
+
+  React.useEffect(() => {
+    // Hash-based navigation keeps the current admin shell simple until each module gets its own route.
+    const syncHash = () => {
+      setCurrentHash(window.location.hash || "")
+    }
+
+    syncHash()
+    window.addEventListener("hashchange", syncHash)
+
+    return () => window.removeEventListener("hashchange", syncHash)
+  }, [])
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -130,41 +223,13 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {adminNavigation.map((item) => (
-                <Collapsible key={item.title} asChild defaultOpen={item.title === "Catalogo"} className="group/collapsible">
-                  <SidebarMenuItem>
-                    {item.children ? (
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton>
-                          <item.icon />
-                          <span>{item.title}</span>
-                          <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                    ) : (
-                      <SidebarMenuButton asChild>
-                        <Link href={`${baseAdminPath}${item.href}`}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    )}
-
-
-                    {item.children ? (
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {item.children.map((child) => (
-                            <SidebarMenuSubItem key={child.title}>
-                              <SidebarMenuSubButton asChild>
-                                <Link href={`${baseAdminPath}${child.href}`}>{child.title}</Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    ) : null}
-                  </SidebarMenuItem>
-                </Collapsible>
+                <SidebarNavItem
+                  key={item.title}
+                  item={item}
+                  baseAdminPath={baseAdminPath}
+                  currentHash={currentHash}
+                  pathname={pathname}
+                />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -175,24 +240,24 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href={`${baseAdminPath}#catalog`}>
+                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#catalog")}>
+                  <Link href={buildAdminHref(baseAdminPath, "#catalog")}>
                     <Tag />
                     <span>Promociones</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href={`${baseAdminPath}#settings`}>
+                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#settings")}>
+                  <Link href={buildAdminHref(baseAdminPath, "#settings")}>
                     <Users />
                     <span>Staff</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link href={`${baseAdminPath}#catalog`}>
+                <SidebarMenuButton asChild isActive={pathname === baseAdminPath && isAnchorActive(currentHash, "#catalog")}>
+                  <Link href={buildAdminHref(baseAdminPath, "#catalog")}>
                     <Package2 />
                     <span>Inventario</span>
                   </Link>
@@ -204,16 +269,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link href="/brands">
-                <Store />
-                <span>Volver al marketplace</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser user={{ name: "John Doe", email: "john.doe@example.com", avatar: "/placeholder.svg" }} />
       </SidebarFooter>
 
       <SidebarRail />
