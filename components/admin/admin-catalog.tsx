@@ -74,8 +74,12 @@ function formatBranchSummary(product: CatalogProduct) {
   return `${availableBranches}/${product.branchStatuses.length} activas`
 }
 
-export function AdminCatalogProducts() {
-  const [products, setProducts] = React.useState<readonly CatalogProduct[]>(catalogProducts)
+type AdminCatalogProductsProps = {
+  readonly initialProducts?: readonly CatalogProduct[]
+}
+
+export function AdminCatalogProducts({ initialProducts = catalogProducts }: AdminCatalogProductsProps) {
+  const [products, setProducts] = React.useState<readonly CatalogProduct[]>(initialProducts)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedCategory, setSelectedCategory] = React.useState("Todos")
   const [isProductDialogOpen, setIsProductDialogOpen] = React.useState(false)

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Plus, Search } from "lucide-react"
 
-import { catalogModifierGroups } from "@/lib/config/admin-catalog"
+import { catalogModifierGroups, type CatalogModifierGroup } from "@/lib/config/admin-catalog"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -12,20 +12,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-export function AdminCatalogModifiers() {
+type AdminCatalogModifiersProps = {
+  readonly initialModifierGroups?: readonly CatalogModifierGroup[]
+}
+
+export function AdminCatalogModifiers({ initialModifierGroups = catalogModifierGroups }: AdminCatalogModifiersProps) {
   const [searchQuery, setSearchQuery] = React.useState("")
 
   const filteredModifierGroups = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     if (!normalizedQuery) {
-      return catalogModifierGroups
+      return initialModifierGroups
     }
 
-    return catalogModifierGroups.filter((group) => {
+    return initialModifierGroups.filter((group) => {
       return [group.name, group.type, group.appliedTo].join(" ").toLowerCase().includes(normalizedQuery)
     })
-  }, [searchQuery])
+  }, [initialModifierGroups, searchQuery])
 
   return (
     <AdminPageShell

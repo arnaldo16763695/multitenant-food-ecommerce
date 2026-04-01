@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Plus, Search } from "lucide-react"
 
-import { catalogCategories } from "@/lib/config/admin-catalog"
+import { catalogCategories, type CatalogCategory } from "@/lib/config/admin-catalog"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -12,18 +12,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-export function AdminCatalogCategories() {
+type AdminCatalogCategoriesProps = {
+  readonly initialCategories?: readonly CatalogCategory[]
+}
+
+export function AdminCatalogCategories({ initialCategories = catalogCategories }: AdminCatalogCategoriesProps) {
   const [searchQuery, setSearchQuery] = React.useState("")
 
   const filteredCategories = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     if (!normalizedQuery) {
-      return catalogCategories
+      return initialCategories
     }
 
-    return catalogCategories.filter((category) => category.name.toLowerCase().includes(normalizedQuery))
-  }, [searchQuery])
+    return initialCategories.filter((category) => category.name.toLowerCase().includes(normalizedQuery))
+  }, [initialCategories, searchQuery])
 
   return (
     <AdminPageShell

@@ -1,5 +1,15 @@
 import { AdminCatalogCategories } from "@/components/admin/admin-catalog-categories"
+import { getAdminCatalogModule } from "@/lib/data/admin-catalog"
 
-export default function AdminCatalogCategoriesPage() {
-  return <AdminCatalogCategories />
+type AdminCatalogCategoriesPageProps = {
+  readonly params: Promise<{
+    tenantSlug: string
+  }>
+}
+
+export default async function AdminCatalogCategoriesPage({ params }: AdminCatalogCategoriesPageProps) {
+  const { tenantSlug } = await params
+  const { categories } = await getAdminCatalogModule(tenantSlug)
+
+  return <AdminCatalogCategories initialCategories={categories} />
 }

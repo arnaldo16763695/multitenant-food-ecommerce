@@ -159,9 +159,14 @@ const adminNavigation: readonly AdminNavigationItem[] = [
 
 type AppSidebarProps = {
   readonly tenantSlug: string
+  readonly user: {
+    name: string
+    email: string
+    avatar: string
+  }
 }
 
-export function AppSidebar({ tenantSlug }: AppSidebarProps) {
+export function AppSidebar({ tenantSlug, user }: AppSidebarProps) {
   const baseAdminPath = `/app/${tenantSlug}/admin`
   const pathname = usePathname()
 
@@ -253,7 +258,7 @@ export function AppSidebar({ tenantSlug }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser user={{ name: "John Doe", email: "john.doe@example.com", avatar: "/placeholder.svg" }} />
+        <NavUser user={user} />
       </SidebarFooter>
 
       <SidebarRail />

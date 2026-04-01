@@ -1,17 +1,21 @@
 "use client"
 
+import * as React from "react"
 import {
   BadgeCheck,
   Bell,
   ChevronsUpDown,
   CreditCard,
+  LoaderCircle,
   LogOut,
   Moon,
   Sparkles,
   Sun,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { useAdminTheme } from "@/components/admin/admin-theme-provider"
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
   Avatar,
   AvatarFallback,
@@ -44,7 +48,24 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
   const { theme, toggleTheme } = useAdminTheme()
+  const [isSigningOut, setIsSigningOut] = React.useState(false)
+
+  async function handleSignOut() {
+    const supabase = createSupabaseBrowserClient()
+
+    if (!supabase) {
+      router.replace("/auth/admin/login")
+      router.refresh()
+      return
+    }
+
+    setIsSigningOut(true)
+    await supabase.auth.signOut()
+    router.replace("/auth/admin/login")
+    router.refresh()
+  }
 
   return (
     <SidebarMenu>
@@ -126,8 +147,8 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOut />
+            <DropdownMenuItem onSelect={handleSignOut} disabled={isSigningOut}>
+              {isSigningOut ? <LoaderCircle className="animate-spin" /> : <LogOut />}
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -1,7 +1,7 @@
 import { ArrowRight, Layers3, SlidersHorizontal } from "lucide-react"
 import Link from "next/link"
 
-import { catalogCategories, catalogModifierGroups, catalogProducts } from "@/lib/config/admin-catalog"
+import type { CatalogCategory, CatalogModifierGroup, CatalogProduct } from "@/lib/config/admin-catalog"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 type AdminCatalogOverviewProps = {
   readonly tenantSlug: string
+  readonly products: readonly CatalogProduct[]
+  readonly categories: readonly CatalogCategory[]
+  readonly modifierGroups: readonly CatalogModifierGroup[]
+  readonly source: "supabase" | "mock"
 }
 
-export function AdminCatalogOverview({ tenantSlug }: AdminCatalogOverviewProps) {
+export function AdminCatalogOverview({ tenantSlug, products, categories, modifierGroups, source }: AdminCatalogOverviewProps) {
   const baseCatalogPath = `/app/${tenantSlug}/admin/catalog`
 
   return (
@@ -19,7 +23,7 @@ export function AdminCatalogOverview({ tenantSlug }: AdminCatalogOverviewProps) 
       eyebrow="Catalogo"
       title="Centro del menu por tenant"
       description="El catalogo ahora funciona como modulo contenedor. Desde aqui entras a productos, categorias y modificadores con una estructura mas clara y escalable para CRUD reales."
-      badge="Modulo organizado por entidades"
+      badge={source === "supabase" ? "Datos cargados desde Supabase" : "Modo mock hasta configurar Supabase"}
     >
       <section className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -29,7 +33,7 @@ export function AdminCatalogOverview({ tenantSlug }: AdminCatalogOverviewProps) 
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {catalogProducts.length} productos base listos para evolucionar a datos reales.
+              {products.length} productos base listos para evolucionar a datos reales.
             </div>
             <Button asChild className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/products`}>
@@ -47,7 +51,7 @@ export function AdminCatalogOverview({ tenantSlug }: AdminCatalogOverviewProps) 
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {catalogCategories.length} categorias listas para orden y control de visibilidad.
+              {categories.length} categorias listas para orden y control de visibilidad.
             </div>
             <Button asChild variant="outline" className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/categories`}>
@@ -65,7 +69,7 @@ export function AdminCatalogOverview({ tenantSlug }: AdminCatalogOverviewProps) 
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {catalogModifierGroups.length} grupos preparados para reglas min/max y asignacion por producto.
+              {modifierGroups.length} grupos preparados para reglas min/max y asignacion por producto.
             </div>
             <Button asChild variant="outline" className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/modifiers`}>
