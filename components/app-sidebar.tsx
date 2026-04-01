@@ -131,9 +131,9 @@ const adminNavigation: readonly AdminNavigationItem[] = [
     href: "/catalog",
     icon: Store,
     children: [
-      { title: "Productos", href: "/catalog" },
-      { title: "Categorias", href: "/catalog" },
-      { title: "Modificadores", href: "/catalog" },
+      { title: "Productos", href: "/catalog/products" },
+      { title: "Categorias", href: "/catalog/categories" },
+      { title: "Modificadores", href: "/catalog/modifiers" },
     ],
   },
   {
@@ -225,7 +225,7 @@ export function AppSidebar({ tenantSlug }: AppSidebarProps) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
-                  <Link href={buildAdminHref("/catalog")}>
+                  <Link href={buildAdminHref("/catalog/products")}>
                     <Tag />
                     <span>Promociones</span>
                   </Link>
@@ -241,7 +241,7 @@ export function AppSidebar({ tenantSlug }: AppSidebarProps) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
-                  <Link href={buildAdminHref("/catalog")}>
+                  <Link href={buildAdminHref("/catalog/products")}>
                     <Package2 />
                     <span>Inventario</span>
                   </Link>
