@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation"
 
-import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type AdminAccessContext = {
@@ -50,22 +49,16 @@ export async function requireAdminAccess(tenantSlug: string): Promise<AdminAcces
     redirect(`/auth/admin/login?next=${encodeURIComponent(nextPath)}`)
   }
 
-  const adminClient = createSupabaseAdminClient()
-
-  if (!adminClient) {
-    throw new Error("Supabase admin client is not configured.")
-  }
-
   const [profileResult, tenantResult] = await Promise.all([
-    adminClient.from("profiles").select("id, full_name, email").eq("auth_user_id", user.id).limit(1).maybeSingle<ProfileRow>(),
-    adminClient.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>(),
+    supabase.from("profiles").select("id, full_name, email").eq("auth_user_id", user.id).limit(1).maybeSingle<ProfileRow>(),
+    supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>(),
   ])
 
   if (profileResult.error || !profileResult.data || tenantResult.error || !tenantResult.data) {
     redirect(`/auth/admin/login?next=${encodeURIComponent(nextPath)}&reason=access`)
   }
 
-  const membershipResult = await adminClient
+  const membershipResult = await supabase
     .from("tenant_memberships")
     .select("tenant_id, role")
     .eq("tenant_id", tenantResult.data.id)

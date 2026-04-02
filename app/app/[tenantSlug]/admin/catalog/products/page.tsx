@@ -11,5 +11,5 @@ export default async function AdminCatalogProductsPage({ params }: AdminCatalogP
   const { tenantSlug } = await params
   const { products } = await getAdminCatalogModule(tenantSlug)
 
-  return <AdminCatalogProducts initialProducts={products} />
+  return <AdminCatalogProducts tenantSlug={tenantSlug} initialProducts={products} />
 }

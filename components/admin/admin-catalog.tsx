@@ -2,8 +2,15 @@
 
 import * as React from "react"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { catalogProducts, type CatalogProduct } from "@/lib/config/admin-catalog"
+import {
+  createProductAction,
+  duplicateProductAction,
+  toggleProductStatusAction,
+  updateProductAction,
+} from "@/app/app/[tenantSlug]/admin/catalog/products/actions"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -75,18 +82,24 @@ function formatBranchSummary(product: CatalogProduct) {
 }
 
 type AdminCatalogProductsProps = {
+  readonly tenantSlug: string
   readonly initialProducts?: readonly CatalogProduct[]
 }
 
-export function AdminCatalogProducts({ initialProducts = catalogProducts }: AdminCatalogProductsProps) {
-  const [products, setProducts] = React.useState<readonly CatalogProduct[]>(initialProducts)
+export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProducts }: AdminCatalogProductsProps) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedCategory, setSelectedCategory] = React.useState("Todos")
   const [isProductDialogOpen, setIsProductDialogOpen] = React.useState(false)
   const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = React.useState(false)
   const [productDialogMode, setProductDialogMode] = React.useState<ProductDialogMode>("create")
-  const [productFormValues, setProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(products.length))
-  const [initialProductFormValues, setInitialProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(products.length))
+  const [formErrorMessage, setFormErrorMessage] = React.useState("")
+  const [isSavingProduct, startSavingProduct] = React.useTransition()
+  const [isRunningRowAction, startRowAction] = React.useTransition()
+  const [productFormValues, setProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length))
+  const [initialProductFormValues, setInitialProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length))
+
+  const products = initialProducts
 
   const categoryFilters = React.useMemo(() => {
     return ["Todos", ...new Set(products.map((product) => product.category))].filter(Boolean)
@@ -122,6 +135,7 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
     setProductDialogMode("create")
     setInitialProductFormValues(emptyProduct)
     setProductFormValues(emptyProduct)
+    setFormErrorMessage("")
     setIsProductDialogOpen(true)
   }
 
@@ -130,33 +144,22 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
     setProductDialogMode("edit")
     setInitialProductFormValues(nextValues)
     setProductFormValues(nextValues)
+    setFormErrorMessage("")
     setIsProductDialogOpen(true)
   }
 
-  function duplicateProduct(product: CatalogProduct) {
-    const duplicatedProduct: CatalogProduct = {
-      ...product,
-      id: `${product.id}-copy-${Date.now()}`,
-      name: `${product.name} Copy`,
-      status: "Draft",
-    }
+  function runWithRefresh(action: () => Promise<{ ok: boolean; error?: string }>, onSuccess?: () => void) {
+    startRowAction(async () => {
+      const result = await action()
 
-    setProducts((currentProducts) => [duplicatedProduct, ...currentProducts])
-  }
+      if (!result.ok) {
+        setFormErrorMessage(result.error ?? "No pudimos completar la accion.")
+        return
+      }
 
-  function toggleProductStatus(product: CatalogProduct) {
-    setProducts((currentProducts) =>
-      currentProducts.map((currentProduct) => {
-        if (currentProduct.id !== product.id) {
-          return currentProduct
-        }
-
-        return {
-          ...currentProduct,
-          status: currentProduct.status === "Activo" ? "Draft" : "Activo",
-        }
-      })
-    )
+      onSuccess?.()
+      router.refresh()
+    })
   }
 
   function handleProductDialogOpenChange(nextOpen: boolean) {
@@ -174,6 +177,7 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
   }
 
   function handleFieldChange(field: keyof ProductFormValues, value: string) {
+    setFormErrorMessage("")
     setProductFormValues((currentValues) => ({
       ...currentValues,
       [field]: value,
@@ -182,59 +186,32 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
 
   function saveProduct() {
     if (!productFormValues.name.trim() || !productFormValues.category.trim() || !productFormValues.basePrice.trim()) {
+      setFormErrorMessage("Completa nombre, categoria y precio base valido.")
       return
     }
 
-    if (productDialogMode === "create") {
-      const newProduct: CatalogProduct = {
-        id: productFormValues.id,
-        name: productFormValues.name.trim(),
-        category: productFormValues.category.trim(),
-        description: productFormValues.description.trim(),
-        basePrice: productFormValues.basePrice.trim(),
+    startSavingProduct(async () => {
+      const payload = {
+        name: productFormValues.name,
+        category: productFormValues.category,
+        description: productFormValues.description,
+        basePrice: productFormValues.basePrice,
         status: productFormValues.status,
-        modifierGroups: [],
-        tags: ["New"],
-        branchStatuses: [
-          { branchName: "Centro", availability: "Disponible", price: productFormValues.basePrice.trim(), prepTime: "10 min" },
-          { branchName: "Norte", availability: "Pausado", price: productFormValues.basePrice.trim(), prepTime: "12 min" },
-        ],
+      } as const
+
+      const result =
+        productDialogMode === "create"
+          ? await createProductAction(tenantSlug, payload)
+          : await updateProductAction(productFormValues.id, tenantSlug, payload)
+
+      if (!result.ok) {
+        setFormErrorMessage(result.error ?? "No pudimos guardar el producto.")
+        return
       }
 
-      setProducts((currentProducts) => [newProduct, ...currentProducts])
-      setInitialProductFormValues(buildFormValues(newProduct))
-      setProductFormValues(buildFormValues(newProduct))
       closeProductDialog()
-      return
-    }
-
-    setProducts((currentProducts) =>
-      currentProducts.map((currentProduct) => {
-        if (currentProduct.id !== productFormValues.id) {
-          return currentProduct
-        }
-
-        return {
-          ...currentProduct,
-          name: productFormValues.name.trim(),
-          category: productFormValues.category.trim(),
-          description: productFormValues.description.trim(),
-          basePrice: productFormValues.basePrice.trim(),
-          status: productFormValues.status,
-          branchStatuses: currentProduct.branchStatuses.map((branchStatus, index) =>
-            index === 0
-              ? {
-                  ...branchStatus,
-                  price: productFormValues.basePrice.trim(),
-                }
-              : branchStatus
-          ),
-        }
-      })
-    )
-
-    setInitialProductFormValues(productFormValues)
-    closeProductDialog()
+      router.refresh()
+    })
   }
 
   function saveAndCloseUnsavedDialog() {
@@ -350,7 +327,7 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44 rounded-xl">
                               <DropdownMenuItem onSelect={() => openEditDialog(product)}>Editar producto</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => duplicateProduct(product)}>Duplicar</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => runWithRefresh(() => duplicateProductAction(product.id, tenantSlug))}>Duplicar</DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={() => {
                                   openEditDialog(product)
@@ -359,7 +336,7 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
                                 Ver detalle
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem onSelect={() => toggleProductStatus(product)}>
+                              <DropdownMenuItem onSelect={() => runWithRefresh(() => toggleProductStatusAction(product.id, tenantSlug, product.status))}>
                                 {product.status === "Activo" ? "Pausar" : "Activar"}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -427,13 +404,17 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
                 </select>
               </label>
             </div>
+
+            {formErrorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => handleProductDialogOpenChange(false)}>
+            <Button variant="outline" onClick={() => handleProductDialogOpenChange(false)} disabled={isSavingProduct}>
               Cerrar
             </Button>
-            <Button onClick={saveProduct}>{productDialogMode === "create" ? "Crear producto" : "Guardar cambios"}</Button>
+            <Button onClick={saveProduct} disabled={isSavingProduct || isRunningRowAction}>
+              {productDialogMode === "create" ? "Crear producto" : "Guardar cambios"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -445,13 +426,15 @@ export function AdminCatalogProducts({ initialProducts = catalogProducts }: Admi
             <DialogDescription>Detectamos cambios en el formulario. Si cierras ahora, puedes perderlos. Elige como quieres continuar.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUnsavedDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsUnsavedDialogOpen(false)} disabled={isSavingProduct}>
               Seguir editando
             </Button>
-            <Button variant="destructive" onClick={discardChanges}>
+            <Button variant="destructive" onClick={discardChanges} disabled={isSavingProduct}>
               Cerrar sin guardar
             </Button>
-            <Button onClick={saveAndCloseUnsavedDialog}>Guardar y cerrar</Button>
+            <Button onClick={saveAndCloseUnsavedDialog} disabled={isSavingProduct}>
+              Guardar y cerrar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
