@@ -30,3 +30,37 @@ export type CreateOrderResult = {
   readonly orderNumber?: number
   readonly error?: string
 }
+
+export type CustomerOrderSummary = {
+  readonly id: string
+  readonly orderNumber: number
+  readonly status: string
+  readonly fulfillmentType: "pickup" | "delivery"
+  readonly totalAmount: number
+  readonly placedAt: string
+  readonly itemCount: number
+}
+
+export type CustomerOrderDetailItem = {
+  readonly id: string
+  readonly productName: string
+  readonly categoryName: string | null
+  readonly quantity: number
+  readonly unitPrice: number
+  readonly lineTotal: number
+}
+
+export type CustomerOrderDetail = {
+  readonly id: string
+  readonly orderNumber: number
+  readonly status: string
+  readonly fulfillmentType: "pickup" | "delivery"
+  readonly totalAmount: number
+  readonly subtotalAmount: number
+  readonly placedAt: string
+  readonly customerName: string
+  readonly customerPhone: string | null
+  readonly customerEmail: string | null
+  readonly notes: string | null
+  readonly items: readonly CustomerOrderDetailItem[]
+}

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { CreateOrderInput, CreateOrderResult } from "@/lib/domain/order"
+import type { CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -17,6 +17,44 @@ type CategoryRow = {
 type OrderRow = {
   id: string
   order_number: number
+}
+
+type CustomerOrderRow = {
+  id: string
+  order_number: number
+  status: string
+  fulfillment_type: "pickup" | "delivery"
+  total_amount: number
+  placed_at: string
+}
+
+type OrderItemCountRow = {
+  order_id: string
+  quantity: number
+}
+
+type CustomerOrderDetailRow = {
+  id: string
+  order_number: number
+  status: string
+  fulfillment_type: "pickup" | "delivery"
+  total_amount: number
+  subtotal_amount: number
+  placed_at: string
+  customer_name: string
+  customer_phone: string | null
+  customer_email: string | null
+  notes: string | null
+}
+
+type CustomerOrderDetailItemRow = {
+  id: string
+  order_id: string
+  product_name_snapshot: string
+  category_name_snapshot: string | null
+  quantity: number
+  unit_price_snapshot: number
+  line_total: number
 }
 
 export async function createStorefrontOrder(supabase: SupabaseClient, input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -156,5 +194,117 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
     ok: true,
     orderId: orderResult.data.id,
     orderNumber: orderResult.data.order_number,
+  }
+}
+
+export async function getCustomerOrders(supabase: SupabaseClient, tenantSlug: string, customerId: string): Promise<readonly CustomerOrderSummary[]> {
+  const tenantResult = await supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>()
+
+  if (tenantResult.error || !tenantResult.data) {
+    return []
+  }
+
+  const ordersResult = await supabase
+    .from("orders")
+    .select("id, order_number, status, fulfillment_type, total_amount, placed_at")
+    .eq("tenant_id", tenantResult.data.id)
+    .eq("customer_id", customerId)
+    .order("placed_at", { ascending: false })
+    .returns<CustomerOrderRow[]>()
+
+  if (ordersResult.error) {
+    return []
+  }
+
+  const orders = ordersResult.data ?? []
+  const orderIds = orders.map((order) => order.id)
+
+  const orderItemsResult = orderIds.length
+    ? await supabase.from("order_items").select("order_id, quantity").in("order_id", orderIds).returns<OrderItemCountRow[]>()
+    : { data: [], error: null }
+
+  if (orderItemsResult.error) {
+    return orders.map((order) => ({
+      id: order.id,
+      orderNumber: order.order_number,
+      status: order.status,
+      fulfillmentType: order.fulfillment_type,
+      totalAmount: Number(order.total_amount),
+      placedAt: order.placed_at,
+      itemCount: 0,
+    }))
+  }
+
+  const itemCountMap = (orderItemsResult.data ?? []).reduce<Map<string, number>>((map, item) => {
+    map.set(item.order_id, (map.get(item.order_id) ?? 0) + item.quantity)
+    return map
+  }, new Map())
+
+  return orders.map((order) => ({
+    id: order.id,
+    orderNumber: order.order_number,
+    status: order.status,
+    fulfillmentType: order.fulfillment_type,
+    totalAmount: Number(order.total_amount),
+    placedAt: order.placed_at,
+    itemCount: itemCountMap.get(order.id) ?? 0,
+  }))
+}
+
+export async function getCustomerOrderDetail(
+  supabase: SupabaseClient,
+  tenantSlug: string,
+  customerId: string,
+  orderId: string
+): Promise<CustomerOrderDetail | null> {
+  const tenantResult = await supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>()
+
+  if (tenantResult.error || !tenantResult.data) {
+    return null
+  }
+
+  const orderResult = await supabase
+    .from("orders")
+    .select("id, order_number, status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
+    .eq("tenant_id", tenantResult.data.id)
+    .eq("customer_id", customerId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<CustomerOrderDetailRow>()
+
+  if (orderResult.error || !orderResult.data) {
+    return null
+  }
+
+  const orderItemsResult = await supabase
+    .from("order_items")
+    .select("id, order_id, product_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total")
+    .eq("order_id", orderResult.data.id)
+    .returns<CustomerOrderDetailItemRow[]>()
+
+  if (orderItemsResult.error) {
+    return null
+  }
+
+  return {
+    id: orderResult.data.id,
+    orderNumber: orderResult.data.order_number,
+    status: orderResult.data.status,
+    fulfillmentType: orderResult.data.fulfillment_type,
+    totalAmount: Number(orderResult.data.total_amount),
+    subtotalAmount: Number(orderResult.data.subtotal_amount),
+    placedAt: orderResult.data.placed_at,
+    customerName: orderResult.data.customer_name,
+    customerPhone: orderResult.data.customer_phone,
+    customerEmail: orderResult.data.customer_email,
+    notes: orderResult.data.notes,
+    items: (orderItemsResult.data ?? []).map((item) => ({
+      id: item.id,
+      productName: item.product_name_snapshot,
+      categoryName: item.category_name_snapshot,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price_snapshot),
+      lineTotal: Number(item.line_total),
+    })),
   }
 }
