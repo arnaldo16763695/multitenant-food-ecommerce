@@ -29,7 +29,7 @@ type CatalogModuleData = {
   readonly source: "supabase" | "mock"
 }
 
-type CategoryRow = { id: string; name: string; is_visible: boolean; image_path: string | null }
+type CategoryRow = { id: string; name: string; is_visible: boolean; image_path: string | null; sort_order: number }
 type ProductRow = {
   id: string
   name: string
@@ -139,7 +139,7 @@ async function resolveUniqueSlug(supabase: SupabaseClient, tenantId: string, bas
 export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, tenantId: string): Promise<CatalogModuleData> {
   const [branchesResult, categoriesResult, productsResult, modifierGroupsResult] = await Promise.all([
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
-    supabase.from("categories").select("id, name, is_visible, image_path").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
+    supabase.from("categories").select("id, name, is_visible, image_path, sort_order").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
     supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
     supabase.from("modifier_groups").select("id, name, selection_type").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
   ])
@@ -213,9 +213,11 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   }))
 
   const mappedCategories: CatalogCategory[] = categories.map((category) => ({
+    id: category.id,
     name: category.name,
     itemCount: mappedProducts.filter((product) => product.category === category.name).length,
     visibility: fromCatalogDbVisibility(category.is_visible),
+    sortOrder: category.sort_order,
     imagePath: category.image_path,
     imageUrl: getCatalogMediaPublicUrl(category.image_path),
   }))

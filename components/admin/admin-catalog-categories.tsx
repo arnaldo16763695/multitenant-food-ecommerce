@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { Plus, Search } from "lucide-react"
+import { MoreHorizontal, Plus, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { createCategoryWithImageAction, updateCategoryWithImageAction } from "@/app/app/[tenantSlug]/admin/catalog/categories/actions"
@@ -21,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -55,10 +61,10 @@ function buildEmptyCategory(index: number): CategoryFormValues {
 
 function buildCategoryFormValues(category: CatalogCategory, index: number): CategoryFormValues {
   return {
-    id: category.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    id: category.id,
     name: category.name,
     visibility: category.visibility,
-    sortOrder: index + 1,
+    sortOrder: category.sortOrder ?? index + 1,
     imagePath: category.imagePath ?? "",
     imageAlt: category.name,
   }
@@ -220,27 +226,43 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = catalog
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead>Imagen</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Imagen</TableHead>
                   <TableHead>Productos</TableHead>
                   <TableHead>Visibilidad</TableHead>
-                  <TableHead className="text-right">Orden</TableHead>
+                  <TableHead>Orden</TableHead>
+                  <TableHead className="w-[80px] text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCategories.map((category, index) => (
-                  <TableRow key={category.name} className="cursor-pointer" onClick={() => openEditDialog(category, index)}>
+                  <TableRow key={category.id} className="cursor-pointer" onClick={() => openEditDialog(category, index)}>
+                    <TableCell className="font-semibold text-card-foreground">{category.name}</TableCell>
                     <TableCell>
                       <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted p-1">
                         {category.imageUrl ? <Image alt={category.name} className="h-full w-full object-contain" height={56} src={category.imageUrl} unoptimized width={56} /> : null}
                       </div>
                     </TableCell>
-                    <TableCell className="font-semibold text-card-foreground">{category.name}</TableCell>
                     <TableCell className="text-muted-foreground">{category.itemCount}</TableCell>
                     <TableCell>
                       <Badge variant={category.visibility === "Publica" ? "success" : "outline"}>{category.visibility}</Badge>
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">#{index + 1}</TableCell>
+                    <TableCell className="text-muted-foreground">#{category.sortOrder ?? index + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
+                            <Button variant="ghost" size="icon-sm">
+                              <MoreHorizontal />
+                              <span className="sr-only">Open category actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44 rounded-xl">
+                            <DropdownMenuItem onSelect={() => openEditDialog(category, index)}>Editar categoría</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

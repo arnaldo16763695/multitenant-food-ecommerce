@@ -20,9 +20,11 @@ export type CatalogProduct = {
 }
 
 export type CatalogCategory = {
+  readonly id: string
   readonly name: string
   readonly itemCount: number
   readonly visibility: "Publica" | "Oculta"
+  readonly sortOrder?: number
   readonly imagePath?: string | null
   readonly imageUrl?: string | null
 }
@@ -106,30 +108,38 @@ export const catalogProducts: readonly CatalogProduct[] = [
 
 export const catalogCategories: readonly CatalogCategory[] = [
   {
+    id: "cat-burgers",
     name: "Burgers",
     itemCount: 8,
     visibility: "Publica",
+    sortOrder: 1,
     imagePath: "tenants/demo-brand/categories/burgers/cover.jpg",
     imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
   },
   {
+    id: "cat-combos",
     name: "Combos",
     itemCount: 5,
     visibility: "Publica",
+    sortOrder: 2,
     imagePath: "tenants/demo-brand/categories/combos/cover.jpg",
     imageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=600&q=80",
   },
   {
+    id: "cat-wraps",
     name: "Wraps",
     itemCount: 4,
     visibility: "Publica",
+    sortOrder: 3,
     imagePath: "tenants/demo-brand/categories/wraps/cover.jpg",
     imageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=600&q=80",
   },
   {
+    id: "cat-bebidas",
     name: "Bebidas",
     itemCount: 9,
     visibility: "Oculta",
+    sortOrder: 4,
     imagePath: "tenants/demo-brand/categories/bebidas/cover.jpg",
     imageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80",
   },
