@@ -2,10 +2,8 @@
 
 import * as React from "react"
 import { LoaderCircle, UserRoundPlus } from "lucide-react"
-import { useRouter } from "next/navigation"
 
-import { provisionCustomerAccountAction } from "@/app/app/[tenantSlug]/account/register/actions"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { registerCustomerAccountAction } from "@/app/app/[tenantSlug]/account/register/actions"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +14,6 @@ type CustomerRegisterFormProps = {
 }
 
 export function CustomerRegisterForm({ tenantSlug }: CustomerRegisterFormProps) {
-  const router = useRouter()
   const [fullName, setFullName] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [phone, setPhone] = React.useState("")
@@ -31,53 +28,29 @@ export function CustomerRegisterForm({ tenantSlug }: CustomerRegisterFormProps) 
     setErrorMessage("")
     setSuccessMessage("")
 
-    const supabase = createSupabaseBrowserClient()
-
-    if (!supabase) {
-      setErrorMessage("Supabase no esta configurado en este entorno.")
-      return
-    }
-
     setIsSubmitting(true)
 
-    const signUpResult = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          phone,
-        },
-      },
-    })
-
-    if (signUpResult.error || !signUpResult.data.user) {
-      setErrorMessage(signUpResult.error?.message ?? "No pudimos crear la cuenta.")
-      setIsSubmitting(false)
-      return
-    }
-
-    const provisionResult = await provisionCustomerAccountAction({
-      authUserId: signUpResult.data.user.id,
+    const result = await registerCustomerAccountAction({
+      tenantSlug,
       email,
       fullName,
       phone,
+      password,
       marketingOptIn,
     })
 
-    if (!provisionResult.ok) {
-      setErrorMessage(provisionResult.error ?? "No pudimos completar el registro del cliente.")
+    if (!result.ok) {
+      setErrorMessage(result.error ?? "No pudimos crear la cuenta.")
       setIsSubmitting(false)
       return
     }
 
-    setSuccessMessage("Cuenta creada. Si tu proyecto requiere confirmacion de email, revisa tu correo para activar el acceso.")
+    setSuccessMessage(
+      result.delivery === "resend"
+        ? "Cuenta creada. Revisa tu email para confirmar y activar tu acceso."
+        : "Cuenta creada. No hay proveedor de email configurado todavía, así que el link de confirmación se imprimió en consola del servidor."
+    )
     setIsSubmitting(false)
-
-    if (signUpResult.data.session) {
-      router.replace(`/app/${tenantSlug}/account`)
-      router.refresh()
-    }
   }
 
   return (

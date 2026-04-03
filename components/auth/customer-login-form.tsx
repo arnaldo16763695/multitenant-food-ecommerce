@@ -5,6 +5,7 @@ import Link from "next/link"
 import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { resendCustomerConfirmationAction } from "@/app/app/[tenantSlug]/account/register/actions"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 import { Button } from "@/components/ui/button"
@@ -20,11 +21,13 @@ export function CustomerLoginForm({ tenantSlug }: CustomerLoginFormProps) {
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [errorMessage, setErrorMessage] = React.useState("")
+  const [successMessage, setSuccessMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErrorMessage("")
+    setSuccessMessage("")
 
     const supabase = createSupabaseBrowserClient()
 
@@ -41,7 +44,23 @@ export function CustomerLoginForm({ tenantSlug }: CustomerLoginFormProps) {
     })
 
     if (result.error) {
-      setErrorMessage(result.error.message)
+      if (result.error.message.toLowerCase().includes("email not confirmed")) {
+        const resendResult = await resendCustomerConfirmationAction({
+          tenantSlug,
+          email,
+        })
+
+        setErrorMessage("Tu email aún no está confirmado.")
+        setSuccessMessage(
+          resendResult.ok
+            ? resendResult.delivery === "resend"
+              ? "Te reenviamos un link de activación a tu correo."
+              : "No hay proveedor de email configurado todavía, así que el link de activación se imprimió en consola del servidor."
+            : resendResult.error ?? "No pudimos reenviar el link de activación."
+        )
+      } else {
+        setErrorMessage(result.error.message)
+      }
       setIsSubmitting(false)
       return
     }
@@ -69,6 +88,7 @@ export function CustomerLoginForm({ tenantSlug }: CustomerLoginFormProps) {
           </label>
 
           {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+          {successMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
           <Button className="mt-2 h-10 rounded-full" disabled={isSubmitting} type="submit">
             {isSubmitting ? <LoaderCircle className="animate-spin" /> : <LogIn />}
