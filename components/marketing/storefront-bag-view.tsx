@@ -94,8 +94,8 @@ export function StorefrontBagView({ tenantSlug }: StorefrontBagViewProps) {
                 </div>
               </div>
 
-              <Button className="h-10 w-full rounded-full" disabled={items.length === 0}>
-                Continuar al checkout
+              <Button asChild className="h-10 w-full rounded-full" disabled={items.length === 0}>
+                <Link href={`/app/${tenantSlug}/checkout`}>Continuar al checkout</Link>
               </Button>
               <Button variant="outline" className="h-10 w-full rounded-full" disabled={items.length === 0} onClick={() => clearTenantBag(tenantSlug)}>
                 Vaciar bolsa
