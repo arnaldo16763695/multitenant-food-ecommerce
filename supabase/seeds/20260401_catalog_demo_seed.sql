@@ -1,9 +1,11 @@
 with upsert_tenant as (
-  insert into public.tenants (name, slug, status)
-  values ('Demo Brand', 'demo-brand', 'active')
+  insert into public.tenants (name, slug, status, storefront_enabled, custom_domain)
+  values ('Demo Brand', 'demo-brand', 'active', true, null)
   on conflict (slug) do update set
     name = excluded.name,
     status = excluded.status,
+    storefront_enabled = excluded.storefront_enabled,
+    custom_domain = excluded.custom_domain,
     updated_at = now()
   returning id
 ), tenant_ref as (
