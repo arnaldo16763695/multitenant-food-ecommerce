@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ChevronDown, MapPinned, ReceiptText, ShoppingBag, UserRound, UserRoundPlus } from "lucide-react"
+import { ChevronDown, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -13,17 +14,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useShoppingBagCount } from "@/lib/storefront/bag-store"
+import type { CustomerAccountContext } from "@/lib/auth/customer"
 
 type StorefrontHeaderProps = {
   readonly tenantSlug: string
   readonly brandName: string
   readonly branchLabel: string
+  readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontHeader({ tenantSlug, brandName, branchLabel }: StorefrontHeaderProps) {
+export function StorefrontHeader({ tenantSlug, brandName, branchLabel, customerSession }: StorefrontHeaderProps) {
+  const router = useRouter()
   const liveCartItemsCount = useShoppingBagCount(tenantSlug)
   const [isBagAnimating, setIsBagAnimating] = React.useState(false)
+  const [isSigningOut, setIsSigningOut] = React.useState(false)
   const previousCountRef = React.useRef(liveCartItemsCount)
 
   React.useEffect(() => {
@@ -41,6 +47,19 @@ export function StorefrontHeader({ tenantSlug, brandName, branchLabel }: Storefr
 
     previousCountRef.current = liveCartItemsCount
   }, [liveCartItemsCount])
+
+  async function handleCustomerSignOut() {
+    const supabase = createSupabaseBrowserClient()
+
+    if (!supabase) {
+      router.refresh()
+      return
+    }
+
+    setIsSigningOut(true)
+    await supabase.auth.signOut()
+    router.refresh()
+  }
 
   return (
     <>
@@ -84,12 +103,14 @@ export function StorefrontHeader({ tenantSlug, brandName, branchLabel }: Storefr
               <DropdownMenuContent align="end" className="w-60 rounded-2xl">
                 <DropdownMenuLabel className="px-3 py-2">Cliente</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href={`/app/${tenantSlug}/account/register`}>
-                    <UserRoundPlus />
-                    Registrarme
-                  </Link>
-                </DropdownMenuItem>
+                {!customerSession ? (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/app/${tenantSlug}/account/login`}>
+                      <LogIn />
+                      Iniciar sesión
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem asChild>
                   <Link href={`/app/${tenantSlug}/account`}>
                     <UserRound />
@@ -102,6 +123,15 @@ export function StorefrontHeader({ tenantSlug, brandName, branchLabel }: Storefr
                     Mis pedidos
                   </Link>
                 </DropdownMenuItem>
+                {customerSession ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={handleCustomerSignOut} disabled={isSigningOut}>
+                      <LogOut />
+                      Cerrar sesión
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

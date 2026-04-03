@@ -2,6 +2,7 @@ import Link from "next/link"
 import { Newsreader } from "next/font/google"
 import { Clock3, Flame, MapPinned, ShoppingBag } from "lucide-react"
 
+import type { CustomerAccountContext } from "@/lib/auth/customer"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontMenuGrid } from "@/components/marketing/storefront-menu-grid"
 
@@ -20,6 +21,7 @@ type TenantShellProps = {
   readonly etaMinutes?: number
   readonly shareUrl?: string
   readonly heroImageUrl?: string | null
+  readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
   readonly menu?: readonly {
     id: string
     name: string
@@ -62,6 +64,7 @@ export function TenantShell({
   menu,
   shareUrl,
   heroImageUrl,
+  customerSession,
 }: TenantShellProps) {
   const publicBranchLabel = suggestedBranch ?? "Centro · 1.2 km"
   const publicEta = etaMinutes ?? 18
@@ -74,7 +77,7 @@ export function TenantShell({
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName={title} branchLabel={publicBranchLabel} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName={title} branchLabel={publicBranchLabel} customerSession={customerSession} />
 
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
           <div
@@ -155,9 +158,16 @@ export function TenantShell({
                 <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/orders`}>
                   Mis pedidos
                 </Link>
-                <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
-                  Registrarme
-                </Link>
+                {!customerSession ? (
+                  <>
+                    <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/login`}>
+                      Iniciar sesión
+                    </Link>
+                    <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
+                      Registrarme
+                    </Link>
+                  </>
+                ) : null}
               </div>
             </div>
 

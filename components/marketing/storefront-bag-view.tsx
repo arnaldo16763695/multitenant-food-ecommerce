@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react"
 
+import type { CustomerAccountContext } from "@/lib/auth/customer"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,9 +11,10 @@ import { useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from
 
 type StorefrontBagViewProps = {
   readonly tenantSlug: string
+  readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontBagView({ tenantSlug }: StorefrontBagViewProps) {
+export function StorefrontBagView({ tenantSlug, customerSession }: StorefrontBagViewProps) {
   const items = useShoppingBagItems(tenantSlug)
   const subtotal = useShoppingBagSubtotal(tenantSlug)
   const incrementItem = useShoppingBagStore((state) => state.incrementItem)
@@ -25,7 +27,7 @@ export function StorefrontBagView({ tenantSlug }: StorefrontBagViewProps) {
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Shopping bag" branchLabel="Centro · 1.2 km" />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Shopping bag" branchLabel="Centro · 1.2 km" customerSession={customerSession} />
 
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">

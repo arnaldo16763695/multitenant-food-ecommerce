@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 
 import { TenantShell } from "@/components/marketing/tenant-shell"
+import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getPublicStorefrontBySlug } from "@/lib/data/public-storefront"
 
 type TenantPageProps = {
@@ -12,6 +13,7 @@ type TenantPageProps = {
 export default async function TenantPage({ params }: TenantPageProps) {
   const { tenantSlug } = await params
   const storefront = await getPublicStorefrontBySlug(tenantSlug)
+  const customerContext = await getCustomerAccountContext()
 
   if (!storefront) {
     notFound()
@@ -26,6 +28,7 @@ export default async function TenantPage({ params }: TenantPageProps) {
       suggestedBranch={storefront.suggestedBranch}
       etaMinutes={storefront.etaMinutes}
       heroImageUrl={storefront.tenant.heroImageUrl}
+      customerSession={customerContext}
       menu={storefront.menu}
       shareUrl={storefront.shareUrl}
     />

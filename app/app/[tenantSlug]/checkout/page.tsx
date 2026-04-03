@@ -17,6 +17,7 @@ export default async function StorefrontCheckoutPage({ params }: StorefrontCheck
     <StorefrontCheckoutView
       tenantSlug={tenantSlug}
       branchLabel={storefront?.suggestedBranch ?? "Sucursal activa"}
+      customerSession={customerContext}
       customerDefaults={{
         fullName: customerContext?.customer.fullName,
         email: customerContext?.customer.email,

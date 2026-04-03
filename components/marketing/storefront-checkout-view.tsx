@@ -6,6 +6,7 @@ import { LoaderCircle, ShoppingBag } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { createStorefrontOrderAction } from "@/app/app/[tenantSlug]/checkout/actions"
+import type { CustomerAccountContext } from "@/lib/auth/customer"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,9 +22,10 @@ type StorefrontCheckoutViewProps = {
     email?: string | null
     phone?: string | null
   }
+  readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaults }: StorefrontCheckoutViewProps) {
+export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaults, customerSession }: StorefrontCheckoutViewProps) {
   const router = useRouter()
   const items = useShoppingBagItems(tenantSlug)
   const subtotal = useShoppingBagSubtotal(tenantSlug)
@@ -72,7 +74,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Checkout" branchLabel={branchLabel} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Checkout" branchLabel={branchLabel} customerSession={customerSession} />
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">

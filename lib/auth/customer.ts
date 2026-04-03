@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
-type CustomerAccountContext = {
+export type CustomerAccountContext = {
   readonly user: {
     id: string
     email: string
