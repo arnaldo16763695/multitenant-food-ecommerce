@@ -9,7 +9,7 @@ type AdminCatalogProductsPageProps = {
 
 export default async function AdminCatalogProductsPage({ params }: AdminCatalogProductsPageProps) {
   const { tenantSlug } = await params
-  const { products } = await getAdminCatalogModule(tenantSlug)
+  const { products, categories } = await getAdminCatalogModule(tenantSlug)
 
-  return <AdminCatalogProducts tenantSlug={tenantSlug} initialProducts={products} />
+  return <AdminCatalogProducts tenantSlug={tenantSlug} initialProducts={products} initialCategories={categories} />
 }

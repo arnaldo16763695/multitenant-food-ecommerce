@@ -5,7 +5,7 @@ import Image from "next/image"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { catalogProducts, type CatalogProduct } from "@/lib/config/admin-catalog"
+import { catalogCategories, catalogProducts, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
 import {
   createProductWithImageAction,
   duplicateProductAction,
@@ -92,9 +92,10 @@ function formatBranchSummary(product: CatalogProduct) {
 type AdminCatalogProductsProps = {
   readonly tenantSlug: string
   readonly initialProducts?: readonly CatalogProduct[]
+  readonly initialCategories?: readonly CatalogCategory[]
 }
 
-export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProducts }: AdminCatalogProductsProps) {
+export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProducts, initialCategories = catalogCategories }: AdminCatalogProductsProps) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedCategory, setSelectedCategory] = React.useState("Todos")
@@ -112,8 +113,10 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   const products = initialProducts
 
   const categoryFilters = React.useMemo(() => {
-    return ["Todos", ...new Set(products.map((product) => product.category))].filter(Boolean)
-  }, [products])
+    return ["Todos", ...new Set(initialCategories.map((category) => category.name))].filter(Boolean)
+  }, [initialCategories])
+
+  const categoryOptions = React.useMemo(() => initialCategories.map((category) => category.name), [initialCategories])
 
   const filteredProducts = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -412,7 +415,18 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Categoria</span>
-                <Input value={productFormValues.category} onChange={(event) => handleFieldChange("category", event.target.value)} placeholder="Ej. Burgers" />
+                <select
+                  value={productFormValues.category}
+                  onChange={(event) => handleFieldChange("category", event.target.value)}
+                  className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option value="">Selecciona una categoria</option>
+                  {categoryOptions.map((categoryName) => (
+                    <option key={categoryName} value={categoryName}>
+                      {categoryName}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
 

@@ -236,7 +236,7 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = catalog
               </TableHeader>
               <TableBody>
                 {filteredCategories.map((category, index) => (
-                  <TableRow key={category.id} className="cursor-pointer" onClick={() => openEditDialog(category, index)}>
+                  <TableRow key={category.id}>
                     <TableCell className="font-semibold text-card-foreground">{category.name}</TableCell>
                     <TableCell>
                       <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted p-1">
