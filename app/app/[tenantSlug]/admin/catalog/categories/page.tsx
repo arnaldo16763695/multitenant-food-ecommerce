@@ -11,5 +11,5 @@ export default async function AdminCatalogCategoriesPage({ params }: AdminCatalo
   const { tenantSlug } = await params
   const { categories } = await getAdminCatalogModule(tenantSlug)
 
-  return <AdminCatalogCategories initialCategories={categories} />
+  return <AdminCatalogCategories tenantSlug={tenantSlug} initialCategories={categories} />
 }

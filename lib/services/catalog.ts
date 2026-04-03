@@ -8,11 +8,15 @@ import {
   type CatalogModifierGroup,
   type CatalogProduct,
 } from "@/lib/config/admin-catalog"
+import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 import {
+  fromCatalogDbVisibility,
   fromCatalogDbStatus,
   normalizeCatalogPrice,
   slugifyCatalogValue,
+  toCatalogDbVisibility,
   toCatalogDbStatus,
+  type CatalogCategoryMutationInput,
   type CatalogMutationResult,
   type CatalogProductMutationInput,
   type CatalogProductStatus,
@@ -25,7 +29,7 @@ type CatalogModuleData = {
   readonly source: "supabase" | "mock"
 }
 
-type CategoryRow = { id: string; name: string; is_visible: boolean }
+type CategoryRow = { id: string; name: string; is_visible: boolean; image_path: string | null }
 type ProductRow = {
   id: string
   name: string
@@ -34,6 +38,8 @@ type ProductRow = {
   status: "active" | "draft"
   tags: string[] | null
   category_id: string | null
+  primary_image_path: string | null
+  primary_image_alt: string | null
 }
 type BranchRow = { id: string; name: string }
 type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple" }
@@ -84,6 +90,29 @@ async function resolveCategoryId(supabase: SupabaseClient, tenantId: string, cat
   return categoryResult.data?.id ?? null
 }
 
+async function resolveUniqueCategorySlug(supabase: SupabaseClient, tenantId: string, baseName: string, excludeCategoryId?: string) {
+  const baseSlug = slugifyCatalogValue(baseName) || `category-${Date.now()}`
+  let candidateSlug = baseSlug
+  let suffix = 1
+
+  while (true) {
+    let query = supabase.from("categories").select("id").eq("tenant_id", tenantId).eq("slug", candidateSlug).limit(1)
+
+    if (excludeCategoryId) {
+      query = query.neq("id", excludeCategoryId)
+    }
+
+    const existingCategory = await query.maybeSingle<{ id: string }>()
+
+    if (!existingCategory.data) {
+      return candidateSlug
+    }
+
+    suffix += 1
+    candidateSlug = `${baseSlug}-${suffix}`
+  }
+}
+
 async function resolveUniqueSlug(supabase: SupabaseClient, tenantId: string, baseName: string, excludeProductId?: string) {
   const baseSlug = slugifyCatalogValue(baseName) || `product-${Date.now()}`
   let candidateSlug = baseSlug
@@ -110,8 +139,8 @@ async function resolveUniqueSlug(supabase: SupabaseClient, tenantId: string, bas
 export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, tenantId: string): Promise<CatalogModuleData> {
   const [branchesResult, categoriesResult, productsResult, modifierGroupsResult] = await Promise.all([
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
-    supabase.from("categories").select("id, name, is_visible").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
-    supabase.from("products").select("id, name, description, base_price, status, tags, category_id").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
+    supabase.from("categories").select("id, name, is_visible, image_path").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
+    supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
     supabase.from("modifier_groups").select("id, name, selection_type").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
   ])
 
@@ -169,6 +198,8 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     description: product.description,
     basePrice: formatCurrency(product.base_price),
     status: fromCatalogDbStatus(product.status),
+    primaryImagePath: product.primary_image_path,
+    primaryImageUrl: getCatalogMediaPublicUrl(product.primary_image_path),
     tags: product.tags ?? [],
     modifierGroups: (productModifierGroupsMap.get(product.id) ?? [])
       .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId)?.name)
@@ -184,7 +215,9 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const mappedCategories: CatalogCategory[] = categories.map((category) => ({
     name: category.name,
     itemCount: mappedProducts.filter((product) => product.category === category.name).length,
-    visibility: category.is_visible ? "Publica" : "Oculta",
+    visibility: fromCatalogDbVisibility(category.is_visible),
+    imagePath: category.image_path,
+    imageUrl: getCatalogMediaPublicUrl(category.image_path),
   }))
 
   const modifierUsageCount = productModifierGroups.reduce<Map<string, number>>((map, relation) => {
@@ -211,6 +244,17 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
 }
 
 export async function createCatalogProduct(supabase: SupabaseClient, tenantId: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
+  return createCatalogProductWithOptions(supabase, tenantId, payload)
+}
+
+export async function createCatalogProductWithOptions(
+  supabase: SupabaseClient,
+  tenantId: string,
+  payload: CatalogProductMutationInput,
+  options?: {
+    readonly productId?: string
+  }
+): Promise<CatalogMutationResult> {
   const normalizedPrice = normalizeCatalogPrice(payload.basePrice)
 
   if (!payload.name.trim() || !payload.category.trim() || !normalizedPrice) {
@@ -223,6 +267,7 @@ export async function createCatalogProduct(supabase: SupabaseClient, tenantId: s
   ])
 
   const insertResult = await supabase.from("products").insert({
+    id: options?.productId,
     tenant_id: tenantId,
     category_id: categoryId,
     name: payload.name.trim(),
@@ -230,6 +275,8 @@ export async function createCatalogProduct(supabase: SupabaseClient, tenantId: s
     description: payload.description.trim(),
     base_price: normalizedPrice,
     status: toCatalogDbStatus(payload.status),
+    primary_image_path: payload.primaryImagePath?.trim() || null,
+    primary_image_alt: payload.primaryImageAlt?.trim() || null,
     tags: ["New"],
   })
 
@@ -237,7 +284,7 @@ export async function createCatalogProduct(supabase: SupabaseClient, tenantId: s
     return { ok: false, error: insertResult.error.message }
   }
 
-  return { ok: true }
+  return { ok: true, entityId: options?.productId }
 }
 
 export async function updateCatalogProduct(
@@ -266,6 +313,8 @@ export async function updateCatalogProduct(
       description: payload.description.trim(),
       base_price: normalizedPrice,
       status: toCatalogDbStatus(payload.status),
+      primary_image_path: payload.primaryImagePath?.trim() || null,
+      primary_image_alt: payload.primaryImageAlt?.trim() || null,
     })
     .eq("id", productId)
     .eq("tenant_id", tenantId)
@@ -325,6 +374,70 @@ export async function duplicateCatalogProduct(supabase: SupabaseClient, tenantId
 
   if (insertResult.error) {
     return { ok: false, error: insertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function createCatalogCategory(
+  supabase: SupabaseClient,
+  tenantId: string,
+  payload: CatalogCategoryMutationInput,
+  options?: {
+    readonly categoryId?: string
+  }
+): Promise<CatalogMutationResult> {
+  if (!payload.name.trim()) {
+    return { ok: false, error: "Completa el nombre de la categoria." }
+  }
+
+  const categorySlug = await resolveUniqueCategorySlug(supabase, tenantId, payload.name)
+
+  const insertResult = await supabase.from("categories").insert({
+    id: options?.categoryId,
+    tenant_id: tenantId,
+    name: payload.name.trim(),
+    slug: categorySlug,
+    is_visible: toCatalogDbVisibility(payload.visibility),
+    sort_order: payload.sortOrder,
+    image_path: payload.imagePath?.trim() || null,
+    image_alt: payload.imageAlt?.trim() || null,
+  })
+
+  if (insertResult.error) {
+    return { ok: false, error: insertResult.error.message }
+  }
+
+  return { ok: true, entityId: options?.categoryId }
+}
+
+export async function updateCatalogCategory(
+  supabase: SupabaseClient,
+  tenantId: string,
+  categoryId: string,
+  payload: CatalogCategoryMutationInput
+): Promise<CatalogMutationResult> {
+  if (!payload.name.trim()) {
+    return { ok: false, error: "Completa el nombre de la categoria." }
+  }
+
+  const categorySlug = await resolveUniqueCategorySlug(supabase, tenantId, payload.name, categoryId)
+
+  const updateResult = await supabase
+    .from("categories")
+    .update({
+      name: payload.name.trim(),
+      slug: categorySlug,
+      is_visible: toCatalogDbVisibility(payload.visibility),
+      sort_order: payload.sortOrder,
+      image_path: payload.imagePath?.trim() || null,
+      image_alt: payload.imageAlt?.trim() || null,
+    })
+    .eq("id", categoryId)
+    .eq("tenant_id", tenantId)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
   }
 
   return { ok: true }

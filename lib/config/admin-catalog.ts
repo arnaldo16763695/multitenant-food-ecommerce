@@ -12,6 +12,8 @@ export type CatalogProduct = {
   readonly description: string
   readonly basePrice: string
   readonly status: "Activo" | "Draft"
+  readonly primaryImagePath?: string | null
+  readonly primaryImageUrl?: string | null
   readonly modifierGroups: readonly string[]
   readonly tags: readonly string[]
   readonly branchStatuses: readonly CatalogBranchStatus[]
@@ -21,6 +23,8 @@ export type CatalogCategory = {
   readonly name: string
   readonly itemCount: number
   readonly visibility: "Publica" | "Oculta"
+  readonly imagePath?: string | null
+  readonly imageUrl?: string | null
 }
 
 export type CatalogModifierGroup = {
@@ -37,6 +41,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     description: "Doble carne, queso americano, salsa signature y pickles.",
     basePrice: "$ 11.90",
     status: "Activo",
+    primaryImagePath: "tenants/demo-brand/products/fire-smash-burger/primary/cover.jpg",
+    primaryImageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80",
     modifierGroups: ["Punto de carne", "Extras", "Salsas"],
     tags: ["Best seller", "Combo ready"],
     branchStatuses: [
@@ -52,6 +58,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     description: "Pollo crispy, papas medianas, bebida y dip incluido.",
     basePrice: "$ 14.50",
     status: "Activo",
+    primaryImagePath: "tenants/demo-brand/products/crispy-box/primary/cover.jpg",
+    primaryImageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=900&q=80",
     modifierGroups: ["Bebidas", "Salsas"],
     tags: ["Lunch", "High rotation"],
     branchStatuses: [
@@ -67,6 +75,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     description: "Wrap de pollo grillado con aderezo citrico y mix de hojas.",
     basePrice: "$ 9.80",
     status: "Draft",
+    primaryImagePath: "tenants/demo-brand/products/lime-chicken-wrap/primary/cover.jpg",
+    primaryImageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=900&q=80",
     modifierGroups: ["Extras", "Aderezos"],
     tags: ["Healthy", "Seasonal"],
     branchStatuses: [
@@ -82,6 +92,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     description: "Refresco individual disponible para combos y venta directa.",
     basePrice: "$ 2.90",
     status: "Activo",
+    primaryImagePath: "tenants/demo-brand/products/spark-cola/primary/cover.jpg",
+    primaryImageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=900&q=80",
     modifierGroups: ["Tamano"],
     tags: ["Upsell"],
     branchStatuses: [
@@ -93,10 +105,34 @@ export const catalogProducts: readonly CatalogProduct[] = [
 ] as const
 
 export const catalogCategories: readonly CatalogCategory[] = [
-  { name: "Burgers", itemCount: 8, visibility: "Publica" },
-  { name: "Combos", itemCount: 5, visibility: "Publica" },
-  { name: "Wraps", itemCount: 4, visibility: "Publica" },
-  { name: "Bebidas", itemCount: 9, visibility: "Oculta" },
+  {
+    name: "Burgers",
+    itemCount: 8,
+    visibility: "Publica",
+    imagePath: "tenants/demo-brand/categories/burgers/cover.jpg",
+    imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    name: "Combos",
+    itemCount: 5,
+    visibility: "Publica",
+    imagePath: "tenants/demo-brand/categories/combos/cover.jpg",
+    imageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    name: "Wraps",
+    itemCount: 4,
+    visibility: "Publica",
+    imagePath: "tenants/demo-brand/categories/wraps/cover.jpg",
+    imageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    name: "Bebidas",
+    itemCount: 9,
+    visibility: "Oculta",
+    imagePath: "tenants/demo-brand/categories/bebidas/cover.jpg",
+    imageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80",
+  },
 ] as const
 
 export const catalogModifierGroups: readonly CatalogModifierGroup[] = [

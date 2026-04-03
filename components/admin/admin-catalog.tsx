@@ -1,16 +1,18 @@
 "use client"
 
 import * as React from "react"
+import Image from "next/image"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { catalogProducts, type CatalogProduct } from "@/lib/config/admin-catalog"
 import {
-  createProductAction,
+  createProductWithImageAction,
   duplicateProductAction,
   toggleProductStatusAction,
-  updateProductAction,
+  updateProductWithImageAction,
 } from "@/app/app/[tenantSlug]/admin/catalog/products/actions"
+import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +45,8 @@ type ProductFormValues = {
   readonly description: string
   readonly basePrice: string
   readonly status: ProductStatus
+  readonly primaryImagePath: string
+  readonly primaryImageAlt: string
 }
 
 type ProductDialogMode = "create" | "edit"
@@ -57,6 +61,8 @@ function buildFormValues(product: CatalogProduct): ProductFormValues {
     description: product.description,
     basePrice: product.basePrice,
     status: product.status,
+    primaryImagePath: product.primaryImageUrl ?? "",
+    primaryImageAlt: product.name,
   }
 }
 
@@ -68,6 +74,8 @@ function buildEmptyProduct(index: number): ProductFormValues {
     description: "",
     basePrice: "",
     status: DEFAULT_PRODUCT_STATUS,
+    primaryImagePath: "",
+    primaryImageAlt: "",
   }
 }
 
@@ -94,6 +102,8 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = React.useState(false)
   const [productDialogMode, setProductDialogMode] = React.useState<ProductDialogMode>("create")
   const [formErrorMessage, setFormErrorMessage] = React.useState("")
+  const [selectedPrimaryImageFile, setSelectedPrimaryImageFile] = React.useState<File | null>(null)
+  const [primaryImagePreviewUrl, setPrimaryImagePreviewUrl] = React.useState<string | null>(null)
   const [isSavingProduct, startSavingProduct] = React.useTransition()
   const [isRunningRowAction, startRowAction] = React.useTransition()
   const [productFormValues, setProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length))
@@ -136,6 +146,8 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
     setInitialProductFormValues(emptyProduct)
     setProductFormValues(emptyProduct)
     setFormErrorMessage("")
+    setSelectedPrimaryImageFile(null)
+    setPrimaryImagePreviewUrl(null)
     setIsProductDialogOpen(true)
   }
 
@@ -145,6 +157,8 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
     setInitialProductFormValues(nextValues)
     setProductFormValues(nextValues)
     setFormErrorMessage("")
+    setSelectedPrimaryImageFile(null)
+    setPrimaryImagePreviewUrl(product.primaryImageUrl ?? null)
     setIsProductDialogOpen(true)
   }
 
@@ -174,6 +188,8 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   function closeProductDialog() {
     setIsProductDialogOpen(false)
     setIsUnsavedDialogOpen(false)
+    setSelectedPrimaryImageFile(null)
+    setPrimaryImagePreviewUrl(null)
   }
 
   function handleFieldChange(field: keyof ProductFormValues, value: string) {
@@ -191,18 +207,21 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
     }
 
     startSavingProduct(async () => {
-      const payload = {
-        name: productFormValues.name,
-        category: productFormValues.category,
-        description: productFormValues.description,
-        basePrice: productFormValues.basePrice,
-        status: productFormValues.status,
-      } as const
+      const formData = new FormData()
+      formData.set("name", productFormValues.name)
+      formData.set("category", productFormValues.category)
+      formData.set("description", productFormValues.description)
+      formData.set("basePrice", productFormValues.basePrice)
+      formData.set("status", productFormValues.status)
+      formData.set("primaryImagePath", productFormValues.primaryImagePath)
+      formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
+      formData.set("previousPrimaryImagePath", initialProductFormValues.primaryImagePath)
 
-      const result =
-        productDialogMode === "create"
-          ? await createProductAction(tenantSlug, payload)
-          : await updateProductAction(productFormValues.id, tenantSlug, payload)
+      if (selectedPrimaryImageFile) {
+        formData.set("primaryImageFile", selectedPrimaryImageFile)
+      }
+
+      const result = productDialogMode === "create" ? await createProductWithImageAction(tenantSlug, formData) : await updateProductWithImageAction(productFormValues.id, tenantSlug, formData)
 
       if (!result.ok) {
         setFormErrorMessage(result.error ?? "No pudimos guardar el producto.")
@@ -221,6 +240,20 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   function discardChanges() {
     setProductFormValues(initialProductFormValues)
     closeProductDialog()
+  }
+
+  function handlePrimaryImageFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+
+    setSelectedPrimaryImageFile(file)
+
+    if (!file) {
+      setPrimaryImagePreviewUrl(getCatalogMediaPublicUrl(productFormValues.primaryImagePath) ?? null)
+      return
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(file)
+    setPrimaryImagePreviewUrl(nextPreviewUrl)
   }
 
   return (
@@ -290,6 +323,7 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
                 <TableHeader className="bg-secondary/50">
                   <TableRow>
                     <TableHead>Producto</TableHead>
+                    <TableHead>Imagen</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Precio</TableHead>
@@ -305,6 +339,11 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
                         <div className="space-y-1">
                           <p className="font-semibold text-card-foreground">{product.name}</p>
                           <p className="line-clamp-1 max-w-md text-xs text-muted-foreground">{product.description}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted p-1">
+                          {product.primaryImageUrl ? <Image alt={product.name} className="h-full w-full object-contain" height={56} src={product.primaryImageUrl} unoptimized width={56} /> : null}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -365,7 +404,7 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
             <DialogDescription>Modal compacto para alta o edicion del producto sin salir de la tabla principal.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 px-6 pb-2">
+          <div className="grid max-h-[calc(88vh-11rem)] gap-4 overflow-y-auto px-6 pb-2">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
@@ -403,6 +442,46 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
                   <option value="Draft">Draft</option>
                 </select>
               </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-card-foreground">Primary image path</span>
+                <Input
+                  value={productFormValues.primaryImagePath}
+                  onChange={(event) => handleFieldChange("primaryImagePath", event.target.value)}
+                  placeholder="tenants/tenant-id/products/product-id/primary/cover.jpg"
+                />
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-card-foreground">Image alt text</span>
+                <Input
+                  value={productFormValues.primaryImageAlt}
+                  onChange={(event) => handleFieldChange("primaryImageAlt", event.target.value)}
+                  placeholder="Describe la imagen principal"
+                />
+              </label>
+            </div>
+
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-card-foreground">Subir imagen principal</span>
+              <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePrimaryImageFileChange} />
+            </label>
+
+            <div className="rounded-[1.25rem] border border-dashed border-border p-4">
+              <p className="text-sm font-medium text-card-foreground">Preview</p>
+              <div className="mt-3 flex aspect-[16/9] max-h-48 items-center justify-center overflow-hidden rounded-[1rem] border border-border bg-muted p-3">
+                {primaryImagePreviewUrl ? (
+                  <Image
+                    alt={productFormValues.primaryImageAlt || productFormValues.name || "Product preview"}
+                    className="h-full w-full object-contain"
+                    height={360}
+                    src={primaryImagePreviewUrl}
+                    unoptimized
+                    width={640}
+                  />
+                ) : null}
+              </div>
             </div>
 
             {formErrorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}

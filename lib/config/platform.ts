@@ -66,6 +66,7 @@ export const featuredBrands: readonly BrandCard[] = [
     nearestBranch: "Centro - 1.2 km",
     etaMinutes: 18,
     accent: "from-orange-500 via-red-500 to-amber-300",
+    heroImageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=80",
   },
   {
     id: "pollo-rush",
@@ -76,6 +77,7 @@ export const featuredBrands: readonly BrandCard[] = [
     nearestBranch: "Norte - 2.1 km",
     etaMinutes: 24,
     accent: "from-yellow-400 via-orange-400 to-red-500",
+    heroImageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=1600&q=80",
   },
   {
     id: "verde-wraps",
@@ -86,5 +88,6 @@ export const featuredBrands: readonly BrandCard[] = [
     nearestBranch: "Este - 3.4 km",
     etaMinutes: 21,
     accent: "from-emerald-500 via-lime-400 to-teal-300",
+    heroImageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=80",
   },
 ];

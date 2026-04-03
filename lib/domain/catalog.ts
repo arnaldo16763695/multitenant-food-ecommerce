@@ -8,10 +8,23 @@ export type CatalogProductMutationInput = {
   readonly description: string
   readonly basePrice: string
   readonly status: CatalogProductStatus
+  readonly primaryImagePath?: string
+  readonly primaryImageAlt?: string
+}
+
+export type CatalogCategoryVisibility = "Publica" | "Oculta"
+
+export type CatalogCategoryMutationInput = {
+  readonly name: string
+  readonly visibility: CatalogCategoryVisibility
+  readonly sortOrder: number
+  readonly imagePath?: string
+  readonly imageAlt?: string
 }
 
 export type CatalogMutationResult = {
   readonly ok: boolean
+  readonly entityId?: string
   readonly error?: string
 }
 
@@ -41,4 +54,12 @@ export function toCatalogDbStatus(status: CatalogProductStatus) {
 
 export function fromCatalogDbStatus(status: "active" | "draft") {
   return status === "active" ? "Activo" : "Draft"
+}
+
+export function toCatalogDbVisibility(visibility: CatalogCategoryVisibility) {
+  return visibility === "Publica"
+}
+
+export function fromCatalogDbVisibility(isVisible: boolean) {
+  return isVisible ? "Publica" : "Oculta"
 }

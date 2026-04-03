@@ -9,6 +9,7 @@ type StorefrontTenant = {
   readonly slug: string
   readonly customDomain: string | null
   readonly storefrontEnabled: boolean
+  readonly heroImageUrl: string | null
 }
 
 type TenantProduct = {
@@ -17,6 +18,7 @@ type TenantProduct = {
   readonly description: string
   readonly basePrice: string
   readonly category: string
+  readonly imageUrl: string | null
 }
 
 type PublicStorefrontData = {
@@ -33,6 +35,7 @@ type TenantRow = {
   slug: string
   custom_domain: string | null
   storefront_enabled: boolean
+  hero_image_url: string | null
 }
 
 type ProductRow = {
@@ -41,6 +44,21 @@ type ProductRow = {
   description: string
   base_price: number | string
   category_id: string | null
+  primary_image_path: string | null
+}
+
+function getStoragePublicUrl(path: string | null) {
+  if (!path) {
+    return null
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  if (!supabaseUrl) {
+    return null
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/catalog-media/${path}`
 }
 
 type CategoryRow = {
@@ -73,6 +91,7 @@ export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promi
         slug: fallbackBrand.slug,
         customDomain: null,
         storefrontEnabled: true,
+        heroImageUrl: fallbackBrand.heroImageUrl,
       },
       suggestedBranch: fallbackBrand.nearestBranch,
       etaMinutes: fallbackBrand.etaMinutes,
@@ -83,6 +102,7 @@ export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promi
           description: "Carne doble, queso fundido y salsa ahumada.",
           basePrice: "$ 11.90",
           category: "Burgers",
+          imageUrl: fallbackBrand.heroImageUrl,
         },
       ],
       shareUrl: `https://vzfood.com/app/${fallbackBrand.slug}`,
@@ -91,7 +111,7 @@ export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promi
 
   const tenantResult = await supabase
     .from("tenants")
-    .select("id, name, slug, custom_domain, storefront_enabled")
+    .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
     .eq("slug", tenantSlug)
     .limit(1)
     .maybeSingle<TenantRow>()
@@ -106,12 +126,13 @@ export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promi
     slug: tenantResult.data.slug,
     customDomain: tenantResult.data.custom_domain,
     storefrontEnabled: tenantResult.data.storefront_enabled,
+    heroImageUrl: tenantResult.data.hero_image_url,
   }
 
   const [branchesResult, categoriesResult, productsResult] = await Promise.all([
     supabase.from("branches").select("name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).limit(1),
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
-    supabase.from("products").select("id, name, description, base_price, category_id").eq("tenant_id", tenant.id).order("name", { ascending: true }).limit(6).returns<ProductRow[]>(),
+    supabase.from("products").select("id, name, description, base_price, category_id, primary_image_path").eq("tenant_id", tenant.id).order("name", { ascending: true }).limit(6).returns<ProductRow[]>(),
   ])
 
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
@@ -121,6 +142,7 @@ export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promi
     description: product.description,
     basePrice: formatCurrency(product.base_price),
     category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
+    imageUrl: getStoragePublicUrl(product.primary_image_path),
   }))
 
   const fallbackBrand = getFallbackBrand(tenant.slug)

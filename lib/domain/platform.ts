@@ -19,4 +19,5 @@ export type BrandCard = {
   readonly nearestBranch: string;
   readonly etaMinutes: number;
   readonly accent: string;
+  readonly heroImageUrl: string;
 };

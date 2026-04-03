@@ -1,11 +1,19 @@
 with upsert_tenant as (
-  insert into public.tenants (name, slug, status, storefront_enabled, custom_domain)
-  values ('Demo Brand', 'demo-brand', 'active', true, null)
+  insert into public.tenants (name, slug, status, storefront_enabled, custom_domain, hero_image_url)
+  values (
+    'Demo Brand',
+    'demo-brand',
+    'active',
+    true,
+    null,
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=80'
+  )
   on conflict (slug) do update set
     name = excluded.name,
     status = excluded.status,
     storefront_enabled = excluded.storefront_enabled,
     custom_domain = excluded.custom_domain,
+    hero_image_url = excluded.hero_image_url,
     updated_at = now()
   returning id
 ), tenant_ref as (
@@ -58,6 +66,23 @@ on conflict (tenant_id, slug) do update set
   sort_order = excluded.sort_order,
   updated_at = now();
 
+update public.categories
+set image_path = case slug
+  when 'burgers' then 'tenants/demo-brand/categories/burgers/cover.jpg'
+  when 'combos' then 'tenants/demo-brand/categories/combos/cover.jpg'
+  when 'wraps' then 'tenants/demo-brand/categories/wraps/cover.jpg'
+  when 'bebidas' then 'tenants/demo-brand/categories/bebidas/cover.jpg'
+  else image_path
+end,
+image_alt = case slug
+  when 'burgers' then 'Categoria de hamburguesas'
+  when 'combos' then 'Categoria de combos'
+  when 'wraps' then 'Categoria de wraps'
+  when 'bebidas' then 'Categoria de bebidas'
+  else image_alt
+end
+where tenant_id = (select id from public.tenants where slug = 'demo-brand' limit 1);
+
 with tenant_ref as (
   select id from public.tenants where slug = 'demo-brand' limit 1
 )
@@ -107,6 +132,23 @@ on conflict (tenant_id, slug) do update set
   tags = excluded.tags,
   updated_at = now();
 
+update public.products
+set primary_image_path = case slug
+  when 'fire-smash-burger' then 'tenants/demo-brand/products/fire-smash-burger/primary/cover.jpg'
+  when 'crispy-box' then 'tenants/demo-brand/products/crispy-box/primary/cover.jpg'
+  when 'lime-chicken-wrap' then 'tenants/demo-brand/products/lime-chicken-wrap/primary/cover.jpg'
+  when 'spark-cola' then 'tenants/demo-brand/products/spark-cola/primary/cover.jpg'
+  else primary_image_path
+end,
+primary_image_alt = case slug
+  when 'fire-smash-burger' then 'Fire Smash Burger'
+  when 'crispy-box' then 'Crispy Box'
+  when 'lime-chicken-wrap' then 'Lime Chicken Wrap'
+  when 'spark-cola' then 'Spark Cola'
+  else primary_image_alt
+end
+where tenant_id = (select id from public.tenants where slug = 'demo-brand' limit 1);
+
 insert into public.product_modifier_groups (product_id, modifier_group_id, sort_order)
 select product_ref.id, modifier_group_ref.id, relation.sort_order
 from (
@@ -147,3 +189,20 @@ on conflict (branch_id, product_id) do update set
   price_override = excluded.price_override,
   prep_time_minutes = excluded.prep_time_minutes,
   updated_at = now();
+
+insert into public.product_images (product_id, storage_path, alt_text, sort_order)
+select product_ref.id, seed.storage_path, seed.alt_text, seed.sort_order
+from (
+  values
+    ('fire-smash-burger', 'tenants/demo-brand/products/fire-smash-burger/gallery/01.jpg', 'Fire Smash Burger angled shot', 1),
+    ('fire-smash-burger', 'tenants/demo-brand/products/fire-smash-burger/gallery/02.jpg', 'Fire Smash Burger close up', 2),
+    ('crispy-box', 'tenants/demo-brand/products/crispy-box/gallery/01.jpg', 'Crispy Box combo pack', 1),
+    ('lime-chicken-wrap', 'tenants/demo-brand/products/lime-chicken-wrap/gallery/01.jpg', 'Lime Chicken Wrap sliced', 1)
+) as seed(product_slug, storage_path, alt_text, sort_order)
+join public.products as product_ref on product_ref.slug = seed.product_slug
+where not exists (
+  select 1
+  from public.product_images pi
+  where pi.product_id = product_ref.id
+    and pi.storage_path = seed.storage_path
+);
