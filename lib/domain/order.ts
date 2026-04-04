@@ -41,6 +41,19 @@ export type CustomerOrderSummary = {
   readonly itemCount: number
 }
 
+export type AdminOrderSummary = {
+  readonly id: string
+  readonly orderNumber: number
+  readonly customerName: string
+  readonly branchName: string
+  readonly status: string
+  readonly channel: string
+  readonly placedAt: string
+  readonly totalAmount: number
+}
+
+export type OrderStatus = "pending_payment" | "confirmed" | "in_preparation" | "ready" | "completed" | "cancelled"
+
 export type CustomerOrderDetailItem = {
   readonly id: string
   readonly productName: string
@@ -63,4 +76,31 @@ export type CustomerOrderDetail = {
   readonly customerEmail: string | null
   readonly notes: string | null
   readonly items: readonly CustomerOrderDetailItem[]
+}
+
+export type AdminOrderDetailItem = {
+  readonly id: string
+  readonly productName: string
+  readonly categoryName: string | null
+  readonly quantity: number
+  readonly unitPrice: number
+  readonly lineTotal: number
+  readonly notes: string | null
+}
+
+export type AdminOrderDetail = {
+  readonly id: string
+  readonly orderNumber: number
+  readonly status: string
+  readonly channel: string
+  readonly fulfillmentType: "pickup" | "delivery"
+  readonly customerName: string
+  readonly customerPhone: string | null
+  readonly customerEmail: string | null
+  readonly branchName: string
+  readonly subtotalAmount: number
+  readonly totalAmount: number
+  readonly placedAt: string
+  readonly notes: string | null
+  readonly items: readonly AdminOrderDetailItem[]
 }

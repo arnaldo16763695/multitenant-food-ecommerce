@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, OrderStatus } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -26,6 +26,19 @@ type CustomerOrderRow = {
   fulfillment_type: "pickup" | "delivery"
   total_amount: number
   placed_at: string
+}
+
+type AdminOrderRow = {
+  id: string
+  order_number: number
+  customer_name: string
+  status: string
+  channel: string
+  total_amount: number
+  placed_at: string
+  branches: {
+    name: string
+  } | null
 }
 
 type OrderItemCountRow = {
@@ -249,6 +262,196 @@ export async function getCustomerOrders(supabase: SupabaseClient, tenantSlug: st
     placedAt: order.placed_at,
     itemCount: itemCountMap.get(order.id) ?? 0,
   }))
+}
+
+type AdminOrderDetailRow = {
+  id: string
+  order_number: number
+  status: string
+  channel: string
+  fulfillment_type: "pickup" | "delivery"
+  customer_name: string
+  customer_phone: string | null
+  customer_email: string | null
+  subtotal_amount: number
+  total_amount: number
+  placed_at: string
+  notes: string | null
+  branches: {
+    name: string
+  } | null
+}
+
+type AdminOrderDetailItemRow = {
+  id: string
+  order_id: string
+  product_name_snapshot: string
+  category_name_snapshot: string | null
+  quantity: number
+  unit_price_snapshot: number
+  line_total: number
+  notes: string | null
+}
+
+export async function getAdminOrders(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminOrderSummary[]> {
+  const ordersResult = await supabase
+    .from("orders")
+    .select("id, order_number, customer_name, status, channel, total_amount, placed_at, branches(name)")
+    .eq("tenant_id", tenantId)
+    .order("placed_at", { ascending: false })
+    .returns<AdminOrderRow[]>()
+
+  if (ordersResult.error) {
+    return []
+  }
+
+  return (ordersResult.data ?? []).map((order) => ({
+    id: order.id,
+    orderNumber: order.order_number,
+    customerName: order.customer_name,
+    branchName: order.branches?.name ?? "Sucursal",
+    status: order.status,
+    channel: order.channel,
+    placedAt: order.placed_at,
+    totalAmount: Number(order.total_amount),
+  }))
+}
+
+export async function updateAdminOrderStatus(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string,
+  nextStatus: OrderStatus,
+  changedByProfileId?: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const orderResult = await supabase
+    .from("orders")
+    .select("status")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<{ status: OrderStatus }>()
+
+  if (orderResult.error || !orderResult.data) {
+    return { ok: false, error: "No encontramos la orden." }
+  }
+
+  const currentStatus = orderResult.data.status
+
+  if (currentStatus === nextStatus) {
+    return { ok: true }
+  }
+
+  const allowedTransitions: Record<OrderStatus, readonly OrderStatus[]> = {
+    pending_payment: ["confirmed", "cancelled"],
+    confirmed: ["in_preparation", "cancelled"],
+    in_preparation: ["ready", "cancelled"],
+    ready: ["completed", "cancelled"],
+    completed: [],
+    cancelled: [],
+  }
+
+  if (!allowedTransitions[currentStatus].includes(nextStatus)) {
+    return { ok: false, error: `No se puede cambiar de ${currentStatus} a ${nextStatus}.` }
+  }
+
+  const timestampPayload: {
+    confirmed_at?: string | null
+    completed_at?: string | null
+    cancelled_at?: string | null
+  } = {}
+
+  if (nextStatus === "confirmed") {
+    timestampPayload.confirmed_at = new Date().toISOString()
+  }
+
+  if (nextStatus === "completed") {
+    timestampPayload.completed_at = new Date().toISOString()
+  }
+
+  if (nextStatus === "cancelled") {
+    timestampPayload.cancelled_at = new Date().toISOString()
+  }
+
+  const updateResult = await supabase
+    .from("orders")
+    .update({
+      status: nextStatus,
+      ...timestampPayload,
+    })
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  const historyResult = await supabase.from("order_status_history").insert({
+    order_id: orderId,
+    from_status: currentStatus,
+    to_status: nextStatus,
+    changed_by_profile_id: changedByProfileId ?? null,
+    source: "admin",
+  })
+
+  if (historyResult.error) {
+    return { ok: false, error: historyResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function getAdminOrderDetail(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string
+): Promise<AdminOrderDetail | null> {
+  const orderResult = await supabase
+    .from("orders")
+    .select("id, order_number, status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name)")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<AdminOrderDetailRow>()
+
+  if (orderResult.error || !orderResult.data) {
+    return null
+  }
+
+  const itemsResult = await supabase
+    .from("order_items")
+    .select("id, order_id, product_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total, notes")
+    .eq("order_id", orderId)
+    .returns<AdminOrderDetailItemRow[]>()
+
+  if (itemsResult.error) {
+    return null
+  }
+
+  return {
+    id: orderResult.data.id,
+    orderNumber: orderResult.data.order_number,
+    status: orderResult.data.status,
+    channel: orderResult.data.channel,
+    fulfillmentType: orderResult.data.fulfillment_type,
+    customerName: orderResult.data.customer_name,
+    customerPhone: orderResult.data.customer_phone,
+    customerEmail: orderResult.data.customer_email,
+    branchName: orderResult.data.branches?.name ?? "Sucursal",
+    subtotalAmount: Number(orderResult.data.subtotal_amount),
+    totalAmount: Number(orderResult.data.total_amount),
+    placedAt: orderResult.data.placed_at,
+    notes: orderResult.data.notes,
+    items: (itemsResult.data ?? []).map((item) => ({
+      id: item.id,
+      productName: item.product_name_snapshot,
+      categoryName: item.category_name_snapshot,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price_snapshot),
+      lineTotal: Number(item.line_total),
+      notes: item.notes,
+    })),
+  }
 }
 
 export async function getCustomerOrderDetail(

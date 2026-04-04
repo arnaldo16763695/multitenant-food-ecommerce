@@ -1,0 +1,168 @@
+import Link from "next/link"
+
+import { requireAdminAccess } from "@/lib/auth/admin"
+import { getAdminOrderDetail } from "@/lib/services/orders"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+
+import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
+function formatOrderStatus(status: string) {
+  switch (status) {
+    case "pending_payment":
+      return "Pago pendiente"
+    case "confirmed":
+      return "Confirmado"
+    case "in_preparation":
+      return "En preparación"
+    case "ready":
+      return "Listo"
+    case "completed":
+      return "Completado"
+    case "cancelled":
+      return "Cancelado"
+    default:
+      return status
+  }
+}
+
+function getOrderBadgeVariant(status: string) {
+  if (status === "ready" || status === "completed") return "success"
+  if (status === "in_preparation") return "secondary"
+
+  return "warning"
+}
+
+function formatOrderChannel(channel: string) {
+  if (channel === "web") return "Web"
+  if (channel === "mobile") return "Mobile"
+  if (channel === "admin") return "Admin"
+
+  return channel
+}
+
+type AdminOrderDetailPageProps = {
+  readonly params: Promise<{
+    tenantSlug: string
+    orderId: string
+  }>
+}
+
+export default async function AdminOrderDetailPage({ params }: AdminOrderDetailPageProps) {
+  const { tenantSlug, orderId } = await params
+  const access = await requireAdminAccess(tenantSlug)
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const order = await getAdminOrderDetail(supabase, access.membership.tenantId, orderId)
+
+  return (
+    <AdminPageShell
+      eyebrow="Pedidos / Detalle"
+      title={order ? `Orden #${order.orderNumber}` : "Detalle de la orden"}
+      description="Vista operativa del pedido con datos del cliente, sucursal, estado e items confirmados."
+      density="compact"
+    >
+      <div className="flex justify-end">
+        <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href={`/app/${tenantSlug}/admin/orders`}>
+          Volver a pedidos
+        </Link>
+      </div>
+
+      {order ? (
+        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumen</CardTitle>
+              <CardDescription>Información principal del pedido y del cliente.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 text-sm">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.25rem] bg-secondary/40 p-4">
+                  <p className="font-semibold text-card-foreground">Cliente</p>
+                  <p className="mt-2 text-muted-foreground">{order.customerName}</p>
+                  <p className="mt-1 text-muted-foreground">{order.customerPhone ?? "Sin teléfono"}</p>
+                  <p className="mt-1 text-muted-foreground">{order.customerEmail ?? "Sin email"}</p>
+                </div>
+                <div className="rounded-[1.25rem] bg-secondary/40 p-4">
+                  <p className="font-semibold text-card-foreground">Orden</p>
+                  <p className="mt-2 text-muted-foreground">Sucursal: {order.branchName}</p>
+                  <p className="mt-1 text-muted-foreground">Canal: {formatOrderChannel(order.channel)}</p>
+                  <p className="mt-1 text-muted-foreground">Fecha: {new Date(order.placedAt).toLocaleString("es-MX")}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge variant={getOrderBadgeVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
+                <Badge variant="outline">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</Badge>
+              </div>
+
+              <div className="rounded-[1.25rem] border border-border p-4">
+                <p className="font-semibold text-card-foreground">Notas</p>
+                <p className="mt-2 leading-7 text-muted-foreground">{order.notes || "Sin notas del cliente."}</p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[1.25rem] bg-secondary/40 p-4">
+                  <p className="font-semibold text-card-foreground">Subtotal</p>
+                  <p className="mt-2 text-2xl font-semibold text-card-foreground">$ {order.subtotalAmount.toFixed(2)}</p>
+                </div>
+                <div className="rounded-[1.25rem] bg-secondary/40 p-4">
+                  <p className="font-semibold text-card-foreground">Total</p>
+                  <p className="mt-2 text-2xl font-semibold text-card-foreground">$ {order.totalAmount.toFixed(2)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Items del pedido</CardTitle>
+              <CardDescription>Snapshot de lo que se confirmó en la orden.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-[1.25rem] border border-border">
+                <Table>
+                  <TableHeader className="bg-secondary/50">
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Categoría</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {order.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-semibold text-card-foreground">
+                          <div>
+                            <p>{item.productName}</p>
+                            {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{item.categoryName ?? "Sin categoría"}</TableCell>
+                        <TableCell className="text-muted-foreground">{item.quantity}</TableCell>
+                        <TableCell className="text-muted-foreground">$ {item.unitPrice.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-medium text-card-foreground">$ {item.lineTotal.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">No encontramos la orden solicitada para este tenant.</CardContent>
+        </Card>
+      )}
+    </AdminPageShell>
+  )
+}
