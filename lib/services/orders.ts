@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, OrderStatus } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, OrderStatus } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -36,6 +36,20 @@ type AdminOrderRow = {
   channel: string
   total_amount: number
   placed_at: string
+  branches: {
+    name: string
+  } | null
+}
+
+type KitchenOrderRow = {
+  id: string
+  order_number: number
+  customer_name: string
+  status: OrderStatus
+  fulfillment_type: "pickup" | "delivery"
+  total_amount: number
+  placed_at: string
+  notes: string | null
   branches: {
     name: string
   } | null
@@ -314,6 +328,48 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
     channel: order.channel,
     placedAt: order.placed_at,
     totalAmount: Number(order.total_amount),
+  }))
+}
+
+export async function getKitchenOrders(
+  supabase: SupabaseClient,
+  tenantId: string,
+  statuses: readonly OrderStatus[] = ["confirmed", "in_preparation", "ready", "completed"]
+): Promise<readonly KitchenOrderSummary[]> {
+  const ordersResult = await supabase
+    .from("orders")
+    .select("id, order_number, customer_name, status, fulfillment_type, total_amount, placed_at, notes, branches(name)")
+    .eq("tenant_id", tenantId)
+    .in("status", [...statuses])
+    .order("placed_at", { ascending: true })
+    .returns<KitchenOrderRow[]>()
+
+  if (ordersResult.error) {
+    return []
+  }
+
+  const orders = ordersResult.data ?? []
+  const orderIds = orders.map((order) => order.id)
+  const orderItemsResult = orderIds.length
+    ? await supabase.from("order_items").select("order_id, quantity").in("order_id", orderIds).returns<OrderItemCountRow[]>()
+    : { data: [], error: null }
+
+  const itemCountMap = (orderItemsResult.data ?? []).reduce<Map<string, number>>((map, item) => {
+    map.set(item.order_id, (map.get(item.order_id) ?? 0) + item.quantity)
+    return map
+  }, new Map())
+
+  return orders.map((order) => ({
+    id: order.id,
+    orderNumber: order.order_number,
+    customerName: order.customer_name,
+    branchName: order.branches?.name ?? "Sucursal",
+    status: order.status,
+    fulfillmentType: order.fulfillment_type,
+    placedAt: order.placed_at,
+    totalAmount: Number(order.total_amount),
+    itemCount: itemCountMap.get(order.id) ?? 0,
+    notes: order.notes,
   }))
 }
 

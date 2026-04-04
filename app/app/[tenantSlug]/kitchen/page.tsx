@@ -1,20 +1,36 @@
-import { TenantShell } from "@/components/marketing/tenant-shell";
+import { requireAdminAccess } from "@/lib/auth/admin"
+import { getKitchenOrders } from "@/lib/services/orders"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
+
+import { KitchenBoard } from "@/components/kitchen/kitchen-board"
+import { AdminPageShell } from "@/components/admin/admin-page-shell"
 
 type KitchenPageProps = {
   readonly params: Promise<{
-    tenantSlug: string;
-  }>;
-};
+    tenantSlug: string
+  }>
+}
 
 export default async function KitchenPage({ params }: KitchenPageProps) {
-  const { tenantSlug } = await params;
+  const { tenantSlug } = await params
+  const access = await requireAdminAccess(tenantSlug)
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const orders = await getKitchenOrders(supabase, access.membership.tenantId)
 
   return (
-    <TenantShell
-      tenantSlug={tenantSlug}
-      eyebrow="Kitchen module"
-      title={`Kitchen shell para ${tenantSlug}`}
-      description="Esta superficie queda reservada para el tablero en tiempo real de preparacion, asignacion y estados operativos por sucursal. La base ya separa claramente operacion y venta."
-    />
-  );
+    <AdminPageShell
+      eyebrow="Kitchen"
+      title="Tablero operativo de cocina"
+      description="Primera fase de kitchen: órdenes reales por estado, foco en ejecución rápida y transición operativa sin complejidad extra aún."
+      badge={`${orders.length} órdenes activas`}
+      density="compact"
+    >
+      <KitchenBoard tenantSlug={tenantSlug} orders={orders} />
+    </AdminPageShell>
+  )
 }
