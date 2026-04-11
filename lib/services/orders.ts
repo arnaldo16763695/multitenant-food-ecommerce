@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, OrderStatus } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, OrderStatus, PaymentStatus } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -33,6 +33,7 @@ type AdminOrderRow = {
   order_number: number
   customer_name: string
   status: string
+  payment_status: PaymentStatus
   channel: string
   total_amount: number
   placed_at: string
@@ -181,7 +182,7 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
       customer_id: input.customerId ?? null,
       channel: "web",
       fulfillment_type: input.fulfillmentType,
-      status: "confirmed",
+      status: "pending_payment",
       payment_status: "pending",
       customer_name: input.customer.fullName.trim(),
       customer_phone: input.customer.phone.trim(),
@@ -194,7 +195,6 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
       total_amount: subtotal,
       currency: "MXN",
       notes: input.customer.notes?.trim() || null,
-      confirmed_at: new Date().toISOString(),
     })
     .select("id, order_number")
     .single<OrderRow>()
@@ -217,7 +217,7 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   const orderStatusHistoryResult = await supabase.from("order_status_history").insert({
     order_id: orderResult.data.id,
     from_status: null,
-    to_status: "confirmed",
+    to_status: "pending_payment",
     changed_by_profile_id: null,
     source: "customer",
   })
@@ -291,6 +291,7 @@ type AdminOrderDetailRow = {
   id: string
   order_number: number
   status: string
+  payment_status: PaymentStatus
   channel: string
   fulfillment_type: "pickup" | "delivery"
   customer_name: string
@@ -319,7 +320,7 @@ type AdminOrderDetailItemRow = {
 export async function getAdminOrders(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminOrderSummary[]> {
   const ordersResult = await supabase
     .from("orders")
-    .select("id, order_number, customer_name, status, channel, total_amount, placed_at, branches(name)")
+    .select("id, order_number, customer_name, status, payment_status, channel, total_amount, placed_at, branches(name)")
     .eq("tenant_id", tenantId)
     .order("placed_at", { ascending: false })
     .returns<AdminOrderRow[]>()
@@ -334,6 +335,7 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
     customerName: order.customer_name,
     branchName: order.branches?.name ?? "Sucursal",
     status: order.status,
+    paymentStatus: order.payment_status,
     channel: order.channel,
     placedAt: order.placed_at,
     totalAmount: Number(order.total_amount),
@@ -434,30 +436,32 @@ export async function updateAdminOrderStatus(
     return { ok: false, error: `No se puede cambiar de ${currentStatus} a ${nextStatus}.` }
   }
 
-  const timestampPayload: {
+  const updatePayload: {
+    status: OrderStatus
     confirmed_at?: string | null
     completed_at?: string | null
     cancelled_at?: string | null
-  } = {}
+    payment_status?: "pending" | "paid" | "failed" | "refunded"
+  } = {
+    status: nextStatus,
+  }
 
   if (nextStatus === "confirmed") {
-    timestampPayload.confirmed_at = new Date().toISOString()
+    updatePayload.confirmed_at = new Date().toISOString()
+    updatePayload.payment_status = "paid"
   }
 
   if (nextStatus === "completed") {
-    timestampPayload.completed_at = new Date().toISOString()
+    updatePayload.completed_at = new Date().toISOString()
   }
 
   if (nextStatus === "cancelled") {
-    timestampPayload.cancelled_at = new Date().toISOString()
+    updatePayload.cancelled_at = new Date().toISOString()
   }
 
   const updateResult = await supabase
     .from("orders")
-    .update({
-      status: nextStatus,
-      ...timestampPayload,
-    })
+    .update(updatePayload)
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
 
@@ -475,6 +479,54 @@ export async function updateAdminOrderStatus(
 
   if (historyResult.error) {
     return { ok: false, error: historyResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function updateAdminOrderPaymentStatus(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string,
+  nextPaymentStatus: PaymentStatus
+): Promise<{ ok: boolean; error?: string }> {
+  const orderResult = await supabase
+    .from("orders")
+    .select("payment_status")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<{ payment_status: PaymentStatus }>()
+
+  if (orderResult.error || !orderResult.data) {
+    return { ok: false, error: "No encontramos la orden." }
+  }
+
+  const currentPaymentStatus = orderResult.data.payment_status
+
+  if (currentPaymentStatus === nextPaymentStatus) {
+    return { ok: true }
+  }
+
+  const allowedTransitions: Record<PaymentStatus, readonly PaymentStatus[]> = {
+    pending: ["paid", "failed"],
+    paid: ["refunded"],
+    failed: ["pending", "paid"],
+    refunded: [],
+  }
+
+  if (!allowedTransitions[currentPaymentStatus].includes(nextPaymentStatus)) {
+    return { ok: false, error: `No se puede cambiar el pago de ${currentPaymentStatus} a ${nextPaymentStatus}.` }
+  }
+
+  const updateResult = await supabase
+    .from("orders")
+    .update({ payment_status: nextPaymentStatus })
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
   }
 
   return { ok: true }
@@ -544,7 +596,7 @@ export async function getAdminOrderDetail(
 ): Promise<AdminOrderDetail | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name)")
+    .select("id, order_number, status, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
@@ -568,6 +620,7 @@ export async function getAdminOrderDetail(
     id: orderResult.data.id,
     orderNumber: orderResult.data.order_number,
     status: orderResult.data.status,
+    paymentStatus: orderResult.data.payment_status,
     channel: orderResult.data.channel,
     fulfillmentType: orderResult.data.fulfillment_type,
     customerName: orderResult.data.customer_name,

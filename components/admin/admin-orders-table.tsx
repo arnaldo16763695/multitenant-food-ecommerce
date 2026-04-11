@@ -5,8 +5,8 @@ import Link from "next/link"
 import { MoreHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { updateAdminOrderStatusAction } from "@/app/app/[tenantSlug]/admin/orders/actions"
-import type { AdminOrderSummary, OrderStatus } from "@/lib/domain/order"
+import { updateAdminOrderPaymentStatusAction, updateAdminOrderStatusAction } from "@/app/app/[tenantSlug]/admin/orders/actions"
+import { formatOrderStatus, formatPaymentStatus, type AdminOrderSummary, type OrderStatus, type PaymentStatus } from "@/lib/domain/order"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -20,25 +20,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 type AdminOrdersTableProps = {
   readonly tenantSlug: string
   readonly orders: readonly AdminOrderSummary[]
-}
-
-function formatOrderStatus(status: string) {
-  switch (status) {
-    case "pending_payment":
-      return "Pago pendiente"
-    case "confirmed":
-      return "Confirmado"
-    case "in_preparation":
-      return "En preparación"
-    case "ready":
-      return "Listo"
-    case "completed":
-      return "Completado"
-    case "cancelled":
-      return "Cancelado"
-    default:
-      return status
-  }
 }
 
 function formatOrderChannel(channel: string) {
@@ -68,6 +49,23 @@ function getSelectableStatuses(status: string) {
   return [status as OrderStatus, ...getNextStatuses(status)]
 }
 
+function getNextPaymentStatuses(status: PaymentStatus): readonly PaymentStatus[] {
+  switch (status) {
+    case "pending":
+      return ["paid", "failed"]
+    case "paid":
+      return ["refunded"]
+    case "failed":
+      return ["pending", "paid"]
+    default:
+      return []
+  }
+}
+
+function getSelectablePaymentStatuses(status: PaymentStatus) {
+  return [status, ...getNextPaymentStatuses(status)]
+}
+
 export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) {
   const router = useRouter()
   const [errorMessage, setErrorMessage] = React.useState("")
@@ -88,6 +86,21 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     })
   }
 
+  function handlePaymentStatusChange(orderId: string, nextPaymentStatus: PaymentStatus) {
+    setErrorMessage("")
+
+    startTransition(async () => {
+      const result = await updateAdminOrderPaymentStatusAction(tenantSlug, orderId, nextPaymentStatus)
+
+      if (!result.ok) {
+        setErrorMessage(result.error ?? "No pudimos actualizar el pago.")
+        return
+      }
+
+      router.refresh()
+    })
+  }
+
   return (
     <>
       <div className="overflow-hidden rounded-[1.25rem] border border-border">
@@ -97,6 +110,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead>Pedido</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Sucursal</TableHead>
+              <TableHead>Pago</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Canal</TableHead>
               <TableHead>Fecha</TableHead>
@@ -107,12 +121,27 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           <TableBody>
             {orders.map((order) => {
               const selectableStatuses = getSelectableStatuses(order.status)
+              const selectablePaymentStatuses = getSelectablePaymentStatuses(order.paymentStatus)
 
               return (
                 <TableRow key={order.id}>
                   <TableCell className="font-semibold text-card-foreground">#{order.orderNumber}</TableCell>
                   <TableCell className="text-muted-foreground">{order.customerName}</TableCell>
                   <TableCell className="text-muted-foreground">{order.branchName}</TableCell>
+                  <TableCell>
+                    <select
+                      className="h-9 min-w-36 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      value={order.paymentStatus}
+                      disabled={isPending || selectablePaymentStatuses.length === 1}
+                      onChange={(event) => handlePaymentStatusChange(order.id, event.target.value as PaymentStatus)}
+                    >
+                      {selectablePaymentStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {formatPaymentStatus(status)}
+                        </option>
+                      ))}
+                    </select>
+                  </TableCell>
                   <TableCell>
                     <select
                       className="h-9 min-w-44 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"

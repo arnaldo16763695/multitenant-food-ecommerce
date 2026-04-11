@@ -59,7 +59,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
       })
 
       if (!result.ok || !result.orderId) {
-        setErrorMessage(result.error ?? "No pudimos confirmar tu pedido.")
+        setErrorMessage(result.error ?? "No pudimos registrar tu pedido.")
         return
       }
 
@@ -126,7 +126,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
 
                 <Button className="h-10 rounded-full" disabled={isSubmitting || items.length === 0} type="submit">
                   {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}
-                  Confirmar pedido
+                  Enviar pedido
                 </Button>
               </form>
             </CardContent>

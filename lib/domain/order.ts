@@ -47,12 +47,48 @@ export type AdminOrderSummary = {
   readonly customerName: string
   readonly branchName: string
   readonly status: string
+  readonly paymentStatus: PaymentStatus
   readonly channel: string
   readonly placedAt: string
   readonly totalAmount: number
 }
 
 export type OrderStatus = "pending_payment" | "confirmed" | "in_preparation" | "ready" | "completed" | "cancelled"
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded"
+
+export function formatOrderStatus(status: string) {
+  switch (status) {
+    case "pending_payment":
+      return "Pago pendiente"
+    case "confirmed":
+      return "Confirmado"
+    case "in_preparation":
+      return "En preparación"
+    case "ready":
+      return "Listo"
+    case "completed":
+      return "Completado"
+    case "cancelled":
+      return "Cancelado"
+    default:
+      return status
+  }
+}
+
+export function formatPaymentStatus(status: PaymentStatus) {
+  switch (status) {
+    case "pending":
+      return "Pendiente"
+    case "paid":
+      return "Pagado"
+    case "failed":
+      return "Fallido"
+    case "refunded":
+      return "Reembolsado"
+    default:
+      return status
+  }
+}
 
 export type CustomerOrderDetailItem = {
   readonly id: string
@@ -92,6 +128,7 @@ export type AdminOrderDetail = {
   readonly id: string
   readonly orderNumber: number
   readonly status: string
+  readonly paymentStatus: PaymentStatus
   readonly channel: string
   readonly fulfillmentType: "pickup" | "delivery"
   readonly customerName: string

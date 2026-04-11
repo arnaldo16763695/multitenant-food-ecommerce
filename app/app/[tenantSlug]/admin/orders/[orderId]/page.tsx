@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { formatOrderStatus, formatPaymentStatus } from "@/lib/domain/order"
 import { getAdminOrderDetail } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -10,28 +11,17 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-function formatOrderStatus(status: string) {
-  switch (status) {
-    case "pending_payment":
-      return "Pago pendiente"
-    case "confirmed":
-      return "Confirmado"
-    case "in_preparation":
-      return "En preparación"
-    case "ready":
-      return "Listo"
-    case "completed":
-      return "Completado"
-    case "cancelled":
-      return "Cancelado"
-    default:
-      return status
-  }
-}
-
 function getOrderBadgeVariant(status: string) {
   if (status === "ready" || status === "completed") return "success"
   if (status === "in_preparation") return "secondary"
+
+  return "warning"
+}
+
+function getPaymentBadgeVariant(status: string) {
+  if (status === "paid") return "success"
+  if (status === "refunded") return "secondary"
+  if (status === "failed") return "destructive"
 
   return "warning"
 }
@@ -66,7 +56,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
     <AdminPageShell
       eyebrow="Pedidos / Detalle"
       title={order ? `Orden #${order.orderNumber}` : "Detalle de la orden"}
-      description="Vista operativa del pedido con datos del cliente, sucursal, estado e items confirmados."
+      description="Vista operativa del pedido con datos del cliente, sucursal, pago, estado e items confirmados."
       density="compact"
     >
       <OrderRealtimeRefresh tenantId={access.membership.tenantId} orderId={orderId} />
@@ -81,7 +71,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           <Card>
             <CardHeader>
               <CardTitle>Resumen</CardTitle>
-              <CardDescription>Información principal del pedido y del cliente.</CardDescription>
+              <CardDescription>Información principal del pedido, el pago y el cliente.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 text-sm">
               <div className="grid gap-4 md:grid-cols-2">
@@ -100,6 +90,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+                <Badge variant={getPaymentBadgeVariant(order.paymentStatus)}>{formatPaymentStatus(order.paymentStatus)}</Badge>
                 <Badge variant={getOrderBadgeVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                 <Badge variant="outline">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</Badge>
               </div>
