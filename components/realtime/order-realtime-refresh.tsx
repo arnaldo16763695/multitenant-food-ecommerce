@@ -38,7 +38,7 @@ export function OrderRealtimeRefresh({
     }
 
     const scheduleRefresh = () => {
-      debugLog("scheduleRefresh")
+      debugLog("REFRESH_SCHEDULED")
 
       if (refreshTimeout) {
         window.clearTimeout(refreshTimeout)
@@ -56,7 +56,7 @@ export function OrderRealtimeRefresh({
 
       pollInterval = window.setInterval(() => {
         if (document.visibilityState === "visible") {
-          debugLog("polling refresh")
+          debugLog("POLLING_REFRESH")
           router.refresh()
         }
       }, pollIntervalMs)
@@ -176,7 +176,8 @@ export function OrderRealtimeRefresh({
             supabase
               .channel(`orders-tenant-${tenantId}`)
               .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-                debugLog("tenant orders change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "tenant-orders",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
@@ -195,7 +196,8 @@ export function OrderRealtimeRefresh({
             supabase
               .channel(`orders-customer-${customerId}`)
               .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${customerId}` }, (payload) => {
-                debugLog("customer orders change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "customer-orders",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
@@ -214,7 +216,8 @@ export function OrderRealtimeRefresh({
             supabase
               .channel(`order-detail-${orderId}`)
               .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `id=eq.${orderId}` }, (payload) => {
-                debugLog("order detail change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "order-detail",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
@@ -224,7 +227,8 @@ export function OrderRealtimeRefresh({
                 scheduleRefresh()
               })
               .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, (payload) => {
-                debugLog("order items change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "order-items",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
@@ -234,7 +238,8 @@ export function OrderRealtimeRefresh({
                 scheduleRefresh()
               })
               .on("postgres_changes", { event: "*", schema: "public", table: "order_status_history", filter: `order_id=eq.${orderId}` }, (payload) => {
-                debugLog("order history change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "order-history",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
@@ -244,7 +249,8 @@ export function OrderRealtimeRefresh({
                 scheduleRefresh()
               })
               .on("postgres_changes", { event: "*", schema: "public", table: "payments", filter: `order_id=eq.${orderId}` }, (payload) => {
-                debugLog("payments change", {
+                debugLog("REALTIME_EVENT_RECEIVED", {
+                  scope: "payments",
                   eventType: payload.eventType,
                   schema: payload.schema,
                   table: payload.table,
