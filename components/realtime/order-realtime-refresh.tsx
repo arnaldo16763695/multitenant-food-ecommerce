@@ -119,6 +119,10 @@ export function OrderRealtimeRefresh({
 
     const trackChannel = (channel: RealtimeChannel) => {
       channel.subscribe((status, error) => {
+        console.info(
+          `[OrderRealtimeRefreshStatus] channel=${channel.topic} status=${status} hasError=${Boolean(error)} error=${error ? JSON.stringify(error) : "null"}`
+        )
+
         debugLog("channel status", {
           channel: channel.topic,
           status,
@@ -185,6 +189,23 @@ export function OrderRealtimeRefresh({
                   oldRecord: payload.old,
                 })
                 scheduleRefresh()
+              })
+          )
+        )
+
+        channels.push(
+          trackChannel(
+            supabase
+              .channel(`orders-tenant-unfiltered-debug-${tenantId}`)
+              .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+                debugLog("REALTIME_UNFILTERED_EVENT", {
+                  scope: "orders-unfiltered",
+                  eventType: payload.eventType,
+                  schema: payload.schema,
+                  table: payload.table,
+                  newRecord: payload.new,
+                  oldRecord: payload.old,
+                })
               })
           )
         )
