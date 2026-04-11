@@ -39,6 +39,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local opencode artifacts
+.opencode/node_modules/
+.opencode/package-lock.json
+.opencode/bun.lock
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
