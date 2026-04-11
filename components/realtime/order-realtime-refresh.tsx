@@ -10,16 +10,12 @@ type OrderRealtimeRefreshProps = {
   readonly tenantId?: string
   readonly customerId?: string
   readonly orderId?: string
-  readonly pollIntervalMs?: number
 }
-
-const DEFAULT_POLL_INTERVAL_MS = 5000
 
 export function OrderRealtimeRefresh({
   tenantId,
   customerId,
   orderId,
-  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
 }: OrderRealtimeRefreshProps) {
   const router = useRouter()
 
@@ -31,7 +27,6 @@ export function OrderRealtimeRefresh({
     }
 
     let refreshTimeout: number | null = null
-    let pollInterval: number | null = null
     let isActive = true
     let authSubscription: { unsubscribe: () => void } | null = null
     let currentAccessToken: string | null = null
@@ -45,42 +40,6 @@ export function OrderRealtimeRefresh({
       refreshTimeout = window.setTimeout(() => {
         router.refresh()
       }, 180)
-    }
-
-    const startPolling = () => {
-      if (pollInterval || typeof window === "undefined") {
-        return
-      }
-
-      pollInterval = window.setInterval(() => {
-        if (document.visibilityState === "visible") {
-          router.refresh()
-        }
-      }, pollIntervalMs)
-    }
-
-    const stopPolling = () => {
-      if (!pollInterval) {
-        return
-      }
-
-      window.clearInterval(pollInterval)
-      pollInterval = null
-    }
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        scheduleRefresh()
-        startPolling()
-        return
-      }
-
-      stopPolling()
-    }
-
-    const handleReconnect = () => {
-      scheduleRefresh()
-      startPolling()
     }
 
     const teardownChannels = () => {
@@ -165,11 +124,6 @@ export function OrderRealtimeRefresh({
     authSubscription = authListener.data.subscription
     void setupRealtime()
 
-    startPolling()
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    window.addEventListener("focus", handleReconnect)
-    window.addEventListener("online", handleReconnect)
-
     return () => {
       isActive = false
 
@@ -177,15 +131,10 @@ export function OrderRealtimeRefresh({
         window.clearTimeout(refreshTimeout)
       }
 
-      stopPolling()
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      window.removeEventListener("focus", handleReconnect)
-      window.removeEventListener("online", handleReconnect)
-
       authSubscription?.unsubscribe()
       teardownChannels()
     }
-  }, [customerId, orderId, pollIntervalMs, router, tenantId])
+  }, [customerId, orderId, router, tenantId])
 
   return null
 }
