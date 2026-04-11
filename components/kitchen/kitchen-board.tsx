@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
 type KitchenBoardProps = {
@@ -238,7 +239,9 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
                           <p>Sucursal: {order.branchName}</p>
                           <p>Items: {readyItemsCount}/{order.itemCount} listos</p>
                           <p>Total: $ {order.totalAmount.toFixed(2)}</p>
-                          <p>Hora: {new Date(order.placedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p>
+                          <p>
+                            Hora: <LocalizedDateTime value={order.placedAt} kind="time" />
+                          </p>
                           <p>Notas: {order.notes || "Sin notas"}</p>
                         </div>
 

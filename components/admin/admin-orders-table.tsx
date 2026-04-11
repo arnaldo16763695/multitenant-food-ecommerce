@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type AdminOrdersTableProps = {
@@ -157,7 +158,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                     </select>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatOrderChannel(order.channel)}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(order.placedAt).toLocaleString("es-MX")}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <LocalizedDateTime value={order.placedAt} />
+                  </TableCell>
                   <TableCell className="text-right font-medium text-card-foreground">$ {order.totalAmount.toFixed(2)}</TableCell>
                   <TableCell>
                     <div className="flex justify-end">
