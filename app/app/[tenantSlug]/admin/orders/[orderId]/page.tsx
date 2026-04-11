@@ -11,17 +11,17 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-function getOrderBadgeVariant(status: string) {
+function getOrderBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
   if (status === "ready" || status === "completed") return "success"
   if (status === "in_preparation") return "secondary"
 
   return "warning"
 }
 
-function getPaymentBadgeVariant(status: string) {
+function getPaymentBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
   if (status === "paid") return "success"
   if (status === "refunded") return "secondary"
-  if (status === "failed") return "destructive"
+  if (status === "failed") return "warning"
 
   return "warning"
 }
