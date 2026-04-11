@@ -36,14 +36,6 @@ export function OrderRealtimeRefresh({
     let authSubscription: { unsubscribe: () => void } | null = null
     let currentAccessToken: string | null = null
     const channels: RealtimeChannel[] = []
-    const debugContext = { tenantId, customerId, orderId }
-
-    const debugLog = (message: string, payload?: Record<string, unknown>) => {
-      console.info(`[OrderRealtimeRefresh] ${message}`, {
-        ...debugContext,
-        ...(payload ?? {}),
-      })
-    }
 
     const scheduleRefresh = () => {
       if (refreshTimeout) {
@@ -100,20 +92,7 @@ export function OrderRealtimeRefresh({
     }
 
     const subscribeChannel = (channel: RealtimeChannel) => {
-      channel.subscribe((status, error) => {
-        console.info(
-          `[OrderRealtimeRefreshStatus] channel=${channel.topic} status=${status} hasError=${Boolean(error)} error=${error ? JSON.stringify(error) : "null"}`
-        )
-
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          debugLog("REALTIME_CHANNEL_ISSUE", {
-            channel: channel.topic,
-            status,
-            error: error ?? null,
-          })
-        }
-      })
-
+      channel.subscribe()
       channels.push(channel)
     }
 
@@ -122,26 +101,7 @@ export function OrderRealtimeRefresh({
         subscribeChannel(
           supabase
             .channel(`orders-tenant-${tenantId}`)
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "tenant-orders",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
-        )
-
-        subscribeChannel(
-          supabase
-            .channel(`orders-tenant-unfiltered-debug-${tenantId}`)
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
-              debugLog("REALTIME_UNFILTERED_EVENT", {
-                scope: "orders-unfiltered",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `tenant_id=eq.${tenantId}` }, scheduleRefresh)
         )
       }
 
@@ -149,14 +109,7 @@ export function OrderRealtimeRefresh({
         subscribeChannel(
           supabase
             .channel(`orders-customer-${customerId}`)
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${customerId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "customer-orders",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${customerId}` }, scheduleRefresh)
         )
       }
 
@@ -164,38 +117,10 @@ export function OrderRealtimeRefresh({
         subscribeChannel(
           supabase
             .channel(`order-detail-${orderId}`)
-            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `id=eq.${orderId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "order-detail",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
-            .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "order-items",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
-            .on("postgres_changes", { event: "*", schema: "public", table: "order_status_history", filter: `order_id=eq.${orderId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "order-history",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
-            .on("postgres_changes", { event: "*", schema: "public", table: "payments", filter: `order_id=eq.${orderId}` }, (payload) => {
-              debugLog("REALTIME_EVENT_RECEIVED", {
-                scope: "payments",
-                eventType: payload.eventType,
-                table: payload.table,
-              })
-              scheduleRefresh()
-            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `id=eq.${orderId}` }, scheduleRefresh)
+            .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, scheduleRefresh)
+            .on("postgres_changes", { event: "*", schema: "public", table: "order_status_history", filter: `order_id=eq.${orderId}` }, scheduleRefresh)
+            .on("postgres_changes", { event: "*", schema: "public", table: "payments", filter: `order_id=eq.${orderId}` }, scheduleRefresh)
         )
       }
     }
@@ -210,13 +135,10 @@ export function OrderRealtimeRefresh({
       currentAccessToken = nextToken
 
       if (!nextToken) {
-        debugLog("REALTIME_AUTH_MISSING")
         return
       }
 
       supabase.realtime.setAuth(nextToken)
-      debugLog("REALTIME_AUTH_SYNCED")
-
       teardownChannels()
       buildChannels()
     }
@@ -225,15 +147,9 @@ export function OrderRealtimeRefresh({
       const { data, error } = await supabase.auth.getSession()
 
       if (error) {
-        console.error("Supabase realtime auth sync failed", { error, tenantId, customerId, orderId })
+        console.error("Supabase realtime auth sync failed", error)
         return
       }
-
-      debugLog("REALTIME_SESSION_READY", {
-        hasSession: Boolean(data.session),
-        hasAccessToken: Boolean(data.session?.access_token),
-        userId: data.session?.user?.id ?? null,
-      })
 
       await syncRealtimeAuth(data.session?.access_token)
     }
