@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 import { AdminOrdersTable } from "@/components/admin/admin-orders-table"
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 type AdminOrdersPageProps = {
@@ -31,6 +32,7 @@ export default async function AdminOrdersPage({ params }: AdminOrdersPageProps) 
       badge={`${orders.length} órdenes`}
       density="compact"
     >
+      <OrderRealtimeRefresh tenantId={access.membership.tenantId} />
       <Card>
         <CardHeader>
           <CardTitle>Órdenes recientes</CardTitle>

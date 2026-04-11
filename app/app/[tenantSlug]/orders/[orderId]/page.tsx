@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 
 type StorefrontOrderPageProps = {
   readonly params: Promise<{
@@ -34,6 +35,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-8 sm:px-10">
+      <OrderRealtimeRefresh orderId={orderId} />
       <section className="rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Pedido confirmado</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950">Tu orden ya quedó registrada.</h1>

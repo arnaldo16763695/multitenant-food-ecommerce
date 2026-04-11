@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 import { KitchenBoard } from "@/components/kitchen/kitchen-board"
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 
 type KitchenPageProps = {
   readonly params: Promise<{
@@ -30,6 +31,7 @@ export default async function KitchenPage({ params }: KitchenPageProps) {
       badge={`${orders.length} órdenes activas`}
       density="compact"
     >
+      <OrderRealtimeRefresh tenantId={access.membership.tenantId} />
       <KitchenBoard tenantSlug={tenantSlug} orders={orders} />
     </AdminPageShell>
   )

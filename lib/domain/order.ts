@@ -111,9 +111,16 @@ export type KitchenOrderSummary = {
   readonly customerName: string
   readonly branchName: string
   readonly status: OrderStatus
+  readonly channel: string
   readonly fulfillmentType: "pickup" | "delivery"
   readonly placedAt: string
   readonly totalAmount: number
   readonly itemCount: number
   readonly notes: string | null
+  readonly items: readonly {
+    id: string
+    productName: string
+    quantity: number
+    prepStatus: "pending" | "ready"
+  }[]
 }

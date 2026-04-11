@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import type { OrderStatus } from "@/lib/domain/order"
-import { updateAdminOrderStatus } from "@/lib/services/orders"
+import { canKitchenMarkOrderReady, updateAdminOrderStatus, updateKitchenOrderItemPrepStatus } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 const ALLOWED_KITCHEN_STATUSES: readonly OrderStatus[] = ["in_preparation", "ready", "completed"]
@@ -21,7 +21,40 @@ export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId
     throw new Error("Supabase environment variables are missing.")
   }
 
+  if (nextStatus === "ready") {
+    const readyCheck = await canKitchenMarkOrderReady(supabase, access.membership.tenantId, orderId)
+
+    if (!readyCheck.ok) {
+      return readyCheck
+    }
+  }
+
   const result = await updateAdminOrderStatus(supabase, access.membership.tenantId, orderId, nextStatus, access.profile.id)
+
+  if (result.ok) {
+    revalidatePath(`/app/${tenantSlug}/kitchen`)
+    revalidatePath(`/app/${tenantSlug}/admin/orders`)
+    revalidatePath(`/app/${tenantSlug}/account/orders`)
+    revalidatePath(`/app/${tenantSlug}/orders/${orderId}`)
+  }
+
+  return result
+}
+
+export async function updateKitchenOrderItemPrepStatusAction(
+  tenantSlug: string,
+  orderId: string,
+  orderItemId: string,
+  nextPrepStatus: "pending" | "ready"
+) {
+  const access = await requireAdminAccess(tenantSlug)
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const result = await updateKitchenOrderItemPrepStatus(supabase, access.membership.tenantId, orderItemId, nextPrepStatus)
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/kitchen`)

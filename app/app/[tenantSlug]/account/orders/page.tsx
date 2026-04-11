@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
+import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getCustomerOrders } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -23,6 +24,7 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
         <StorefrontHeader tenantSlug={tenantSlug} brandName="Pedidos" branchLabel="Centro · 1.2 km" customerSession={customerContext} />
+        {customerContext ? <OrderRealtimeRefresh customerId={customerContext.customer.id} /> : null}
 
         <section className="mx-auto w-full max-w-5xl rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
           <div className="flex flex-wrap items-center justify-between gap-3">

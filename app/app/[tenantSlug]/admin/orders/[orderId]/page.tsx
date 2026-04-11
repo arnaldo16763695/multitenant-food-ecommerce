@@ -5,6 +5,7 @@ import { getAdminOrderDetail } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -68,6 +69,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
       description="Vista operativa del pedido con datos del cliente, sucursal, estado e items confirmados."
       density="compact"
     >
+      <OrderRealtimeRefresh tenantId={access.membership.tenantId} orderId={orderId} />
       <div className="flex justify-end">
         <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href={`/app/${tenantSlug}/admin/orders`}>
           Volver a pedidos

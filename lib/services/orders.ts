@@ -46,6 +46,7 @@ type KitchenOrderRow = {
   order_number: number
   customer_name: string
   status: OrderStatus
+  channel: string
   fulfillment_type: "pickup" | "delivery"
   total_amount: number
   placed_at: string
@@ -53,6 +54,14 @@ type KitchenOrderRow = {
   branches: {
     name: string
   } | null
+}
+
+type KitchenOrderItemRow = {
+  id: string
+  order_id: string
+  product_name_snapshot: string
+  quantity: number
+  prep_status: "pending" | "ready"
 }
 
 type OrderItemCountRow = {
@@ -338,7 +347,7 @@ export async function getKitchenOrders(
 ): Promise<readonly KitchenOrderSummary[]> {
   const ordersResult = await supabase
     .from("orders")
-    .select("id, order_number, customer_name, status, fulfillment_type, total_amount, placed_at, notes, branches(name)")
+    .select("id, order_number, customer_name, status, channel, fulfillment_type, total_amount, placed_at, notes, branches(name)")
     .eq("tenant_id", tenantId)
     .in("status", [...statuses])
     .order("placed_at", { ascending: true })
@@ -351,11 +360,23 @@ export async function getKitchenOrders(
   const orders = ordersResult.data ?? []
   const orderIds = orders.map((order) => order.id)
   const orderItemsResult = orderIds.length
-    ? await supabase.from("order_items").select("order_id, quantity").in("order_id", orderIds).returns<OrderItemCountRow[]>()
+    ? await supabase
+        .from("order_items")
+        .select("id, order_id, quantity, product_name_snapshot, prep_status")
+        .in("order_id", orderIds)
+        .returns<KitchenOrderItemRow[]>()
     : { data: [], error: null }
 
-  const itemCountMap = (orderItemsResult.data ?? []).reduce<Map<string, number>>((map, item) => {
+  const orderItems = orderItemsResult.data ?? []
+
+  const itemCountMap = orderItems.reduce<Map<string, number>>((map, item) => {
     map.set(item.order_id, (map.get(item.order_id) ?? 0) + item.quantity)
+    return map
+  }, new Map())
+
+  const itemPreviewMap = orderItems.reduce<Map<string, { id: string; productName: string; quantity: number; prepStatus: "pending" | "ready" }[]>>((map, item) => {
+    const currentItems = map.get(item.order_id) ?? []
+    map.set(item.order_id, [...currentItems, { id: item.id, productName: item.product_name_snapshot, quantity: item.quantity, prepStatus: item.prep_status }])
     return map
   }, new Map())
 
@@ -365,11 +386,13 @@ export async function getKitchenOrders(
     customerName: order.customer_name,
     branchName: order.branches?.name ?? "Sucursal",
     status: order.status,
+    channel: order.channel,
     fulfillmentType: order.fulfillment_type,
     placedAt: order.placed_at,
     totalAmount: Number(order.total_amount),
     itemCount: itemCountMap.get(order.id) ?? 0,
     notes: order.notes,
+    items: itemPreviewMap.get(order.id) ?? [],
   }))
 }
 
@@ -455,6 +478,63 @@ export async function updateAdminOrderStatus(
   }
 
   return { ok: true }
+}
+
+export async function updateKitchenOrderItemPrepStatus(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderItemId: string,
+  nextPrepStatus: "pending" | "ready"
+): Promise<{ ok: boolean; error?: string }> {
+  const updateResult = await supabase
+    .from("order_items")
+    .update({ prep_status: nextPrepStatus })
+    .eq("id", orderItemId)
+    .in(
+      "order_id",
+      (
+        await supabase
+          .from("orders")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .returns<{ id: string }[]>()
+      ).data?.map((order) => order.id) ?? []
+    )
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function canKitchenMarkOrderReady(supabase: SupabaseClient, tenantId: string, orderId: string) {
+  const itemsResult = await supabase
+    .from("order_items")
+    .select("prep_status, order_id")
+    .eq("order_id", orderId)
+    .returns<{ prep_status: "pending" | "ready"; order_id: string }[]>()
+
+  if (itemsResult.error) {
+    return { ok: false, error: itemsResult.error.message }
+  }
+
+  const items = itemsResult.data ?? []
+
+  if (!items.length) {
+    return { ok: false, error: "La orden no tiene items para preparar." }
+  }
+
+  const belongsToTenant = await supabase.from("orders").select("id").eq("tenant_id", tenantId).eq("id", orderId).limit(1).maybeSingle<{ id: string }>()
+
+  if (belongsToTenant.error || !belongsToTenant.data) {
+    return { ok: false, error: "La orden no pertenece a este tenant." }
+  }
+
+  return {
+    ok: items.every((item) => item.prep_status === "ready"),
+    error: items.every((item) => item.prep_status === "ready") ? undefined : "Debes marcar todos los items como listos antes de finalizar la orden.",
+  }
 }
 
 export async function getAdminOrderDetail(
