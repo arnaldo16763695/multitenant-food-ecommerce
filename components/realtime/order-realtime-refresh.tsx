@@ -25,12 +25,18 @@ export function OrderRealtimeRefresh({
 
   React.useEffect(() => {
     const supabase = createSupabaseBrowserClient()
+
+    if (!supabase) {
+      return
+    }
+
     let refreshTimeout: number | null = null
     let pollInterval: number | null = null
     let isActive = true
     let authSubscription: { unsubscribe: () => void } | null = null
+    let currentAccessToken: string | null = null
     const channels: RealtimeChannel[] = []
-    const debugContext = { tenantId, customerId, orderId, pollIntervalMs }
+    const debugContext = { tenantId, customerId, orderId }
 
     const debugLog = (message: string, payload?: Record<string, unknown>) => {
       console.info(`[OrderRealtimeRefresh] ${message}`, {
@@ -40,8 +46,6 @@ export function OrderRealtimeRefresh({
     }
 
     const scheduleRefresh = () => {
-      debugLog("REFRESH_SCHEDULED")
-
       if (refreshTimeout) {
         window.clearTimeout(refreshTimeout)
       }
@@ -58,7 +62,6 @@ export function OrderRealtimeRefresh({
 
       pollInterval = window.setInterval(() => {
         if (document.visibilityState === "visible") {
-          debugLog("POLLING_REFRESH")
           router.refresh()
         }
       }, pollIntervalMs)
@@ -74,8 +77,6 @@ export function OrderRealtimeRefresh({
     }
 
     const handleVisibilityChange = () => {
-      debugLog("visibilitychange", { visibilityState: document.visibilityState })
-
       if (document.visibilityState === "visible") {
         scheduleRefresh()
         startPolling()
@@ -86,37 +87,11 @@ export function OrderRealtimeRefresh({
     }
 
     const handleReconnect = () => {
-      debugLog("window reconnect/focus")
       scheduleRefresh()
       startPolling()
     }
 
-    const logChannelStatus = (channel: RealtimeChannel, status: string, error: unknown) => {
-      console.info(
-        `[OrderRealtimeRefreshStatus] channel=${channel.topic} status=${status} hasError=${Boolean(error)} error=${error ? JSON.stringify(error) : "null"}`
-      )
-
-      debugLog("channel status", {
-        channel: channel.topic,
-        status,
-        hasError: Boolean(error),
-        error: error ?? null,
-      })
-    }
-
-    const subscribeChannel = (channel: RealtimeChannel) => {
-      channel.subscribe((status, error) => {
-        logChannelStatus(channel, status, error)
-      })
-
-      channels.push(channel)
-    }
-
     const teardownChannels = () => {
-      if (!supabase) {
-        return
-      }
-
       channels.forEach((channel) => {
         void supabase.removeChannel(channel)
       })
@@ -124,11 +99,25 @@ export function OrderRealtimeRefresh({
       channels.length = 0
     }
 
-    const buildChannels = () => {
-      if (!supabase) {
-        return
-      }
+    const subscribeChannel = (channel: RealtimeChannel) => {
+      channel.subscribe((status, error) => {
+        console.info(
+          `[OrderRealtimeRefreshStatus] channel=${channel.topic} status=${status} hasError=${Boolean(error)} error=${error ? JSON.stringify(error) : "null"}`
+        )
 
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          debugLog("REALTIME_CHANNEL_ISSUE", {
+            channel: channel.topic,
+            status,
+            error: error ?? null,
+          })
+        }
+      })
+
+      channels.push(channel)
+    }
+
+    const buildChannels = () => {
       if (tenantId) {
         subscribeChannel(
           supabase
@@ -137,10 +126,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "tenant-orders",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
@@ -153,10 +139,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_UNFILTERED_EVENT", {
                 scope: "orders-unfiltered",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
             })
         )
@@ -170,10 +153,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "customer-orders",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
@@ -188,10 +168,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "order-detail",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
@@ -199,10 +176,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "order-items",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
@@ -210,10 +184,7 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "order-history",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
@@ -221,27 +192,36 @@ export function OrderRealtimeRefresh({
               debugLog("REALTIME_EVENT_RECEIVED", {
                 scope: "payments",
                 eventType: payload.eventType,
-                schema: payload.schema,
                 table: payload.table,
-                newRecord: payload.new,
-                oldRecord: payload.old,
               })
               scheduleRefresh()
             })
         )
       }
-
-      debugLog("channels created", { count: channels.length, topics: channels.map((channel) => channel.topic) })
     }
 
-    const setupRealtime = async () => {
-      if (!supabase) {
-        debugLog("browser client unavailable")
+    const syncRealtimeAuth = async (accessToken?: string | null) => {
+      const nextToken = accessToken ?? null
+
+      if (nextToken === currentAccessToken) {
         return
       }
 
-      debugLog("browser client ready")
+      currentAccessToken = nextToken
 
+      if (!nextToken) {
+        debugLog("REALTIME_AUTH_MISSING")
+        return
+      }
+
+      supabase.realtime.setAuth(nextToken)
+      debugLog("REALTIME_AUTH_SYNCED")
+
+      teardownChannels()
+      buildChannels()
+    }
+
+    const setupRealtime = async () => {
       const { data, error } = await supabase.auth.getSession()
 
       if (error) {
@@ -249,55 +229,25 @@ export function OrderRealtimeRefresh({
         return
       }
 
-      const accessToken = data.session?.access_token
-
-      debugLog("auth session fetched", {
+      debugLog("REALTIME_SESSION_READY", {
         hasSession: Boolean(data.session),
-        hasAccessToken: Boolean(accessToken),
+        hasAccessToken: Boolean(data.session?.access_token),
         userId: data.session?.user?.id ?? null,
       })
 
-      if (accessToken) {
-        supabase.realtime.setAuth(accessToken)
-        debugLog("realtime auth synced")
-      } else {
-        debugLog("realtime auth skipped because there is no access token")
-      }
-
-      teardownChannels()
-
-      try {
-        debugLog("realtime disconnect requested before resubscribe")
-        await supabase.realtime.disconnect()
-        debugLog("realtime disconnected")
-      } catch (disconnectError) {
-        console.error("Supabase realtime disconnect failed", disconnectError)
-      }
-
-      buildChannels()
+      await syncRealtimeAuth(data.session?.access_token)
     }
 
-    if (supabase) {
-      const authListener = supabase.auth.onAuthStateChange((event, session) => {
-        debugLog("auth state changed", {
-          event,
-          hasSession: Boolean(session),
-          hasAccessToken: Boolean(session?.access_token),
-          userId: session?.user?.id ?? null,
-        })
+    const authListener = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isActive) {
+        return
+      }
 
-        if (!isActive) {
-          return
-        }
+      void syncRealtimeAuth(session?.access_token)
+    })
 
-        void setupRealtime()
-      })
-
-      authSubscription = authListener.data.subscription
-      void setupRealtime()
-    } else {
-      debugLog("browser client unavailable")
-    }
+    authSubscription = authListener.data.subscription
+    void setupRealtime()
 
     startPolling()
     document.addEventListener("visibilitychange", handleVisibilityChange)
