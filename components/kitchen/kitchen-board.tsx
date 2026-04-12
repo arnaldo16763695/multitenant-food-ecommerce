@@ -87,6 +87,16 @@ function updateOrderInCollection(
   return collection.map((order) => (order.id === orderId ? updater(order) : order))
 }
 
+function formatOrderAmount(value: number) {
+  const normalizedValue = Number(value)
+
+  if (!Number.isFinite(normalizedValue)) {
+    return "0.00"
+  }
+
+  return normalizedValue.toFixed(2)
+}
+
 export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: KitchenBoardProps) {
   const [errorMessage, setErrorMessage] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -205,7 +215,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
   }
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
       <section>
         <Card>
           <CardContent className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center xl:justify-between">
@@ -235,6 +245,14 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
             </div>
 
             <div className="flex flex-wrap gap-2 xl:justify-end">
+              <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
+                <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cargadas</span>
+                <p className="mt-1 text-lg font-semibold text-card-foreground">{optimisticOrders.length}</p>
+              </div>
+              <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
+                <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Filtradas</span>
+                <p className="mt-1 text-lg font-semibold text-card-foreground">{filteredOrders.length}</p>
+              </div>
               <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
                 <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Activas</span>
                 <p className="mt-1 text-lg font-semibold text-card-foreground">{summary.active}</p>
@@ -304,7 +322,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
                           <p>Sucursal: {order.branchName}</p>
                           <p>Asignacion: {assignedLabel}</p>
                           <p>Items: {readyItemsCount}/{order.itemCount} listos</p>
-                          <p>Total: $ {order.totalAmount.toFixed(2)}</p>
+                          <p>Total: $ {formatOrderAmount(order.totalAmount)}</p>
                           <p>
                             Hora: <LocalizedDateTime value={order.placedAt} kind="time" />
                           </p>
@@ -428,6 +446,6 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
       </section>
 
       {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
-    </main>
+    </div>
   )
 }
