@@ -55,7 +55,23 @@ type MembershipIdentityRow = {
 }
 
 function getAppUrl() {
-  return process.env.APP_URL || "http://localhost:3000"
+  const explicitAppUrl = process.env.APP_URL?.trim()
+  const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
+  const vercelPreviewUrl = process.env.VERCEL_URL?.trim()
+
+  if (explicitAppUrl) {
+    return explicitAppUrl
+  }
+
+  if (vercelProductionUrl) {
+    return `https://${vercelProductionUrl}`
+  }
+
+  if (vercelPreviewUrl) {
+    return `https://${vercelPreviewUrl}`
+  }
+
+  return "http://localhost:3000"
 }
 
 function normalizeEmail(email: string) {
@@ -163,14 +179,14 @@ async function generateStaffAccessLink(
   fullName: string,
   existingProfile?: ExistingProfileRow
 ) {
-  const redirectTo = `${getAppUrl()}/app/${tenantSlug}/admin`
+  const redirectTo = `${getAppUrl()}/auth/admin/setup-password?next=${encodeURIComponent(`/app/${tenantSlug}/admin`)}`
 
   if (existingProfile) {
     const linkResult = await adminClient.auth.admin.generateLink({
       type: "magiclink",
       email,
       options: {
-        redirectTo,
+        redirectTo: `${getAppUrl()}/app/${tenantSlug}/admin`,
       },
     })
 
@@ -188,28 +204,40 @@ async function generateStaffAccessLink(
     }
   }
 
-  const linkResult = await adminClient.auth.admin.generateLink({
-    type: "signup",
+  const createUserResult = await adminClient.auth.admin.createUser({
     email,
     password: buildTemporaryPassword(),
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+    },
+  })
+
+  if (createUserResult.error || !createUserResult.data.user?.id) {
+    return {
+      ok: false as const,
+      error: createUserResult.error?.message ?? "No pudimos crear la cuenta del staff.",
+    }
+  }
+
+  const linkResult = await adminClient.auth.admin.generateLink({
+    type: "recovery",
+    email,
     options: {
-      data: {
-        full_name: fullName,
-      },
       redirectTo,
     },
   })
 
-  if (linkResult.error || !linkResult.data?.user?.id || !linkResult.data.properties?.action_link) {
+  if (linkResult.error || !linkResult.data.properties?.action_link) {
     return {
       ok: false as const,
-      error: linkResult.error?.message ?? "No pudimos crear la cuenta del staff.",
+      error: linkResult.error?.message ?? "No pudimos generar el enlace para definir la contraseña.",
     }
   }
 
   return {
     ok: true as const,
-    authUserId: linkResult.data.user.id,
+    authUserId: createUserResult.data.user.id,
     invitationUrl: linkResult.data.properties.action_link,
   }
 }

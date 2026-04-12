@@ -55,7 +55,9 @@ export function AdminLoginForm({ nextPath = "/brands", reason }: AdminLoginFormP
       <CardHeader>
         <CardTitle>Acceso admin</CardTitle>
         <CardDescription>
-          Inicia sesion con un usuario que tenga membership activa en el tenant. {reason === "membership" ? "No encontramos acceso para este tenant." : null}
+          Inicia sesion con un usuario que tenga membership activa en el tenant.{" "}
+          {reason === "membership" ? "No encontramos acceso para este tenant." : null}
+          {reason === "password-set" ? "La contraseña fue creada correctamente. Ya puedes entrar." : null}
         </CardDescription>
       </CardHeader>
       <CardContent>
