@@ -123,6 +123,30 @@ export async function getActiveBranchIdsForMembership(
   return (branchMembershipsResult.data ?? []).map((assignment) => assignment.branch_id)
 }
 
+export async function getActiveBranchesForMembership(
+  supabase: SupabaseClient,
+  membershipId: string
+): Promise<readonly StaffBranchOption[]> {
+  const branchMembershipsResult = await supabase
+    .from("branch_memberships")
+    .select("branch_id, branches!inner(id, name)")
+    .eq("tenant_membership_id", membershipId)
+    .eq("is_active", true)
+    .returns<{ branch_id: string; branches: { id: string; name: string } | null }[]>()
+
+  if (branchMembershipsResult.error) {
+    throw new Error(branchMembershipsResult.error.message)
+  }
+
+  return (branchMembershipsResult.data ?? [])
+    .map((assignment) => ({
+      id: assignment.branch_id,
+      name: assignment.branches?.name ?? "Sucursal",
+      isActive: true,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export async function getAdminStaffMembers(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminStaffMember[]> {
   const membershipsResult = await supabase
     .from("tenant_memberships")

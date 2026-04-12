@@ -22,6 +22,7 @@ type KitchenBoardProps = {
   readonly tenantSlug: string
   readonly orders: readonly KitchenOrderSummary[]
   readonly currentMembershipId: string
+  readonly activeBranchName: string
 }
 
 type KitchenColumn = {
@@ -97,10 +98,9 @@ function formatOrderAmount(value: number) {
   return normalizedValue.toFixed(2)
 }
 
-export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: KitchenBoardProps) {
+export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBranchName }: KitchenBoardProps) {
   const [errorMessage, setErrorMessage] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
-  const [selectedBranch, setSelectedBranch] = React.useState("Todas")
   const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
   const [optimisticOrders, setOptimisticOrders] = React.useState<readonly KitchenOrderSummary[]>(orders)
   const [pendingOrderIds, setPendingOrderIds] = React.useState<readonly string[]>([])
@@ -110,18 +110,10 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
     setOptimisticOrders(orders)
   }, [orders])
 
-  const branchOptions = React.useMemo(() => ["Todas", ...new Set(optimisticOrders.map((order) => order.branchName))], [optimisticOrders])
-
   const filteredOrders = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     return optimisticOrders.filter((order) => {
-      const matchesBranch = selectedBranch === "Todas" || order.branchName === selectedBranch
-
-      if (!matchesBranch) {
-        return false
-      }
-
       if (!normalizedQuery) {
         return true
       }
@@ -131,7 +123,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
         .toLowerCase()
         .includes(normalizedQuery)
     })
-  }, [optimisticOrders, searchQuery, selectedBranch])
+  }, [optimisticOrders, searchQuery])
 
   const summary = React.useMemo(
     () => ({
@@ -230,18 +222,9 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 xl:justify-end">
-              <select
-                value={selectedBranch}
-                onChange={(event) => setSelectedBranch(event.target.value)}
-                className="h-9 min-w-44 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
-                {branchOptions.map((branch) => (
-                  <option key={branch} value={branch}>
-                    {branch}
-                  </option>
-                ))}
-              </select>
+            <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm xl:ml-auto">
+              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sucursal activa</span>
+              <p className="mt-1 text-sm font-semibold text-card-foreground">{activeBranchName}</p>
             </div>
 
             <div className="flex flex-wrap gap-2 xl:justify-end">
