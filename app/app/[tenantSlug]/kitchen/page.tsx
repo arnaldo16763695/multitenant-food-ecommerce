@@ -1,6 +1,7 @@
 import { requireKitchenAccess } from "@/lib/auth/admin"
 import { getKitchenOrders } from "@/lib/services/orders"
 import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 import { KitchenBoard } from "@/components/kitchen/kitchen-board"
@@ -16,10 +17,10 @@ type KitchenPageProps = {
 export default async function KitchenPage({ params }: KitchenPageProps) {
   const { tenantSlug } = await params
   const access = await requireKitchenAccess(tenantSlug)
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
-    throw new Error("Supabase environment variables are missing.")
+    throw new Error("Supabase client is not configured.")
   }
 
   const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)

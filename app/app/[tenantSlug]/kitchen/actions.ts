@@ -12,16 +12,17 @@ import {
   updateKitchenOrderItemPrepStatus,
 } from "@/lib/services/orders"
 import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 const ALLOWED_KITCHEN_STATUSES: readonly OrderStatus[] = ["in_preparation", "ready", "completed"]
 
 export async function assignKitchenOrderAction(tenantSlug: string, orderId: string) {
   const access = await requireKitchenAccess(tenantSlug)
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
-    throw new Error("Supabase environment variables are missing.")
+    throw new Error("Supabase client is not configured.")
   }
 
   const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
@@ -41,10 +42,10 @@ export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId
   }
 
   const access = await requireKitchenAccess(tenantSlug)
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
-    throw new Error("Supabase environment variables are missing.")
+    throw new Error("Supabase client is not configured.")
   }
 
   const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
@@ -89,10 +90,10 @@ export async function updateKitchenOrderItemPrepStatusAction(
   nextPrepStatus: "pending" | "ready"
 ) {
   const access = await requireKitchenAccess(tenantSlug)
-  const supabase = await createSupabaseServerClient()
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
-    throw new Error("Supabase environment variables are missing.")
+    throw new Error("Supabase client is not configured.")
   }
 
   const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
