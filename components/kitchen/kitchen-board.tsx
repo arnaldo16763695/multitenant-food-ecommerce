@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { ChefHat, Clock3, PackageCheck, PartyPopper, Search, TimerReset } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 import { updateKitchenOrderItemPrepStatusAction, updateKitchenOrderStatusAction } from "@/app/app/[tenantSlug]/kitchen/actions"
 import type { KitchenOrderSummary, OrderStatus } from "@/lib/domain/order"
@@ -75,20 +74,33 @@ function getOrderChannelLabel(channel: string) {
   return channel
 }
 
+function updateOrderInCollection(
+  collection: readonly KitchenOrderSummary[],
+  orderId: string,
+  updater: (order: KitchenOrderSummary) => KitchenOrderSummary
+) {
+  return collection.map((order) => (order.id === orderId ? updater(order) : order))
+}
+
 export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
-  const router = useRouter()
   const [errorMessage, setErrorMessage] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedBranch, setSelectedBranch] = React.useState("Todas")
   const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
-  const [isPending, startTransition] = React.useTransition()
+  const [optimisticOrders, setOptimisticOrders] = React.useState<readonly KitchenOrderSummary[]>(orders)
+  const [pendingOrderIds, setPendingOrderIds] = React.useState<readonly string[]>([])
+  const [pendingItemIds, setPendingItemIds] = React.useState<readonly string[]>([])
 
-  const branchOptions = React.useMemo(() => ["Todas", ...new Set(orders.map((order) => order.branchName))], [orders])
+  React.useEffect(() => {
+    setOptimisticOrders(orders)
+  }, [orders])
+
+  const branchOptions = React.useMemo(() => ["Todas", ...new Set(optimisticOrders.map((order) => order.branchName))], [optimisticOrders])
 
   const filteredOrders = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
-    return orders.filter((order) => {
+    return optimisticOrders.filter((order) => {
       const matchesBranch = selectedBranch === "Todas" || order.branchName === selectedBranch
 
       if (!matchesBranch) {
@@ -104,7 +116,7 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
         .toLowerCase()
         .includes(normalizedQuery)
     })
-  }, [orders, searchQuery, selectedBranch])
+  }, [optimisticOrders, searchQuery, selectedBranch])
 
   const summary = React.useMemo(
     () => ({
@@ -115,37 +127,53 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
     [filteredOrders]
   )
 
-  const selectedOrder = React.useMemo(() => filteredOrders.find((order) => order.id === selectedOrderId) ?? null, [filteredOrders, selectedOrderId])
+  const selectedOrder = React.useMemo(() => optimisticOrders.find((order) => order.id === selectedOrderId) ?? null, [optimisticOrders, selectedOrderId])
   const selectedOrderAllItemsReady = selectedOrder ? selectedOrder.items.every((item) => item.prepStatus === "ready") : false
 
-  function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
+  async function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
 
-    startTransition(async () => {
-      const result = await updateKitchenOrderStatusAction(tenantSlug, orderId, nextStatus)
+    const previousOrders = optimisticOrders
+    setPendingOrderIds((current) => [...current, orderId])
+    setOptimisticOrders((current) =>
+      updateOrderInCollection(current, orderId, (order) => ({
+        ...order,
+        status: nextStatus,
+      }))
+    )
 
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos actualizar la orden desde kitchen.")
-        return
-      }
+    const result = await updateKitchenOrderStatusAction(tenantSlug, orderId, nextStatus)
 
-      router.refresh()
-    })
+    setPendingOrderIds((current) => current.filter((id) => id !== orderId))
+
+    if (!result.ok) {
+      setOptimisticOrders(previousOrders)
+      setErrorMessage(result.error ?? "No pudimos actualizar la orden desde kitchen.")
+    }
   }
 
-  function handleItemPrepStatusChange(orderId: string, orderItemId: string, checked: boolean) {
+  async function handleItemPrepStatusChange(orderId: string, orderItemId: string, checked: boolean) {
     setErrorMessage("")
 
-    startTransition(async () => {
-      const result = await updateKitchenOrderItemPrepStatusAction(tenantSlug, orderId, orderItemId, checked ? "ready" : "pending")
+    const previousOrders = optimisticOrders
+    const nextPrepStatus = checked ? "ready" : "pending"
 
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos actualizar el item.")
-        return
-      }
+    setPendingItemIds((current) => [...current, orderItemId])
+    setOptimisticOrders((current) =>
+      updateOrderInCollection(current, orderId, (order) => ({
+        ...order,
+        items: order.items.map((item) => (item.id === orderItemId ? { ...item, prepStatus: nextPrepStatus } : item)),
+      }))
+    )
 
-      router.refresh()
-    })
+    const result = await updateKitchenOrderItemPrepStatusAction(tenantSlug, orderId, orderItemId, nextPrepStatus)
+
+    setPendingItemIds((current) => current.filter((id) => id !== orderItemId))
+
+    if (!result.ok) {
+      setOptimisticOrders(previousOrders)
+      setErrorMessage(result.error ?? "No pudimos actualizar el item.")
+    }
   }
 
   return (
@@ -221,9 +249,10 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
                     const nextStatus = getNextKitchenStatus(order.status)
                     const nextLabel = getNextKitchenLabel(order.status)
                     const readyItemsCount = order.items.filter((item) => item.prepStatus === "ready").length
+                    const isOrderPending = pendingOrderIds.includes(order.id)
 
                     return (
-                      <article key={order.id} className="rounded-[1.35rem] border border-border bg-secondary/35 p-4">
+                      <article key={order.id} className="rounded-[1.35rem] border border-border bg-secondary/35 p-4 transition-opacity data-[pending=true]:opacity-80" data-pending={isOrderPending}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-lg font-semibold text-card-foreground">#{order.orderNumber}</p>
@@ -265,32 +294,46 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
                                   </div>
 
                                   <div className="rounded-[1.25rem] border border-border p-4">
-                                    <p className="font-semibold text-card-foreground">Checklist de preparación</p>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="font-semibold text-card-foreground">Checklist de preparación</p>
+                                      <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Toque rápido, sync en background</span>
+                                    </div>
                                     <div className="mt-4 space-y-3">
-                                      {selectedOrder.items.map((item) => (
-                                        <label key={item.id} className="flex items-center gap-3 rounded-[1rem] bg-secondary/35 px-3 py-3">
-                                          <Checkbox
-                                            checked={item.prepStatus === "ready"}
-                                            disabled={isPending || selectedOrder.status === "completed"}
-                                            onCheckedChange={(checked) => handleItemPrepStatusChange(selectedOrder.id, item.id, checked === true)}
-                                          />
-                                          <div className="flex flex-1 items-center justify-between gap-3">
-                                            <span className="text-card-foreground">{item.productName}</span>
-                                            <span className="font-medium text-muted-foreground">x{item.quantity}</span>
-                                          </div>
-                                        </label>
-                                      ))}
+                                      {selectedOrder.items.map((item) => {
+                                        const isItemPending = pendingItemIds.includes(item.id)
+
+                                        return (
+                                          <label
+                                            key={item.id}
+                                            className="flex items-center gap-3 rounded-[1rem] border border-transparent bg-secondary/35 px-3 py-3 transition-all data-[pending=true]:border-amber-200 data-[pending=true]:bg-amber-50/80"
+                                            data-pending={isItemPending}
+                                          >
+                                            <Checkbox
+                                              checked={item.prepStatus === "ready"}
+                                              disabled={isItemPending || selectedOrder.status === "completed"}
+                                              onCheckedChange={(checked) => handleItemPrepStatusChange(selectedOrder.id, item.id, checked === true)}
+                                            />
+                                            <div className="flex flex-1 items-center justify-between gap-3">
+                                              <div>
+                                                <span className="text-card-foreground">{item.productName}</span>
+                                                {isItemPending ? <p className="mt-1 text-xs text-amber-700">Guardando cambio...</p> : null}
+                                              </div>
+                                              <span className="font-medium text-muted-foreground">x{item.quantity}</span>
+                                            </div>
+                                          </label>
+                                        )
+                                      })}
                                     </div>
                                   </div>
 
                                   {nextStatus && nextLabel ? (
                                     <Button
                                       className="w-full rounded-xl"
-                                      disabled={isPending || (nextStatus === "ready" && !selectedOrderAllItemsReady)}
+                                      disabled={isOrderPending || (nextStatus === "ready" && !selectedOrderAllItemsReady)}
                                       onClick={() => handleStatusChange(selectedOrder.id, nextStatus)}
                                     >
                                       <TimerReset />
-                                      {nextLabel}
+                                      {isOrderPending ? "Actualizando orden..." : nextLabel}
                                     </Button>
                                   ) : null}
 
@@ -306,9 +349,13 @@ export function KitchenBoard({ tenantSlug, orders }: KitchenBoardProps) {
                         </Sheet>
 
                         {nextStatus && nextLabel ? (
-                          <Button className="mt-4 w-full rounded-xl" disabled={isPending || (nextStatus === "ready" && readyItemsCount !== order.itemCount)} onClick={() => handleStatusChange(order.id, nextStatus)}>
+                          <Button
+                            className="mt-4 w-full rounded-xl"
+                            disabled={isOrderPending || (nextStatus === "ready" && readyItemsCount !== order.itemCount)}
+                            onClick={() => handleStatusChange(order.id, nextStatus)}
+                          >
                             <TimerReset />
-                            {nextLabel}
+                            {isOrderPending ? "Actualizando orden..." : nextLabel}
                           </Button>
                         ) : null}
                       </article>
