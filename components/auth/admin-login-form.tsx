@@ -4,6 +4,7 @@ import * as React from "react"
 import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { getDefaultRouteForRole } from "@/lib/auth/permissions"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 import { Button } from "@/components/ui/button"
@@ -15,12 +16,77 @@ type AdminLoginFormProps = {
   readonly reason?: string
 }
 
-export function AdminLoginForm({ nextPath = "/brands", reason }: AdminLoginFormProps) {
+type ProfileLookupRow = {
+  id: string
+}
+
+type MembershipLookupRow = {
+  tenant_id: string
+  role: string
+}
+
+type TenantLookupRow = {
+  slug: string
+}
+
+export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+
+  async function resolveFallbackRoute() {
+    const supabase = createSupabaseBrowserClient()
+
+    if (!supabase) {
+      return "/auth/admin/login"
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user?.id) {
+      return "/auth/admin/login"
+    }
+
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("auth_user_id", user.id)
+      .limit(1)
+      .maybeSingle<ProfileLookupRow>()
+
+    if (profileResult.error || !profileResult.data) {
+      return "/auth/admin/login"
+    }
+
+    const membershipResult = await supabase
+      .from("tenant_memberships")
+      .select("tenant_id, role")
+      .eq("profile_id", profileResult.data.id)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<MembershipLookupRow>()
+
+    if (membershipResult.error || !membershipResult.data) {
+      return "/auth/admin/login"
+    }
+
+    const tenantResult = await supabase
+      .from("tenants")
+      .select("slug")
+      .eq("id", membershipResult.data.tenant_id)
+      .limit(1)
+      .maybeSingle<TenantLookupRow>()
+
+    if (tenantResult.error || !tenantResult.data) {
+      return "/auth/admin/login"
+    }
+
+    return getDefaultRouteForRole(tenantResult.data.slug, membershipResult.data.role)
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -46,7 +112,9 @@ export function AdminLoginForm({ nextPath = "/brands", reason }: AdminLoginFormP
       return
     }
 
-    router.replace(nextPath)
+    const destination = nextPath ?? (await resolveFallbackRoute())
+
+    router.replace(destination)
     router.refresh()
   }
 

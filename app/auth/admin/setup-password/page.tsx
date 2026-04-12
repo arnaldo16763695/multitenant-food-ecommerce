@@ -19,7 +19,7 @@ export default async function AdminSetupPasswordPage({ searchParams }: AdminSetu
             Este paso se hace solo una vez. Despues podras entrar todos los dias con email y password desde el login normal.
           </p>
         </div>
-        <AdminSetupPasswordForm nextPath={params.next ?? "/brands"} />
+        <AdminSetupPasswordForm nextPath={params.next ?? "/auth/admin/login"} />
       </div>
     </main>
   )
