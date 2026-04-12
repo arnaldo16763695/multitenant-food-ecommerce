@@ -48,3 +48,15 @@ export function getDefaultAdminSection(role: string): AdminSection {
 
   return "kitchen"
 }
+
+export function getDefaultRouteForRole(tenantSlug: string, role: string) {
+  if (canAccessAdminSection(role, "overview")) {
+    return `/app/${tenantSlug}/admin/overview`
+  }
+
+  if (canAccessAdminSection(role, "orders")) {
+    return `/app/${tenantSlug}/admin/orders`
+  }
+
+  return `/app/${tenantSlug}/kitchen`
+}

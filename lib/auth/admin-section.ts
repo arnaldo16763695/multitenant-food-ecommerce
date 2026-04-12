@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-import { canAccessAdminSection, getDefaultAdminSection, type AdminSection } from "@/lib/auth/permissions"
+import { canAccessAdminSection, getDefaultRouteForRole, type AdminSection } from "@/lib/auth/permissions"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 
@@ -8,7 +8,7 @@ export async function requireAdminSectionAccess(tenantSlug: string, section: Adm
   const access = await requireAdminAccess(tenantSlug)
 
   if (!canAccessAdminSection(access.membership.role, section)) {
-    redirect(`/app/${tenantSlug}/admin/${getDefaultAdminSection(access.membership.role)}`)
+    redirect(getDefaultRouteForRole(tenantSlug, access.membership.role))
   }
 
   return access
