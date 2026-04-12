@@ -59,6 +59,22 @@ type KitchenOrderRow = {
   } | null
 }
 
+type KitchenOrderRowWithoutAssignment = {
+  id: string
+  order_number: number
+  customer_name: string
+  status: OrderStatus
+  branch_id: string
+  channel: string
+  fulfillment_type: "pickup" | "delivery"
+  total_amount: number
+  placed_at: string
+  notes: string | null
+  branches: {
+    name: string
+  } | null
+}
+
 type AssignedMembershipRow = {
   id: string
   profiles: {
@@ -370,7 +386,7 @@ export async function getKitchenOrders(
     return []
   }
 
-  const ordersResult = await supabase
+  const ordersWithAssignmentResult = await supabase
     .from("orders")
     .select("id, order_number, customer_name, status, branch_id, assigned_tenant_membership_id, channel, fulfillment_type, total_amount, placed_at, notes, branches(name)")
     .eq("tenant_id", tenantId)
@@ -379,11 +395,32 @@ export async function getKitchenOrders(
     .order("placed_at", { ascending: true })
     .returns<KitchenOrderRow[]>()
 
+  const ordersResult = ordersWithAssignmentResult.error
+    ? await supabase
+        .from("orders")
+        .select("id, order_number, customer_name, status, branch_id, channel, fulfillment_type, total_amount, placed_at, notes, branches(name)")
+        .eq("tenant_id", tenantId)
+        .in("branch_id", [...branchIds])
+        .in("status", [...statuses])
+        .order("placed_at", { ascending: true })
+        .returns<KitchenOrderRowWithoutAssignment[]>()
+    : ordersWithAssignmentResult
+
   if (ordersResult.error) {
     return []
   }
 
-  const orders = ordersResult.data ?? []
+  const orders = (ordersResult.data ?? []).map((order) => {
+    const assignedMembershipId =
+      "assigned_tenant_membership_id" in order && typeof order.assigned_tenant_membership_id === "string"
+        ? order.assigned_tenant_membership_id
+        : null
+
+    return {
+      ...order,
+      assigned_tenant_membership_id: assignedMembershipId,
+    }
+  })
   const orderIds = orders.map((order) => order.id)
   const assignedMembershipIds = [...new Set(orders.map((order) => order.assigned_tenant_membership_id).filter((value): value is string => Boolean(value)))]
 
