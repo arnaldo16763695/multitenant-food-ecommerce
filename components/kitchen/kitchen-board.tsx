@@ -144,17 +144,6 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
 
   const selectedOrder = React.useMemo(() => optimisticOrders.find((order) => order.id === selectedOrderId) ?? null, [optimisticOrders, selectedOrderId])
   const selectedOrderAllItemsReady = selectedOrder ? selectedOrder.items.every((item) => item.prepStatus === "ready") : false
-  const boardDebugSummary = React.useMemo(
-    () =>
-      filteredOrders.map((order) => ({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        branchName: order.branchName,
-        itemCount: order.itemCount,
-      })),
-    [filteredOrders]
-  )
 
   async function handleAssignOrder(orderId: string) {
     setErrorMessage("")
@@ -257,14 +246,6 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
 
             <div className="flex flex-wrap gap-2 xl:justify-end">
               <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
-                <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cargadas</span>
-                <p className="mt-1 text-lg font-semibold text-card-foreground">{optimisticOrders.length}</p>
-              </div>
-              <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
-                <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Filtradas</span>
-                <p className="mt-1 text-lg font-semibold text-card-foreground">{filteredOrders.length}</p>
-              </div>
-              <div className="rounded-[1rem] border border-border bg-secondary/35 px-3 py-2 text-sm">
                 <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Activas</span>
                 <p className="mt-1 text-lg font-semibold text-card-foreground">{summary.active}</p>
               </div>
@@ -276,29 +257,6 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId }: Kitche
                 <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Listas</span>
                 <p className="mt-1 text-lg font-semibold text-card-foreground">{summary.ready}</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <Card>
-          <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
-            <p className="font-semibold text-card-foreground">Debug del board cliente</p>
-            <p>Tenant slug: {tenantSlug}</p>
-            <p>Membership actual: {currentMembershipId}</p>
-            <p>Ordenes recibidas por el cliente: {optimisticOrders.length}</p>
-            <p>Ordenes luego del filtro actual: {filteredOrders.length}</p>
-            <div className="rounded-xl border border-border bg-secondary/30 px-3 py-3">
-              {boardDebugSummary.length ? (
-                boardDebugSummary.slice(0, 10).map((order) => (
-                  <p key={order.id}>
-                    #{order.orderNumber} | {order.branchName} | {order.status} | {order.itemCount} items
-                  </p>
-                ))
-              ) : (
-                <p>No hay ordenes en el cliente con el filtro actual.</p>
-              )}
             </div>
           </CardContent>
         </Card>
