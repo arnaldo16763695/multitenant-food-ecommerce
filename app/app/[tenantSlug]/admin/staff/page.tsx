@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { AdminStaffManagement } from "@/components/admin/admin-staff-management"
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { canManageStaff, getAdminStaffMembers, getStaffBranches } from "@/lib/services/staff"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type AdminStaffPageProps = {
@@ -14,10 +15,10 @@ type AdminStaffPageProps = {
 export default async function AdminStaffPage({ params }: AdminStaffPageProps) {
   const { tenantSlug } = await params
   const access = await requireAdminSectionAccess(tenantSlug, "staff")
-  const supabase = await createSupabaseServerClient()
+  const supabase = canManageStaff(access.membership.role) ? createSupabaseAdminClient() : await createSupabaseServerClient()
 
   if (!supabase) {
-    throw new Error("Supabase environment variables are missing.")
+    throw new Error("Supabase client is not configured.")
   }
 
   if (!canManageStaff(access.membership.role) && access.membership.role !== "branch_manager") {
