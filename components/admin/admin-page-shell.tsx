@@ -7,6 +7,7 @@ type AdminPageShellProps = {
   readonly title: string
   readonly description: string
   readonly badge?: string
+  readonly actions?: ReactNode
   readonly density?: "default" | "compact"
   readonly children: ReactNode
 }
@@ -16,6 +17,7 @@ export function AdminPageShell({
   title,
   description,
   badge,
+  actions,
   density = "default",
   children,
 }: AdminPageShellProps) {
@@ -36,7 +38,10 @@ export function AdminPageShell({
               </p>
             </div>
           </div>
-          {badge ? <Badge variant="outline">{badge}</Badge> : null}
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            {badge ? <Badge variant="outline">{badge}</Badge> : null}
+            {actions}
+          </div>
         </div>
       </section>
 
