@@ -28,6 +28,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
       <SidebarProvider>
         <AppSidebar
           tenantSlug={tenantSlug}
+          role={access.membership.role}
           user={{
             name: access.profile.fullName,
             email: access.profile.email,

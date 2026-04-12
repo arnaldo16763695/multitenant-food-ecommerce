@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { requireAdminAccess } from "@/lib/auth/admin"
+import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { formatOrderStatus, formatPaymentStatus } from "@/lib/domain/order"
 import { getAdminOrderDetail } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -43,7 +43,7 @@ type AdminOrderDetailPageProps = {
 
 export default async function AdminOrderDetailPage({ params }: AdminOrderDetailPageProps) {
   const { tenantSlug, orderId } = await params
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireAdminSectionAccess(tenantSlug, "orders")
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {

@@ -1,7 +1,17 @@
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function AdminSettingsPage() {
+type AdminSettingsPageProps = {
+  readonly params: Promise<{
+    tenantSlug: string
+  }>
+}
+
+export default async function AdminSettingsPage({ params }: AdminSettingsPageProps) {
+  const { tenantSlug } = await params
+  await requireAdminSectionAccess(tenantSlug, "settings")
+
   return (
     <AdminPageShell
       eyebrow="Configuracion"

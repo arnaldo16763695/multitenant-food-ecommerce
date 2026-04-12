@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { AdminStaffManagement } from "@/components/admin/admin-staff-management"
-import { requireAdminAccess } from "@/lib/auth/admin"
+import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { canManageStaff, getAdminStaffMembers, getStaffBranches } from "@/lib/services/staff"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -13,7 +13,7 @@ type AdminStaffPageProps = {
 
 export default async function AdminStaffPage({ params }: AdminStaffPageProps) {
   const { tenantSlug } = await params
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireAdminSectionAccess(tenantSlug, "staff")
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {

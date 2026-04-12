@@ -1,4 +1,4 @@
-import { requireAdminAccess } from "@/lib/auth/admin"
+import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { getAdminOrders } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -15,7 +15,7 @@ type AdminOrdersPageProps = {
 
 export default async function AdminOrdersPage({ params }: AdminOrdersPageProps) {
   const { tenantSlug } = await params
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireAdminSectionAccess(tenantSlug, "orders")
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {

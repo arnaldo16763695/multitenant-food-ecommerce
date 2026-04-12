@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { canAccessAdminSection } from "@/lib/auth/permissions"
 import { NavUser } from "./nav-user"
 
 type AdminNavigationItem = {
@@ -164,6 +165,7 @@ const adminNavigation: readonly AdminNavigationItem[] = [
 
 type AppSidebarProps = {
   readonly tenantSlug: string
+  readonly role: string
   readonly user: {
     name: string
     email: string
@@ -171,13 +173,24 @@ type AppSidebarProps = {
   }
 }
 
-export function AppSidebar({ tenantSlug, user }: AppSidebarProps) {
+export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
   const baseAdminPath = `/app/${tenantSlug}/admin`
   const pathname = usePathname()
 
   function buildAdminHref(href: string) {
     return `${baseAdminPath}${href === "/overview" ? "" : href}`
   }
+
+  const visibleNavigation = adminNavigation.filter((item) => {
+    if (item.href === "/overview") return canAccessAdminSection(role, "overview")
+    if (item.href === "/catalog") return canAccessAdminSection(role, "catalog")
+    if (item.href === "/orders") return canAccessAdminSection(role, "orders")
+    if (item.href === "/branches") return canAccessAdminSection(role, "branches")
+    if (item.href === "/staff") return canAccessAdminSection(role, "staff")
+    if (item.href === "/settings") return canAccessAdminSection(role, "settings")
+
+    return false
+  })
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -214,7 +227,7 @@ export function AppSidebar({ tenantSlug, user }: AppSidebarProps) {
           <SidebarGroupLabel>Operacion</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminNavigation.map((item) => (
+              {visibleNavigation.map((item) => (
                 <SidebarNavItem
                   key={item.title}
                   item={{
@@ -233,30 +246,36 @@ export function AppSidebar({ tenantSlug, user }: AppSidebarProps) {
           <SidebarGroupLabel>Quick access</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
-                  <Link href={buildAdminHref("/catalog/products")}>
-                    <Tag />
-                    <span>Promociones</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/staff"))}>
-                  <Link href={buildAdminHref("/staff")}>
-                    <Users />
-                    <span>Staff</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
-                  <Link href={buildAdminHref("/catalog/products")}>
-                    <Package2 />
-                    <span>Inventario</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {canAccessAdminSection(role, "catalog") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
+                    <Link href={buildAdminHref("/catalog/products")}>
+                      <Tag />
+                      <span>Promociones</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+              {canAccessAdminSection(role, "staff") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/staff"))}>
+                    <Link href={buildAdminHref("/staff")}>
+                      <Users />
+                      <span>Staff</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+              {canAccessAdminSection(role, "catalog") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/catalog"))}>
+                    <Link href={buildAdminHref("/catalog/products")}>
+                      <Package2 />
+                      <span>Inventario</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

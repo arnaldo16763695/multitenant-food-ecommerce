@@ -1,4 +1,5 @@
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -8,7 +9,16 @@ const branches = [
   { name: "Este", status: "Activa", coverage: "1.8 km", prepTime: "18 min" },
 ] as const
 
-export default function AdminBranchesPage() {
+type AdminBranchesPageProps = {
+  readonly params: Promise<{
+    tenantSlug: string
+  }>
+}
+
+export default async function AdminBranchesPage({ params }: AdminBranchesPageProps) {
+  const { tenantSlug } = await params
+  await requireAdminSectionAccess(tenantSlug, "branches")
+
   return (
     <AdminPageShell
       eyebrow="Sucursales"
