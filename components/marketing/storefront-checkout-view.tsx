@@ -3,16 +3,16 @@
 import * as React from "react"
 import Link from "next/link"
 import { LoaderCircle, ShoppingBag } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 import { createStorefrontOrderAction } from "@/app/app/[tenantSlug]/checkout/actions"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import type { CheckoutBagItemInput } from "@/lib/domain/order"
+import { useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
+
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { type CheckoutBagItemInput } from "@/lib/domain/order"
-import { useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
 
 type StorefrontCheckoutViewProps = {
   readonly tenantSlug: string
@@ -26,7 +26,6 @@ type StorefrontCheckoutViewProps = {
 }
 
 export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaults, customerSession }: StorefrontCheckoutViewProps) {
-  const router = useRouter()
   const items = useShoppingBagItems(tenantSlug)
   const subtotal = useShoppingBagSubtotal(tenantSlug)
   const clearTenantBag = useShoppingBagStore((state) => state.clearTenantBag)
@@ -36,9 +35,9 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
   const [notes, setNotes] = React.useState("")
   const [fulfillmentType, setFulfillmentType] = React.useState<"pickup" | "delivery">("pickup")
   const [errorMessage, setErrorMessage] = React.useState("")
-  const [isSubmitting, startSubmitting] = React.useTransition()
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErrorMessage("")
 
@@ -47,7 +46,9 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
       return
     }
 
-    startSubmitting(async () => {
+    try {
+      setIsSubmitting(true)
+
       const result = await createStorefrontOrderAction({
         tenantSlug,
         items: items as readonly CheckoutBagItemInput[],
@@ -60,13 +61,16 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
 
       if (!result.ok || !result.orderId) {
         setErrorMessage(result.error ?? "No pudimos registrar tu pedido.")
+        setIsSubmitting(false)
         return
       }
 
       clearTenantBag(tenantSlug)
-      router.push(`/app/${tenantSlug}/orders/${result.orderId}`)
-      router.refresh()
-    })
+      window.location.assign(`/app/${tenantSlug}/orders/${result.orderId}`)
+    } catch {
+      setErrorMessage("No pudimos completar el checkout. Intenta nuevamente.")
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -126,7 +130,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
 
                 <Button className="h-10 rounded-full" disabled={isSubmitting || items.length === 0} type="submit">
                   {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}
-                  Enviar pedido
+                  {isSubmitting ? "Procesando pedido..." : "Enviar pedido"}
                 </Button>
               </form>
             </CardContent>
