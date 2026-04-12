@@ -13,6 +13,7 @@ type AdminAccessContext = {
     email: string
   }
   readonly membership: {
+    id: string
     tenantId: string
     role: string
   }
@@ -29,12 +30,12 @@ type TenantRow = {
 }
 
 type MembershipRow = {
+  id: string
   tenant_id: string
   role: string
 }
 
-export async function requireAdminAccess(tenantSlug: string): Promise<AdminAccessContext> {
-  const nextPath = `/app/${tenantSlug}/admin`
+async function requireTenantMembershipAccess(tenantSlug: string, nextPath: string): Promise<AdminAccessContext> {
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
@@ -60,7 +61,7 @@ export async function requireAdminAccess(tenantSlug: string): Promise<AdminAcces
 
   const membershipResult = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role")
+    .select("id, tenant_id, role")
     .eq("tenant_id", tenantResult.data.id)
     .eq("profile_id", profileResult.data.id)
     .eq("is_active", true)
@@ -82,8 +83,23 @@ export async function requireAdminAccess(tenantSlug: string): Promise<AdminAcces
       email: profileResult.data.email ?? user.email,
     },
     membership: {
+      id: membershipResult.data.id,
       tenantId: membershipResult.data.tenant_id,
       role: membershipResult.data.role,
     },
   }
+}
+
+export async function requireAdminAccess(tenantSlug: string): Promise<AdminAccessContext> {
+  return requireTenantMembershipAccess(tenantSlug, `/app/${tenantSlug}/admin`)
+}
+
+export async function requireKitchenAccess(tenantSlug: string): Promise<AdminAccessContext> {
+  const access = await requireTenantMembershipAccess(tenantSlug, `/app/${tenantSlug}/kitchen`)
+
+  if (access.membership.role !== "preparer") {
+    redirect(`/app/${tenantSlug}/admin/overview?reason=kitchen-role`)
+  }
+
+  return access
 }

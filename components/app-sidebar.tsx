@@ -151,6 +151,11 @@ const adminNavigation: readonly AdminNavigationItem[] = [
     icon: MapPinned,
   },
   {
+    title: "Staff",
+    href: "/staff",
+    icon: Users,
+  },
+  {
     title: "Configuracion",
     href: "/settings",
     icon: Settings2,
@@ -237,8 +242,8 @@ export function AppSidebar({ tenantSlug, user }: AppSidebarProps) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/settings"))}>
-                  <Link href={buildAdminHref("/settings")}>
+                <SidebarMenuButton asChild isActive={isPathActive(pathname, buildAdminHref("/staff"))}>
+                  <Link href={buildAdminHref("/staff")}>
                     <Users />
                     <span>Staff</span>
                   </Link>

@@ -1,5 +1,6 @@
-import { requireAdminAccess } from "@/lib/auth/admin"
+import { requireKitchenAccess } from "@/lib/auth/admin"
 import { getKitchenOrders } from "@/lib/services/orders"
+import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 import { KitchenBoard } from "@/components/kitchen/kitchen-board"
@@ -14,14 +15,15 @@ type KitchenPageProps = {
 
 export default async function KitchenPage({ params }: KitchenPageProps) {
   const { tenantSlug } = await params
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireKitchenAccess(tenantSlug)
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const orders = await getKitchenOrders(supabase, access.membership.tenantId)
+  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const orders = await getKitchenOrders(supabase, access.membership.tenantId, branchIds)
 
   return (
     <AdminPageShell
@@ -32,7 +34,11 @@ export default async function KitchenPage({ params }: KitchenPageProps) {
       density="compact"
     >
       <OrderRealtimeRefresh tenantId={access.membership.tenantId} />
-      <KitchenBoard tenantSlug={tenantSlug} orders={orders} />
+      <KitchenBoard
+        tenantSlug={tenantSlug}
+        orders={orders}
+        currentMembershipId={access.membership.id}
+      />
     </AdminPageShell>
   )
 }

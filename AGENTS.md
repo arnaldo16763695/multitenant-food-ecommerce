@@ -14,6 +14,8 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Package manager currently in use: `npm` (`package-lock.json` is present).
 - Path alias: `@/*` maps to the repository root.
 - Current app structure uses the App Router under `app/`.
+- Supabase is part of the app architecture. The repo includes SQL migrations under `supabase/migrations/`.
+- A pulled remote schema snapshot currently exists at `supabase/migrations/20260412150814_remote_schema.sql`. Use it as the most complete repo-local view of the current database when reasoning about tables, foreign keys, RLS policies, and triggers.
 - No project-specific Cursor rules were found in `.cursor/rules/` or `.cursorrules`.
 - No Copilot instructions were found in `.github/copilot-instructions.md`.
 - `CLAUDE.md` delegates to this file, so keep this file accurate and current.
@@ -25,6 +27,8 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Create production build: `npm run build`
 - Start production server: `npm run start`
 - Run lint: `npm run lint`
+- Supabase CLI can be invoked with `npx supabase ...` if it is not installed globally.
+- To pull the hosted schema into the repo, prefer `npx supabase db pull` after linking the project.
 
 ## Tests
 
@@ -139,6 +143,7 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - For anything related to orders, branches, tenants, pricing, availability, or permissions, prioritize correctness over speed of implementation.
 - Prefer snapshots for transactional records when historical correctness matters.
 - Be explicit about tenant and branch boundaries in data models and queries.
+- Before proposing database changes, inspect the latest Supabase migrations and the remote schema snapshot instead of inferring the schema from application code alone.
 
 ## Editing Rules
 

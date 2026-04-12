@@ -2,23 +2,64 @@
 
 import { revalidatePath } from "next/cache"
 
-import { requireAdminAccess } from "@/lib/auth/admin"
+import { requireKitchenAccess } from "@/lib/auth/admin"
 import type { OrderStatus } from "@/lib/domain/order"
-import { canKitchenMarkOrderReady, updateAdminOrderStatus, updateKitchenOrderItemPrepStatus } from "@/lib/services/orders"
+import {
+  assignKitchenOrder,
+  canKitchenMarkOrderReady,
+  ensureKitchenAssignmentAccess,
+  updateAdminOrderStatus,
+  updateKitchenOrderItemPrepStatus,
+} from "@/lib/services/orders"
+import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 const ALLOWED_KITCHEN_STATUSES: readonly OrderStatus[] = ["in_preparation", "ready", "completed"]
+
+export async function assignKitchenOrderAction(tenantSlug: string, orderId: string) {
+  const access = await requireKitchenAccess(tenantSlug)
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const result = await assignKitchenOrder(supabase, access.membership.tenantId, orderId, access.membership.id, branchIds)
+
+  if (result.ok) {
+    revalidatePath(`/app/${tenantSlug}/kitchen`)
+    revalidatePath(`/app/${tenantSlug}/admin/orders`)
+  }
+
+  return result
+}
 
 export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId: string, nextStatus: OrderStatus) {
   if (!ALLOWED_KITCHEN_STATUSES.includes(nextStatus)) {
     return { ok: false, error: "Kitchen no puede mover la orden a ese estado." }
   }
 
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireKitchenAccess(tenantSlug)
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
     throw new Error("Supabase environment variables are missing.")
+  }
+
+  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+
+  const accessCheck = await ensureKitchenAssignmentAccess(
+    supabase,
+    access.membership.tenantId,
+    orderId,
+    access.membership.id,
+    access.membership.role,
+    branchIds
+  )
+
+  if (!accessCheck.ok) {
+    return accessCheck
   }
 
   if (nextStatus === "ready") {
@@ -47,11 +88,26 @@ export async function updateKitchenOrderItemPrepStatusAction(
   orderItemId: string,
   nextPrepStatus: "pending" | "ready"
 ) {
-  const access = await requireAdminAccess(tenantSlug)
+  const access = await requireKitchenAccess(tenantSlug)
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
     throw new Error("Supabase environment variables are missing.")
+  }
+
+  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+
+  const accessCheck = await ensureKitchenAssignmentAccess(
+    supabase,
+    access.membership.tenantId,
+    orderId,
+    access.membership.id,
+    access.membership.role,
+    branchIds
+  )
+
+  if (!accessCheck.ok) {
+    return accessCheck
   }
 
   const result = await updateKitchenOrderItemPrepStatus(supabase, access.membership.tenantId, orderItemId, nextPrepStatus)

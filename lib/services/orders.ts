@@ -47,6 +47,8 @@ type KitchenOrderRow = {
   order_number: number
   customer_name: string
   status: OrderStatus
+  branch_id: string
+  assigned_tenant_membership_id: string | null
   channel: string
   fulfillment_type: "pickup" | "delivery"
   total_amount: number
@@ -54,6 +56,13 @@ type KitchenOrderRow = {
   notes: string | null
   branches: {
     name: string
+  } | null
+}
+
+type AssignedMembershipRow = {
+  id: string
+  profiles: {
+    full_name: string | null
   } | null
 }
 
@@ -345,12 +354,18 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
 export async function getKitchenOrders(
   supabase: SupabaseClient,
   tenantId: string,
+  branchIds: readonly string[],
   statuses: readonly OrderStatus[] = ["confirmed", "in_preparation", "ready", "completed"]
 ): Promise<readonly KitchenOrderSummary[]> {
+  if (!branchIds.length) {
+    return []
+  }
+
   const ordersResult = await supabase
     .from("orders")
-    .select("id, order_number, customer_name, status, channel, fulfillment_type, total_amount, placed_at, notes, branches(name)")
+    .select("id, order_number, customer_name, status, branch_id, assigned_tenant_membership_id, channel, fulfillment_type, total_amount, placed_at, notes, branches(name)")
     .eq("tenant_id", tenantId)
+    .in("branch_id", [...branchIds])
     .in("status", [...statuses])
     .order("placed_at", { ascending: true })
     .returns<KitchenOrderRow[]>()
@@ -361,6 +376,20 @@ export async function getKitchenOrders(
 
   const orders = ordersResult.data ?? []
   const orderIds = orders.map((order) => order.id)
+  const assignedMembershipIds = [...new Set(orders.map((order) => order.assigned_tenant_membership_id).filter((value): value is string => Boolean(value)))]
+
+  const assignedMembershipsResult = assignedMembershipIds.length
+    ? await supabase
+        .from("tenant_memberships")
+        .select("id, profiles(full_name)")
+        .in("id", assignedMembershipIds)
+        .returns<AssignedMembershipRow[]>()
+    : { data: [], error: null }
+
+  const assignedMembershipNameMap = new Map(
+    (assignedMembershipsResult.data ?? []).map((membership) => [membership.id, membership.profiles?.full_name?.trim() || "Staff"])
+  )
+
   const orderItemsResult = orderIds.length
     ? await supabase
         .from("order_items")
@@ -388,6 +417,8 @@ export async function getKitchenOrders(
     customerName: order.customer_name,
     branchName: order.branches?.name ?? "Sucursal",
     status: order.status,
+    assignedMembershipId: order.assigned_tenant_membership_id,
+    assignedStaffName: order.assigned_tenant_membership_id ? assignedMembershipNameMap.get(order.assigned_tenant_membership_id) ?? "Staff" : null,
     channel: order.channel,
     fulfillmentType: order.fulfillment_type,
     placedAt: order.placed_at,
@@ -396,6 +427,105 @@ export async function getKitchenOrders(
     notes: order.notes,
     items: itemPreviewMap.get(order.id) ?? [],
   }))
+}
+
+async function getKitchenOrderAssignment(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string
+): Promise<{ assignedMembershipId: string | null; status: OrderStatus; branchId: string } | null> {
+  const orderResult = await supabase
+    .from("orders")
+    .select("assigned_tenant_membership_id, status, branch_id")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<{ assigned_tenant_membership_id: string | null; status: OrderStatus; branch_id: string }>()
+
+  if (orderResult.error || !orderResult.data) {
+    return null
+  }
+
+  return {
+    assignedMembershipId: orderResult.data.assigned_tenant_membership_id,
+    status: orderResult.data.status,
+    branchId: orderResult.data.branch_id,
+  }
+}
+
+export async function assignKitchenOrder(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string,
+  membershipId: string,
+  branchIds: readonly string[]
+): Promise<{ ok: boolean; error?: string }> {
+  const currentAssignment = await getKitchenOrderAssignment(supabase, tenantId, orderId)
+
+  if (!currentAssignment) {
+    return { ok: false, error: "No encontramos la orden." }
+  }
+
+  if (!branchIds.includes(currentAssignment.branchId)) {
+    return { ok: false, error: "No tienes acceso a la sucursal de esta orden." }
+  }
+
+  if (currentAssignment.assignedMembershipId === membershipId) {
+    return { ok: true }
+  }
+
+  if (currentAssignment.assignedMembershipId) {
+    return { ok: false, error: "Esta orden ya fue tomada por otro miembro del staff." }
+  }
+
+  const updateResult = await supabase
+    .from("orders")
+    .update({
+      assigned_tenant_membership_id: membershipId,
+      assigned_at: new Date().toISOString(),
+    })
+    .eq("tenant_id", tenantId)
+    .eq("id", orderId)
+    .is("assigned_tenant_membership_id", null)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function ensureKitchenAssignmentAccess(
+  supabase: SupabaseClient,
+  tenantId: string,
+  orderId: string,
+  membershipId: string,
+  role: string,
+  branchIds: readonly string[]
+): Promise<{ ok: boolean; error?: string }> {
+  if (role !== "preparer") {
+    return { ok: false, error: "Solo los preparadores pueden operar ordenes desde kitchen." }
+  }
+
+  const currentAssignment = await getKitchenOrderAssignment(supabase, tenantId, orderId)
+
+  if (!currentAssignment) {
+    return { ok: false, error: "No encontramos la orden." }
+  }
+
+  if (!branchIds.includes(currentAssignment.branchId)) {
+    return { ok: false, error: "No tienes acceso a la sucursal de esta orden." }
+  }
+
+  if (!currentAssignment.assignedMembershipId) {
+    return { ok: false, error: "Debes tomar la orden antes de trabajarla en kitchen." }
+  }
+
+  if (currentAssignment.assignedMembershipId !== membershipId) {
+    return { ok: false, error: "Esta orden ya esta asignada a otro preparador." }
+  }
+
+  return { ok: true }
 }
 
 export async function updateAdminOrderStatus(
