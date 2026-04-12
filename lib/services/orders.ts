@@ -296,6 +296,15 @@ export async function getCustomerOrders(supabase: SupabaseClient, tenantSlug: st
   }))
 }
 
+type KitchenDiagnosticOrderRow = {
+  id: string
+  status: OrderStatus
+  branch_id: string
+  branches: {
+    name: string
+  } | null
+}
+
 type AdminOrderDetailRow = {
   id: string
   order_number: number
@@ -427,6 +436,45 @@ export async function getKitchenOrders(
     notes: order.notes,
     items: itemPreviewMap.get(order.id) ?? [],
   }))
+}
+
+export async function getKitchenDiagnostics(
+  supabase: SupabaseClient,
+  tenantId: string,
+  branchIds: readonly string[]
+): Promise<{
+  readonly confirmedOrdersInBranches: number
+  readonly activeOrdersInBranches: number
+  readonly ordersByBranch: readonly { branchId: string; branchName: string; status: OrderStatus }[]
+}> {
+  if (!branchIds.length) {
+    return {
+      confirmedOrdersInBranches: 0,
+      activeOrdersInBranches: 0,
+      ordersByBranch: [],
+    }
+  }
+
+  const ordersResult = await supabase
+    .from("orders")
+    .select("id, status, branch_id, branches(name)")
+    .eq("tenant_id", tenantId)
+    .in("branch_id", [...branchIds])
+    .in("status", ["confirmed", "in_preparation", "ready", "completed"])
+    .order("placed_at", { ascending: false })
+    .returns<KitchenDiagnosticOrderRow[]>()
+
+  const orders = ordersResult.data ?? []
+
+  return {
+    confirmedOrdersInBranches: orders.filter((order) => order.status === "confirmed").length,
+    activeOrdersInBranches: orders.length,
+    ordersByBranch: orders.map((order) => ({
+      branchId: order.branch_id,
+      branchName: order.branches?.name ?? "Sucursal",
+      status: order.status,
+    })),
+  }
 }
 
 async function getKitchenOrderAssignment(
