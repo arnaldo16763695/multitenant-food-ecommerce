@@ -1,3 +1,5 @@
+import { cookies } from "next/headers"
+
 import { PlatformShell } from "@/components/platform/platform-shell"
 import { requirePlatformAccess } from "@/lib/auth/platform"
 
@@ -6,7 +8,20 @@ type PlatformLayoutProps = {
 }
 
 export default async function PlatformLayout({ children }: PlatformLayoutProps) {
+  const cookieStore = await cookies()
+  const initialTheme = cookieStore.get("admin-theme")?.value === "dark" ? "dark" : "light"
   const access = await requirePlatformAccess("/platform")
 
-  return <PlatformShell userName={access.profile.fullName}>{children}</PlatformShell>
+  return (
+    <PlatformShell
+      initialTheme={initialTheme}
+      user={{
+        name: access.profile.fullName,
+        email: access.profile.email,
+        avatar: "/placeholder.svg",
+      }}
+    >
+      {children}
+    </PlatformShell>
+  )
 }
