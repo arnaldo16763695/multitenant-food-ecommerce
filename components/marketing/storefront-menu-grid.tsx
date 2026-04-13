@@ -17,10 +17,11 @@ type StorefrontMenuItem = {
 
 type StorefrontMenuGridProps = {
   readonly tenantSlug: string
+  readonly branchId: string
   readonly menu: readonly StorefrontMenuItem[]
 }
 
-export function StorefrontMenuGrid({ tenantSlug, menu }: StorefrontMenuGridProps) {
+export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMenuGridProps) {
   const addItem = useShoppingBagStore((state) => state.addItem)
 
   return (
@@ -46,6 +47,7 @@ export function StorefrontMenuGrid({ tenantSlug, menu }: StorefrontMenuGridProps
                 addItem({
                   id: item.id,
                   tenantSlug,
+                  branchId,
                   name: item.name,
                   description: item.description,
                   category: item.category,

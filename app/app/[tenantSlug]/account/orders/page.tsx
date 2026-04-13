@@ -24,7 +24,7 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Pedidos" branchLabel="Centro · 1.2 km" customerSession={customerContext} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Pedidos" branchId={null} branchLabel="Sucursal activa" customerSession={customerContext} />
         {customerContext ? <OrderRealtimeRefresh customerId={customerContext.customer.id} /> : null}
 
         <section className="mx-auto w-full max-w-5xl rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
@@ -34,7 +34,7 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
               <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950">Historial y seguimiento de pedidos</h1>
             </div>
             <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href={`/app/${tenantSlug}`}>
-              Volver al menú
+              Volver al menu
             </Link>
           </div>
 
@@ -54,8 +54,12 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 text-sm text-stone-600 md:grid-cols-3">
-                      <p>Items: <span className="font-semibold text-stone-950">{order.itemCount}</span></p>
-                      <p>Total: <span className="font-semibold text-stone-950">$ {order.totalAmount.toFixed(2)}</span></p>
+                      <p>
+                        Items: <span className="font-semibold text-stone-950">{order.itemCount}</span>
+                      </p>
+                      <p>
+                        Total: <span className="font-semibold text-stone-950">$ {order.totalAmount.toFixed(2)}</span>
+                      </p>
                       <p>
                         <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}/orders/${order.id}`}>
                           Ver detalle
@@ -66,13 +70,19 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
                 ))
               ) : (
                 <div className="rounded-[1.5rem] border border-dashed border-stone-300 px-6 py-10 text-sm text-stone-600">
-                  Aún no tienes pedidos registrados en {tenantSlug}. <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}`}>Explorar menú</Link>
+                  Aun no tienes pedidos registrados en {tenantSlug}.{" "}
+                  <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}`}>
+                    Explorar menu
+                  </Link>
                 </div>
               )}
             </div>
           ) : (
             <div className="mt-6 rounded-[1.5rem] border border-dashed border-stone-300 px-6 py-8 text-sm text-stone-600">
-              Para ver tus pedidos debes iniciar sesión como cliente. <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}/account/login`}>Iniciar sesión</Link>
+              Para ver tus pedidos debes iniciar sesion como cliente.{" "}
+              <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}/account/login`}>
+                Iniciar sesion
+              </Link>
             </div>
           )}
         </section>

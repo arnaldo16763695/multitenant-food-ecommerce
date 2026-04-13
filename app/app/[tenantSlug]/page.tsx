@@ -8,11 +8,15 @@ type TenantPageProps = {
   readonly params: Promise<{
     tenantSlug: string
   }>
+  readonly searchParams: Promise<{
+    branch?: string
+  }>
 }
 
-export default async function TenantPage({ params }: TenantPageProps) {
+export default async function TenantPage({ params, searchParams }: TenantPageProps) {
   const { tenantSlug } = await params
-  const storefront = await getPublicStorefrontBySlug(tenantSlug)
+  const { branch: requestedBranchId } = await searchParams
+  const storefront = await getPublicStorefrontBySlug(tenantSlug, requestedBranchId)
   const customerContext = await getCustomerAccountContext()
 
   if (!storefront) {
@@ -24,8 +28,10 @@ export default async function TenantPage({ params }: TenantPageProps) {
       tenantSlug={storefront.tenant.slug}
       eyebrow="Public storefront"
       title={storefront.tenant.name}
-      description="Comparte este storefront con tus clientes y llévalos directo a una experiencia de compra por sucursal, sin pasar por el admin ni por pasos extra."
-      suggestedBranch={storefront.suggestedBranch}
+      description="Comparte este storefront con tus clientes y llevalos directo a una experiencia de compra por sucursal, sin pasar por el admin ni por pasos extra."
+      activeBranchId={storefront.activeBranch?.id}
+      activeBranchLabel={storefront.activeBranch?.name ?? "Sin sucursal activa"}
+      branches={storefront.branches}
       etaMinutes={storefront.etaMinutes}
       heroImageUrl={storefront.tenant.heroImageUrl}
       customerSession={customerContext}

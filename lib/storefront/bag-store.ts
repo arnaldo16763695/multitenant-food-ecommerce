@@ -7,6 +7,7 @@ import { createJSONStorage, persist } from "zustand/middleware"
 export type ShoppingBagItem = {
   readonly id: string
   readonly tenantSlug: string
+  readonly branchId: string
   readonly name: string
   readonly description: string
   readonly category: string
@@ -18,13 +19,13 @@ export type ShoppingBagItem = {
 type ShoppingBagState = {
   readonly items: readonly ShoppingBagItem[]
   addItem: (item: Omit<ShoppingBagItem, "quantity">) => void
-  incrementItem: (itemId: string, tenantSlug: string) => void
-  decrementItem: (itemId: string, tenantSlug: string) => void
-  removeItem: (itemId: string, tenantSlug: string) => void
-  clearTenantBag: (tenantSlug: string) => void
+  incrementItem: (itemId: string, tenantSlug: string, branchId: string) => void
+  decrementItem: (itemId: string, tenantSlug: string, branchId: string) => void
+  removeItem: (itemId: string, tenantSlug: string, branchId: string) => void
+  clearBranchBag: (tenantSlug: string, branchId: string) => void
 }
 
-const SHOPPING_BAG_STORAGE_KEY = "vz-food-shopping-bag-v1"
+const SHOPPING_BAG_STORAGE_KEY = "vz-food-shopping-bag-v2"
 
 function isBrowser() {
   return typeof window !== "undefined"
@@ -46,7 +47,10 @@ export const useShoppingBagStore = create<ShoppingBagState>()(
       items: [],
       addItem: (item) => {
         set((state) => {
-          const existingItem = state.items.find((currentItem) => currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug)
+          const existingItem = state.items.find(
+            (currentItem) =>
+              currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId
+          )
 
           if (!existingItem) {
             return {
@@ -56,37 +60,41 @@ export const useShoppingBagStore = create<ShoppingBagState>()(
 
           return {
             items: state.items.map((currentItem) =>
-              currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug
+              currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId
                 ? { ...currentItem, quantity: currentItem.quantity + 1 }
                 : currentItem
             ),
           }
         })
       },
-      incrementItem: (itemId, tenantSlug) => {
+      incrementItem: (itemId, tenantSlug, branchId) => {
         set((state) => ({
           items: state.items.map((item) =>
-            item.id === itemId && item.tenantSlug === tenantSlug ? { ...item, quantity: item.quantity + 1 } : item
+            item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
           ),
         }))
       },
-      decrementItem: (itemId, tenantSlug) => {
+      decrementItem: (itemId, tenantSlug, branchId) => {
         set((state) => ({
           items: state.items
             .map((item) =>
-              item.id === itemId && item.tenantSlug === tenantSlug ? { ...item, quantity: item.quantity - 1 } : item
+              item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId
+                ? { ...item, quantity: item.quantity - 1 }
+                : item
             )
             .filter((item) => item.quantity > 0),
         }))
       },
-      removeItem: (itemId, tenantSlug) => {
+      removeItem: (itemId, tenantSlug, branchId) => {
         set((state) => ({
-          items: state.items.filter((item) => !(item.id === itemId && item.tenantSlug === tenantSlug)),
+          items: state.items.filter((item) => !(item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId)),
         }))
       },
-      clearTenantBag: (tenantSlug) => {
+      clearBranchBag: (tenantSlug, branchId) => {
         set((state) => ({
-          items: state.items.filter((item) => item.tenantSlug !== tenantSlug),
+          items: state.items.filter((item) => !(item.tenantSlug === tenantSlug && item.branchId === branchId)),
         }))
       },
     }),
@@ -95,25 +103,25 @@ export const useShoppingBagStore = create<ShoppingBagState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ items: state.items }),
       skipHydration: !isBrowser(),
-      version: 1,
+      version: 2,
     }
   )
 )
 
-export function useShoppingBagItems(tenantSlug: string) {
+export function useShoppingBagItems(tenantSlug: string, branchId: string) {
   const items = useShoppingBagStore((state) => state.items)
 
-  return React.useMemo(() => items.filter((item) => item.tenantSlug === tenantSlug), [items, tenantSlug])
+  return React.useMemo(() => items.filter((item) => item.tenantSlug === tenantSlug && item.branchId === branchId), [branchId, items, tenantSlug])
 }
 
-export function useShoppingBagCount(tenantSlug: string) {
-  const items = useShoppingBagItems(tenantSlug)
+export function useShoppingBagCount(tenantSlug: string, branchId: string) {
+  const items = useShoppingBagItems(tenantSlug, branchId)
 
   return React.useMemo(() => items.reduce((count, item) => count + item.quantity, 0), [items])
 }
 
-export function useShoppingBagSubtotal(tenantSlug: string) {
-  const items = useShoppingBagItems(tenantSlug)
+export function useShoppingBagSubtotal(tenantSlug: string, branchId: string) {
+  const items = useShoppingBagItems(tenantSlug, branchId)
   const subtotal = React.useMemo(() => items.reduce((total, item) => total + item.quantity * item.unitPrice, 0), [items])
 
   return React.useMemo(

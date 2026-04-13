@@ -12,6 +12,11 @@ type StorefrontTenant = {
   readonly heroImageUrl: string | null
 }
 
+type StorefrontBranch = {
+  readonly id: string
+  readonly name: string
+}
+
 type TenantProduct = {
   readonly id: string
   readonly name: string
@@ -23,7 +28,8 @@ type TenantProduct = {
 
 type PublicStorefrontData = {
   readonly tenant: StorefrontTenant
-  readonly suggestedBranch: string
+  readonly branches: readonly StorefrontBranch[]
+  readonly activeBranch: StorefrontBranch | null
   readonly etaMinutes: number
   readonly menu: readonly TenantProduct[]
   readonly shareUrl: string
@@ -38,6 +44,11 @@ type TenantRow = {
   hero_image_url: string | null
 }
 
+type BranchRow = {
+  id: string
+  name: string
+}
+
 type ProductRow = {
   id: string
   name: string
@@ -45,6 +56,18 @@ type ProductRow = {
   base_price: number | string
   category_id: string | null
   primary_image_path: string | null
+  status: "active" | "draft"
+}
+
+type CategoryRow = {
+  id: string
+  name: string
+}
+
+type BranchProductOverrideRow = {
+  product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | string | null
 }
 
 function getStoragePublicUrl(path: string | null) {
@@ -61,11 +84,6 @@ function getStoragePublicUrl(path: string | null) {
   return `${supabaseUrl}/storage/v1/object/public/catalog-media/${path}`
 }
 
-type CategoryRow = {
-  id: string
-  name: string
-}
-
 function formatCurrency(value: number | string) {
   return `$ ${Number(value).toFixed(2)}`
 }
@@ -78,85 +96,156 @@ function buildShareUrl(tenant: StorefrontTenant) {
   return tenant.customDomain ? `https://${tenant.customDomain}` : `https://vzfood.com/app/${tenant.slug}`
 }
 
-export const getPublicStorefrontBySlug = cache(async (tenantSlug: string): Promise<PublicStorefrontData | null> => {
-  const supabase = createSupabaseAdminClient()
-
-  if (!supabase) {
-    const fallbackBrand = getFallbackBrand(tenantSlug)
-
-    return {
-      tenant: {
-        id: fallbackBrand.id,
-        name: fallbackBrand.name,
-        slug: fallbackBrand.slug,
-        customDomain: null,
-        storefrontEnabled: true,
-        heroImageUrl: fallbackBrand.heroImageUrl,
-      },
-      suggestedBranch: fallbackBrand.nearestBranch,
-      etaMinutes: fallbackBrand.etaMinutes,
-      menu: [
-        {
-          id: `${fallbackBrand.slug}-item-1`,
-          name: "Smash de la casa",
-          description: "Carne doble, queso fundido y salsa ahumada.",
-          basePrice: "$ 11.90",
-          category: "Burgers",
-          imageUrl: fallbackBrand.heroImageUrl,
-        },
-      ],
-      shareUrl: `https://vzfood.com/app/${fallbackBrand.slug}`,
-    }
-  }
-
-  const tenantResult = await supabase
-    .from("tenants")
-    .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
-    .eq("slug", tenantSlug)
-    .limit(1)
-    .maybeSingle<TenantRow>()
-
-  if (tenantResult.error || !tenantResult.data || !tenantResult.data.storefront_enabled) {
+function resolveActiveBranch(branches: readonly StorefrontBranch[], preferredBranchId?: string | null) {
+  if (!branches.length) {
     return null
   }
 
-  const tenant: StorefrontTenant = {
-    id: tenantResult.data.id,
-    name: tenantResult.data.name,
-    slug: tenantResult.data.slug,
-    customDomain: tenantResult.data.custom_domain,
-    storefrontEnabled: tenantResult.data.storefront_enabled,
-    heroImageUrl: tenantResult.data.hero_image_url,
+  if (!preferredBranchId) {
+    return branches[0]
   }
 
-  const [branchesResult, categoriesResult, productsResult] = await Promise.all([
-    supabase.from("branches").select("name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).limit(1),
-    supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
-    supabase.from("products").select("id, name, description, base_price, category_id, primary_image_path").eq("tenant_id", tenant.id).order("name", { ascending: true }).limit(6).returns<ProductRow[]>(),
-  ])
+  return branches.find((branch) => branch.id === preferredBranchId) ?? branches[0]
+}
 
-  const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
-  const menu: TenantProduct[] = (productsResult.data ?? []).map((product) => ({
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    basePrice: formatCurrency(product.base_price),
-    category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
-    imageUrl: getStoragePublicUrl(product.primary_image_path),
-  }))
+export const getPublicStorefrontBySlug = cache(
+  async (tenantSlug: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> => {
+    const supabase = createSupabaseAdminClient()
 
-  const fallbackBrand = getFallbackBrand(tenant.slug)
+    if (!supabase) {
+      const fallbackBrand = getFallbackBrand(tenantSlug)
+      const fallbackBranch = {
+        id: `${fallbackBrand.slug}-branch-default`,
+        name: fallbackBrand.nearestBranch,
+      } satisfies StorefrontBranch
 
-  return {
-    tenant,
-    suggestedBranch: branchesResult.data?.[0]?.name ?? fallbackBrand.nearestBranch,
-    etaMinutes: fallbackBrand.etaMinutes,
-    menu,
-    shareUrl: buildShareUrl(tenant),
+      return {
+        tenant: {
+          id: fallbackBrand.id,
+          name: fallbackBrand.name,
+          slug: fallbackBrand.slug,
+          customDomain: null,
+          storefrontEnabled: true,
+          heroImageUrl: fallbackBrand.heroImageUrl,
+        },
+        branches: [fallbackBranch],
+        activeBranch: fallbackBranch,
+        etaMinutes: fallbackBrand.etaMinutes,
+        menu: [
+          {
+            id: `${fallbackBrand.slug}-item-1`,
+            name: "Smash de la casa",
+            description: "Carne doble, queso fundido y salsa ahumada.",
+            basePrice: "$ 11.90",
+            category: "Burgers",
+            imageUrl: fallbackBrand.heroImageUrl,
+          },
+        ],
+        shareUrl: `https://vzfood.com/app/${fallbackBrand.slug}`,
+      }
+    }
+
+    const tenantResult = await supabase
+      .from("tenants")
+      .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
+      .eq("slug", tenantSlug)
+      .limit(1)
+      .maybeSingle<TenantRow>()
+
+    if (tenantResult.error || !tenantResult.data || !tenantResult.data.storefront_enabled) {
+      return null
+    }
+
+    const tenant: StorefrontTenant = {
+      id: tenantResult.data.id,
+      name: tenantResult.data.name,
+      slug: tenantResult.data.slug,
+      customDomain: tenantResult.data.custom_domain,
+      storefrontEnabled: tenantResult.data.storefront_enabled,
+      heroImageUrl: tenantResult.data.hero_image_url,
+    }
+
+    const [branchesResult, categoriesResult, productsResult] = await Promise.all([
+      supabase.from("branches").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
+      supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
+      supabase
+        .from("products")
+        .select("id, name, description, base_price, category_id, primary_image_path, status")
+        .eq("tenant_id", tenant.id)
+        .eq("status", "active")
+        .order("name", { ascending: true })
+        .returns<ProductRow[]>(),
+    ])
+
+    const branches = (branchesResult.data ?? []).map((branch) => ({
+      id: branch.id,
+      name: branch.name,
+    }))
+
+    const activeBranch = resolveActiveBranch(branches, preferredBranchId)
+    const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
+    const products = productsResult.data ?? []
+
+    const branchOverridesResult =
+      activeBranch && products.length
+        ? await supabase
+            .from("branch_product_overrides")
+            .select("product_id, availability_status, price_override")
+            .eq("branch_id", activeBranch.id)
+            .in(
+              "product_id",
+              products.map((product) => product.id)
+            )
+            .returns<BranchProductOverrideRow[]>()
+        : { data: [], error: null }
+
+    if (branchesResult.error || categoriesResult.error || productsResult.error || branchOverridesResult.error) {
+      const fallbackBrand = getFallbackBrand(tenant.slug)
+
+      return {
+        tenant,
+        branches,
+        activeBranch,
+        etaMinutes: fallbackBrand.etaMinutes,
+        menu: [],
+        shareUrl: buildShareUrl(tenant),
+      }
+    }
+
+    const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
+
+    const menu: TenantProduct[] = products
+      .filter((product) => {
+        const branchOverride = branchOverrideMap.get(product.id)
+        return branchOverride ? branchOverride.availability_status === "available" : true
+      })
+      .map((product) => {
+        const branchOverride = branchOverrideMap.get(product.id)
+
+        return {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          basePrice: formatCurrency(branchOverride?.price_override ?? product.base_price),
+          category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
+          imageUrl: getStoragePublicUrl(product.primary_image_path),
+        }
+      })
+
+    const fallbackBrand = getFallbackBrand(tenant.slug)
+
+    return {
+      tenant,
+      branches,
+      activeBranch,
+      etaMinutes: fallbackBrand.etaMinutes,
+      menu,
+      shareUrl: buildShareUrl(tenant),
+    }
   }
-})
+)
 
-export const getPublicStorefrontByDomain = cache(async (host: string): Promise<PublicStorefrontData | null> => {
+export const getPublicStorefrontByDomain = cache(async (host: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> => {
   const normalizedHost = host.toLowerCase().split(":")[0]
   const supabase = createSupabaseAdminClient()
 
@@ -176,5 +265,5 @@ export const getPublicStorefrontByDomain = cache(async (host: string): Promise<P
     return null
   }
 
-  return getPublicStorefrontBySlug(tenantResult.data.slug)
+  return getPublicStorefrontBySlug(tenantResult.data.slug, preferredBranchId)
 })

@@ -9,6 +9,12 @@ type ProductRow = {
   name: string
   base_price: number
   category_id: string | null
+  status: "active" | "draft"
+}
+type BranchProductOverrideRow = {
+  product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | null
 }
 type CategoryRow = {
   id: string
@@ -138,19 +144,22 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
     .from("branches")
     .select("id, name")
     .eq("tenant_id", tenantResult.data.id)
+    .eq("id", input.branchId)
     .eq("is_active", true)
-    .order("name", { ascending: true })
-    .limit(1)
     .maybeSingle<BranchRow>()
 
   if (branchResult.error || !branchResult.data) {
-    return { ok: false, error: "No encontramos una sucursal activa para este pedido." }
+    return { ok: false, error: "No encontramos la sucursal activa seleccionada para este pedido." }
   }
 
-  const productIds = input.items.map((item) => item.id)
+  if (input.items.some((item) => item.tenantSlug !== input.tenantSlug || item.branchId !== input.branchId)) {
+    return { ok: false, error: "La bolsa no coincide con la sucursal activa del checkout." }
+  }
+
+  const productIds = [...new Set(input.items.map((item) => item.id))]
   const productsResult = await supabase
     .from("products")
-    .select("id, name, base_price, category_id")
+    .select("id, name, base_price, category_id, status")
     .eq("tenant_id", tenantResult.data.id)
     .in("id", productIds)
     .returns<ProductRow[]>()
@@ -165,17 +174,39 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
     return { ok: false, error: "Uno o más productos ya no están disponibles." }
   }
 
-  const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
-  const categoriesResult = categoryIds.length
-    ? await supabase.from("categories").select("id, name").in("id", categoryIds).returns<CategoryRow[]>()
-    : { data: [], error: null }
+  if (products.some((product) => product.status !== "active")) {
+    return { ok: false, error: "Uno o mÃ¡s productos ya no estÃ¡n disponibles para comprar." }
+  }
 
-  if (categoriesResult.error) {
-    return { ok: false, error: categoriesResult.error.message }
+  const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
+  const [categoriesResult, branchOverridesResult] = await Promise.all([
+    categoryIds.length
+      ? supabase.from("categories").select("id, name").in("id", categoryIds).returns<CategoryRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: CategoryRow[]; error: null }),
+    productIds.length
+      ? supabase
+          .from("branch_product_overrides")
+          .select("product_id, availability_status, price_override")
+          .eq("branch_id", input.branchId)
+          .in("product_id", productIds)
+          .returns<BranchProductOverrideRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductOverrideRow[]; error: null }),
+  ])
+
+  if (categoriesResult.error || branchOverridesResult.error) {
+    return { ok: false, error: categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? "No pudimos validar la sucursal activa." }
   }
 
   const productMap = new Map(products.map((product) => [product.id, product]))
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
+  const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
+
+  if (input.items.some((item) => {
+    const branchOverride = branchOverrideMap.get(item.id)
+    return branchOverride ? branchOverride.availability_status !== "available" : false
+  })) {
+    return { ok: false, error: "Uno o mÃ¡s productos ya no estÃ¡n disponibles en esta sucursal." }
+  }
 
   const orderItemsPayload = input.items.map((item) => {
     const product = productMap.get(item.id)
@@ -184,7 +215,7 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
       throw new Error(`Product ${item.id} not found during checkout.`)
     }
 
-    const unitPrice = Number(product.base_price)
+    const unitPrice = Number(branchOverrideMap.get(product.id)?.price_override ?? product.base_price)
 
     return {
       product_id: product.id,
@@ -203,7 +234,7 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
     .from("orders")
     .insert({
       tenant_id: tenantResult.data.id,
-      branch_id: branchResult.data.id,
+      branch_id: input.branchId,
       customer_id: input.customerId ?? null,
       channel: "web",
       fulfillment_type: input.fulfillmentType,

@@ -3,6 +3,7 @@ import { Newsreader } from "next/font/google"
 import { Clock3, Flame, MapPinned, ShoppingBag } from "lucide-react"
 
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import { StorefrontBranchSelector } from "@/components/marketing/storefront-branch-selector"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontMenuGrid } from "@/components/marketing/storefront-menu-grid"
 
@@ -17,7 +18,12 @@ type TenantShellProps = {
   readonly title: string
   readonly eyebrow: string
   readonly description: string
-  readonly suggestedBranch?: string
+  readonly activeBranchId?: string | null
+  readonly activeBranchLabel?: string
+  readonly branches?: readonly {
+    readonly id: string
+    readonly name: string
+  }[]
   readonly etaMinutes?: number
   readonly shareUrl?: string
   readonly heroImageUrl?: string | null
@@ -59,25 +65,28 @@ export function TenantShell({
   title,
   eyebrow,
   description,
-  suggestedBranch,
+  activeBranchId,
+  activeBranchLabel,
+  branches,
   etaMinutes,
   menu,
   shareUrl,
   heroImageUrl,
   customerSession,
 }: TenantShellProps) {
-  const publicBranchLabel = suggestedBranch ?? "Centro · 1.2 km"
+  const publicBranchLabel = activeBranchLabel ?? "Sin sucursal activa"
   const publicEta = etaMinutes ?? 18
   const publicShareUrl = shareUrl ?? `https://vzfood.com/app/${tenantSlug}`
-  const publicMenu = menu?.length ? menu : fallbackMenu
+  const publicMenu = menu ?? fallbackMenu
   const visibleHeroImage = heroImageUrl ?? fallbackHeroImage
+  const bagHref = activeBranchId ? `/app/${tenantSlug}/bag?branch=${activeBranchId}` : `/app/${tenantSlug}/bag`
 
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.14),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_38%,_#fffdfa_100%)]">
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName={title} branchLabel={publicBranchLabel} customerSession={customerSession} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName={title} branchId={activeBranchId ?? null} branchLabel={publicBranchLabel} customerSession={customerSession} />
 
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
           <div
@@ -97,15 +106,14 @@ export function TenantShell({
                     {title}
                   </h1>
                   <p className="max-w-2xl text-base leading-8 text-stone-200 sm:text-lg">{description}</p>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <Link className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400" href={`/app/${tenantSlug}/bag`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                    <Link className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400" href={bagHref}>
                       <ShoppingBag className="size-4" />
                       Ver bolsa
                     </Link>
-                    <button className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15" type="button">
-                      <MapPinned className="size-4" />
-                      Cambiar sucursal
-                    </button>
+                    {branches && branches.length > 1 && activeBranchId ? (
+                      <StorefrontBranchSelector activeBranchId={activeBranchId} branches={branches} />
+                    ) : null}
                   </div>
                 </div>
 
@@ -134,13 +142,13 @@ export function TenantShell({
         <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-[2rem] border border-stone-200 bg-white/85 p-6 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Storefront</p>
-            <h2 className={`${displayFont.className} mt-4 text-4xl font-medium text-stone-950`}>Productos claros, decisión rápida y bolsa siempre visible.</h2>
+            <h2 className={`${displayFont.className} mt-4 text-4xl font-medium text-stone-950`}>Productos claros, decision rapida y bolsa siempre visible.</h2>
             <p className="mt-4 text-sm leading-7 text-stone-600">
-              Este storefront ya prioriza el patrón correcto: hero comercial con imagen propia del negocio, señales operativas arriba y un grid de productos directo debajo.
+              Este storefront ya prioriza el patron correcto: hero comercial con imagen propia del negocio, senales operativas arriba y un grid de productos directo debajo.
             </p>
             <div className="mt-6 space-y-3 text-sm text-stone-600">
               <div className="rounded-[1.2rem] bg-stone-50 p-4">Imagen hero configurable por la marca</div>
-              <div className="rounded-[1.2rem] bg-stone-50 p-4">Grid de productos con acción directa</div>
+              <div className="rounded-[1.2rem] bg-stone-50 p-4">Grid de productos con accion directa</div>
               <div className="rounded-[1.2rem] bg-stone-50 p-4 break-all">{publicShareUrl}</div>
             </div>
           </div>
@@ -148,7 +156,7 @@ export function TenantShell({
           <div className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menú</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menu</p>
                 <h2 className="mt-2 text-3xl font-semibold tracking-tight text-stone-950">Nuestros productos</h2>
               </div>
               <div className="flex flex-wrap gap-2 text-sm">
@@ -161,7 +169,7 @@ export function TenantShell({
                 {!customerSession ? (
                   <>
                     <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/login`}>
-                      Iniciar sesión
+                      Iniciar sesion
                     </Link>
                     <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
                       Registrarme
@@ -171,7 +179,7 @@ export function TenantShell({
               </div>
             </div>
 
-            <StorefrontMenuGrid tenantSlug={tenantSlug} menu={publicMenu} />
+            <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
           </div>
         </section>
       </div>

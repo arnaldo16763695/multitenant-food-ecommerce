@@ -21,16 +21,19 @@ import type { CustomerAccountContext } from "@/lib/auth/customer"
 type StorefrontHeaderProps = {
   readonly tenantSlug: string
   readonly brandName: string
+  readonly branchId: string | null
   readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontHeader({ tenantSlug, brandName, branchLabel, customerSession }: StorefrontHeaderProps) {
+export function StorefrontHeader({ tenantSlug, brandName, branchId, branchLabel, customerSession }: StorefrontHeaderProps) {
   const router = useRouter()
-  const liveCartItemsCount = useShoppingBagCount(tenantSlug)
+  const liveCartItemsCount = useShoppingBagCount(tenantSlug, branchId ?? "")
   const [isBagAnimating, setIsBagAnimating] = React.useState(false)
   const [isSigningOut, setIsSigningOut] = React.useState(false)
   const previousCountRef = React.useRef(liveCartItemsCount)
+  const homeHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
+  const bagHref = branchId ? `/app/${tenantSlug}/bag?branch=${branchId}` : `/app/${tenantSlug}/bag`
 
   React.useEffect(() => {
     if (liveCartItemsCount > previousCountRef.current) {
@@ -67,7 +70,7 @@ export function StorefrontHeader({ tenantSlug, brandName, branchLabel, customerS
       <header className="fixed top-4 left-1/2 z-40 w-[min(calc(100vw-1.5rem),80rem)] -translate-x-1/2 rounded-[1.8rem] border border-stone-950/10 bg-white/80 px-4 py-3 shadow-[0_18px_40px_rgba(120,53,15,0.08)] backdrop-blur md:px-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <Link className="inline-flex items-center gap-3" href={`/app/${tenantSlug}`}>
+            <Link className="inline-flex items-center gap-3" href={homeHref}>
               <div className="flex size-11 items-center justify-center rounded-[1.1rem] bg-stone-950 text-sm font-semibold text-white">
                 {brandName.slice(0, 2).toUpperCase()}
               </div>
@@ -83,7 +86,7 @@ export function StorefrontHeader({ tenantSlug, brandName, branchLabel, customerS
 
           <div className="flex items-center gap-2 self-end lg:self-auto">
             <Button asChild variant="outline" className={`rounded-full px-4 transition-transform ${isBagAnimating ? "animate-bag-attention" : ""}`}>
-              <Link href={`/app/${tenantSlug}/bag`}>
+              <Link href={bagHref}>
                 <ShoppingBag className={isBagAnimating ? "text-orange-600" : undefined} />
                 Bolsa
                 <span className={`rounded-full bg-stone-950 px-2 py-0.5 text-xs font-semibold text-white transition-colors ${isBagAnimating ? "bg-orange-600" : ""}`}>

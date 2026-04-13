@@ -12,6 +12,7 @@ type CheckoutRouteContext = {
 }
 
 type CheckoutRequestBody = {
+  readonly branchId: string
   readonly items: readonly CheckoutBagItemInput[]
   readonly fullName: string
   readonly phone: string
@@ -33,6 +34,7 @@ export async function POST(request: Request, context: CheckoutRouteContext) {
 
   const result = await createStorefrontOrder(adminClient, {
     tenantSlug,
+    branchId: body.branchId,
     customerId: customerContext?.customer.id ?? null,
     fulfillmentType: body.fulfillmentType,
     items: body.items,

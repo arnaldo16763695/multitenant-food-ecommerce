@@ -7,6 +7,7 @@ import type { CheckoutBagItemInput, CreateOrderResult } from "@/lib/domain/order
 
 type CheckoutPayload = {
   readonly tenantSlug: string
+  readonly branchId: string
   readonly items: readonly CheckoutBagItemInput[]
   readonly fullName: string
   readonly phone: string
@@ -26,6 +27,7 @@ export async function createStorefrontOrderAction(payload: CheckoutPayload): Pro
 
   return createStorefrontOrder(adminClient, {
     tenantSlug: payload.tenantSlug,
+    branchId: payload.branchId,
     customerId: customerContext?.customer.id ?? null,
     fulfillmentType: payload.fulfillmentType,
     items: payload.items,

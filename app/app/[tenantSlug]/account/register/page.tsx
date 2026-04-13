@@ -1,8 +1,9 @@
 import Link from "next/link"
+import { redirect } from "next/navigation"
+
 import { CustomerRegisterForm } from "@/components/auth/customer-register-form"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
-import { redirect } from "next/navigation"
 
 type StorefrontRegisterPageProps = {
   readonly params: Promise<{
@@ -23,7 +24,7 @@ export default async function StorefrontRegisterPage({ params }: StorefrontRegis
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Registro" branchLabel="Centro · 1.2 km" />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Registro" branchId={null} branchLabel="Sucursal activa" />
 
         <section className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
@@ -33,11 +34,11 @@ export default async function StorefrontRegisterPage({ params }: StorefrontRegis
                 <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950">Crear cuenta de cliente</h1>
               </div>
               <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href={`/app/${tenantSlug}`}>
-                Volver al menú
+                Volver al menu
               </Link>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-stone-600">
-              Regístrate desde {tenantSlug} para guardar direcciones, ver tus pedidos y volver a comprar más rápido en esta y otras marcas.
+              Registrate desde {tenantSlug} para guardar direcciones, ver tus pedidos y volver a comprar mas rapido en esta y otras marcas.
             </p>
           </div>
 

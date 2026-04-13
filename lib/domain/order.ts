@@ -1,6 +1,7 @@
 export type CheckoutBagItemInput = {
   readonly id: string
   readonly tenantSlug: string
+  readonly branchId: string
   readonly name: string
   readonly description: string
   readonly category: string
@@ -18,6 +19,7 @@ export type CheckoutCustomerInput = {
 
 export type CreateOrderInput = {
   readonly tenantSlug: string
+  readonly branchId: string
   readonly customerId?: string | null
   readonly customer: CheckoutCustomerInput
   readonly items: readonly CheckoutBagItemInput[]

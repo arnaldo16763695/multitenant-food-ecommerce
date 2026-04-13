@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input"
 
 type StorefrontCheckoutViewProps = {
   readonly tenantSlug: string
+  readonly branchId: string | null
   readonly branchLabel: string
   readonly customerDefaults?: {
     fullName?: string | null
@@ -25,10 +26,11 @@ type StorefrontCheckoutViewProps = {
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaults, customerSession }: StorefrontCheckoutViewProps) {
-  const items = useShoppingBagItems(tenantSlug)
-  const subtotal = useShoppingBagSubtotal(tenantSlug)
-  const clearTenantBag = useShoppingBagStore((state) => state.clearTenantBag)
+export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, customerDefaults, customerSession }: StorefrontCheckoutViewProps) {
+  const activeBranchId = branchId ?? ""
+  const items = useShoppingBagItems(tenantSlug, activeBranchId)
+  const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId)
+  const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
   const [fullName, setFullName] = React.useState(customerDefaults?.fullName ?? "")
   const [email, setEmail] = React.useState(customerDefaults?.email ?? "")
   const [phone, setPhone] = React.useState(customerDefaults?.phone ?? "")
@@ -36,13 +38,19 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
   const [fulfillmentType, setFulfillmentType] = React.useState<"pickup" | "delivery">("pickup")
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const menuHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErrorMessage("")
 
+    if (!branchId) {
+      setErrorMessage("Selecciona una sucursal activa antes de continuar.")
+      return
+    }
+
     if (!items.length) {
-      setErrorMessage("Tu bolsa está vacía.")
+      setErrorMessage("Tu bolsa esta vacia.")
       return
     }
 
@@ -51,6 +59,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
 
       const result = await createStorefrontOrderAction({
         tenantSlug,
+        branchId,
         items: items as readonly CheckoutBagItemInput[],
         fullName,
         email,
@@ -65,7 +74,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
         return
       }
 
-      clearTenantBag(tenantSlug)
+      clearBranchBag(tenantSlug, activeBranchId)
       window.location.assign(`/app/${tenantSlug}/orders/${result.orderId}`)
     } catch {
       setErrorMessage("No pudimos completar el checkout. Intenta nuevamente.")
@@ -78,13 +87,13 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Checkout" branchLabel={branchLabel} customerSession={customerSession} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Checkout" branchId={branchId} branchLabel={branchLabel} customerSession={customerSession} />
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <CardHeader>
               <CardTitle>Datos para confirmar tu pedido</CardTitle>
-              <CardDescription>Usamos esta información para ubicar tu pedido y comunicarnos contigo si hace falta.</CardDescription>
+              <CardDescription>Usamos esta informacion para ubicar tu pedido y comunicarnos contigo si hace falta.</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="grid gap-4" onSubmit={handleSubmit}>
@@ -94,7 +103,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
                     <Input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Ej. Ana Torres" required />
                   </label>
                   <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Teléfono</span>
+                    <span className="font-medium text-card-foreground">Telefono</span>
                     <Input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+5215512345678" required />
                   </label>
                 </div>
@@ -128,7 +137,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
 
                 {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
 
-                <Button className="h-10 rounded-full" disabled={isSubmitting || items.length === 0} type="submit">
+                <Button className="h-10 rounded-full" disabled={isSubmitting || items.length === 0 || !branchId} type="submit">
                   {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}
                   {isSubmitting ? "Procesando pedido..." : "Enviar pedido"}
                 </Button>
@@ -139,12 +148,15 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <CardHeader>
               <CardTitle>Resumen del pedido</CardTitle>
-              <CardDescription>Lo que estás por confirmar.</CardDescription>
+              <CardDescription>Lo que estas por confirmar.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               {items.length === 0 ? (
                 <div className="rounded-[1.5rem] border border-dashed border-stone-300 px-6 py-10 text-center text-stone-600">
-                  Tu bolsa está vacía. <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}`}>Volver al menú</Link>
+                  Tu bolsa esta vacia.{" "}
+                  <Link className="font-semibold text-stone-950" href={menuHref}>
+                    Volver al menu
+                  </Link>
                 </div>
               ) : (
                 items.map((item) => (
@@ -152,7 +164,9 @@ export function StorefrontCheckoutView({ tenantSlug, branchLabel, customerDefaul
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-stone-950">{item.name}</p>
-                        <p className="mt-1 text-xs text-stone-500">{item.quantity} x {item.unitPriceLabel}</p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {item.quantity} x {item.unitPriceLabel}
+                        </p>
                       </div>
                       <span className="font-semibold text-stone-950">$ {(item.unitPrice * item.quantity).toFixed(2)}</span>
                     </div>

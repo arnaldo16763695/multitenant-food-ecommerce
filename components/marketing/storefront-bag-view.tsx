@@ -11,23 +11,28 @@ import { useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from
 
 type StorefrontBagViewProps = {
   readonly tenantSlug: string
+  readonly branchId: string | null
+  readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontBagView({ tenantSlug, customerSession }: StorefrontBagViewProps) {
-  const items = useShoppingBagItems(tenantSlug)
-  const subtotal = useShoppingBagSubtotal(tenantSlug)
+export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerSession }: StorefrontBagViewProps) {
+  const activeBranchId = branchId ?? ""
+  const items = useShoppingBagItems(tenantSlug, activeBranchId)
+  const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId)
   const incrementItem = useShoppingBagStore((state) => state.incrementItem)
   const decrementItem = useShoppingBagStore((state) => state.decrementItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
-  const clearTenantBag = useShoppingBagStore((state) => state.clearTenantBag)
+  const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
+  const menuHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
+  const checkoutHref = branchId ? `/app/${tenantSlug}/checkout?branch=${branchId}` : `/app/${tenantSlug}/checkout`
 
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)]">
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Shopping bag" branchLabel="Centro · 1.2 km" customerSession={customerSession} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Shopping bag" branchId={branchId} branchLabel={branchLabel} customerSession={customerSession} />
 
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
@@ -39,10 +44,10 @@ export function StorefrontBagView({ tenantSlug, customerSession }: StorefrontBag
               {items.length === 0 ? (
                 <div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-50/80 px-6 py-12 text-center">
                   <ShoppingBag className="mx-auto mb-4 size-8 text-stone-400" />
-                  <p className="text-lg font-semibold text-stone-950">Tu bolsa está vacía.</p>
+                  <p className="text-lg font-semibold text-stone-950">Tu bolsa esta vacia.</p>
                   <p className="mt-2 text-sm leading-7 text-stone-600">Agrega productos desde el storefront para empezar tu pedido.</p>
                   <Button asChild className="mt-5 rounded-full">
-                    <Link href={`/app/${tenantSlug}`}>Volver al menú</Link>
+                    <Link href={menuHref}>Volver al menu</Link>
                   </Button>
                 </div>
               ) : (
@@ -61,14 +66,14 @@ export function StorefrontBagView({ tenantSlug, customerSession }: StorefrontBag
                       </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-start">
-                        <Button variant="outline" size="icon-sm" onClick={() => decrementItem(item.id, tenantSlug)}>
+                        <Button variant="outline" size="icon-sm" onClick={() => decrementItem(item.id, tenantSlug, activeBranchId)}>
                           <Minus />
                         </Button>
                         <span className="min-w-8 text-center text-sm font-semibold text-stone-950">{item.quantity}</span>
-                        <Button variant="outline" size="icon-sm" onClick={() => incrementItem(item.id, tenantSlug)}>
+                        <Button variant="outline" size="icon-sm" onClick={() => incrementItem(item.id, tenantSlug, activeBranchId)}>
                           <Plus />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" onClick={() => removeItem(item.id, tenantSlug)}>
+                        <Button variant="ghost" size="icon-sm" onClick={() => removeItem(item.id, tenantSlug, activeBranchId)}>
                           <Trash2 />
                         </Button>
                       </div>
@@ -96,10 +101,10 @@ export function StorefrontBagView({ tenantSlug, customerSession }: StorefrontBag
                 </div>
               </div>
 
-              <Button asChild className="h-10 w-full rounded-full" disabled={items.length === 0}>
-                <Link href={`/app/${tenantSlug}/checkout`}>Continuar al checkout</Link>
+              <Button asChild className="h-10 w-full rounded-full" disabled={items.length === 0 || !branchId}>
+                <Link href={checkoutHref}>Continuar al checkout</Link>
               </Button>
-              <Button variant="outline" className="h-10 w-full rounded-full" disabled={items.length === 0} onClick={() => clearTenantBag(tenantSlug)}>
+              <Button variant="outline" className="h-10 w-full rounded-full" disabled={items.length === 0 || !branchId} onClick={() => clearBranchBag(tenantSlug, activeBranchId)}>
                 Vaciar bolsa
               </Button>
             </CardContent>
