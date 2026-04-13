@@ -28,6 +28,7 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Start production server: `npm run start`
 - Run lint: `npm run lint`
 - Supabase CLI can be invoked with `npx supabase ...` if it is not installed globally.
+- Create Supabase migrations with `npx supabase migration new descriptive_name`. Do not handcraft or rename migration prefixes manually; Supabase tracks the full leading timestamp as the migration version.
 - To pull the hosted schema into the repo, prefer `npx supabase db pull` after linking the project.
 
 ## Tests
@@ -144,6 +145,7 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Prefer snapshots for transactional records when historical correctness matters.
 - Be explicit about tenant and branch boundaries in data models and queries.
 - Before proposing database changes, inspect the latest Supabase migrations and the remote schema snapshot instead of inferring the schema from application code alone.
+- When adding a new Supabase migration, keep the CLI-generated filename prefix intact. A filename like `20260413_000014_name.sql` is invalid for version tracking because Supabase will parse only the segment before the first underscore.
 
 ## Editing Rules
 

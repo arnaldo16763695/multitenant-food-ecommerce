@@ -69,6 +69,9 @@ export function HomePage() {
             <Link className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href="/brands">
               Explorar tiendas
             </Link>
+            <Link className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href="/signup/business">
+              Registrar negocio
+            </Link>
             <Link className="rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600" href="/auth/admin/login">
               Acceso negocios
             </Link>

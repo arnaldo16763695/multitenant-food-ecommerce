@@ -4,12 +4,11 @@ import * as React from "react"
 import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { getDefaultRouteForRole } from "@/lib/auth/permissions"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { getDefaultRouteForRole } from "@/lib/auth/permissions"
+import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type AdminLoginFormProps = {
   readonly nextPath?: string
@@ -27,6 +26,10 @@ type MembershipLookupRow = {
 
 type TenantLookupRow = {
   slug: string
+}
+
+type PlatformMembershipLookupRow = {
+  role: string
 }
 
 export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
@@ -60,6 +63,18 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
 
     if (profileResult.error || !profileResult.data) {
       return "/auth/admin/login"
+    }
+
+    const platformMembershipResult = await supabase
+      .from("platform_memberships")
+      .select("role")
+      .eq("profile_id", profileResult.data.id)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<PlatformMembershipLookupRow>()
+
+    if (platformMembershipResult.data && !platformMembershipResult.error) {
+      return "/platform"
     }
 
     const membershipResult = await supabase
@@ -125,7 +140,7 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
         <CardDescription>
           Inicia sesion con un usuario que tenga membership activa en el tenant.{" "}
           {reason === "membership" ? "No encontramos acceso para este tenant." : null}
-          {reason === "password-set" ? "La contraseña fue creada correctamente. Ya puedes entrar." : null}
+          {reason === "password-set" ? "La contrasena fue creada correctamente. Ya puedes entrar." : null}
         </CardDescription>
       </CardHeader>
       <CardContent>
