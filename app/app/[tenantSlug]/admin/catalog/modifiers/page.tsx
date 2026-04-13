@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation"
+
 import { AdminCatalogModifiers } from "@/components/admin/admin-catalog-modifiers"
-import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
+import { requireAdminAccess } from "@/lib/auth/admin"
+import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { getAdminCatalogModule } from "@/lib/data/admin-catalog"
 
 type AdminCatalogModifiersPageProps = {
@@ -10,7 +13,12 @@ type AdminCatalogModifiersPageProps = {
 
 export default async function AdminCatalogModifiersPage({ params }: AdminCatalogModifiersPageProps) {
   const { tenantSlug } = await params
-  await requireAdminSectionAccess(tenantSlug, "catalog")
+  const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageCatalogMaster(access.membership.role)) {
+    redirect(`/app/${tenantSlug}/admin/catalog/products`)
+  }
+
   const { modifierGroups } = await getAdminCatalogModule(tenantSlug)
 
   return <AdminCatalogModifiers initialModifierGroups={modifierGroups} />

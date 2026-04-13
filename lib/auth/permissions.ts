@@ -12,7 +12,7 @@ export type AdminSection =
 const ROLE_SECTION_ACCESS: Record<TenantRole, readonly AdminSection[]> = {
   owner: ["overview", "catalog", "orders", "branches", "staff", "settings", "kitchen"],
   manager: ["overview", "catalog", "orders", "branches", "staff", "settings", "kitchen"],
-  branch_manager: ["overview", "orders", "branches", "staff", "kitchen"],
+  branch_manager: ["overview", "catalog", "orders", "branches", "staff", "kitchen"],
   cashier: ["overview", "orders"],
   preparer: ["kitchen"],
 }
@@ -59,4 +59,12 @@ export function getDefaultRouteForRole(tenantSlug: string, role: string) {
   }
 
   return `/app/${tenantSlug}/kitchen`
+}
+
+export function canManageCatalogMaster(role: string) {
+  return role === "owner" || role === "manager"
+}
+
+export function canManageCatalogBranchOverrides(role: string) {
+  return role === "owner" || role === "manager" || role === "branch_manager"
 }

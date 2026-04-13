@@ -12,6 +12,7 @@ import {
   toggleProductStatusAction,
   updateProductWithImageAction,
 } from "@/app/app/[tenantSlug]/admin/catalog/products/actions"
+import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
@@ -121,6 +122,7 @@ type AdminCatalogProductsProps = {
   readonly initialProducts?: readonly CatalogProduct[]
   readonly initialCategories?: readonly CatalogCategory[]
   readonly initialBranches?: readonly CatalogBranchOption[]
+  readonly role: string
 }
 
 export function AdminCatalogProducts({
@@ -128,6 +130,7 @@ export function AdminCatalogProducts({
   initialProducts = catalogProducts,
   initialCategories = catalogCategories,
   initialBranches = catalogBranches,
+  role,
 }: AdminCatalogProductsProps) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
@@ -144,6 +147,7 @@ export function AdminCatalogProducts({
   const [initialProductFormValues, setInitialProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length, initialBranches))
 
   const products = initialProducts
+  const canEditGlobalCatalog = canManageCatalogMaster(role)
 
   const categoryFilters = React.useMemo(() => {
     return ["Todos", ...new Set(initialCategories.map((category) => category.name))].filter(Boolean)
@@ -349,10 +353,12 @@ export function AdminCatalogProducts({
                 <SlidersHorizontal />
                 Filtros
               </Button>
-              <Button className="h-9 rounded-xl" onClick={openCreateDialog}>
-                <Plus />
-                Nuevo producto
-              </Button>
+              {canEditGlobalCatalog ? (
+                <Button className="h-9 rounded-xl" onClick={openCreateDialog}>
+                  <Plus />
+                  Nuevo producto
+                </Button>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2 xl:max-w-[28rem] xl:justify-end">
@@ -376,7 +382,11 @@ export function AdminCatalogProducts({
         <Card>
           <CardHeader>
             <CardTitle>Productos</CardTitle>
-            <CardDescription>Vista principal compacta tipo CRUD para escaneo y acciones rapidas.</CardDescription>
+            <CardDescription>
+              {canEditGlobalCatalog
+                ? "Vista principal compacta tipo CRUD para escaneo y acciones rapidas."
+                : "Vista operativa por sucursal. Puedes ajustar disponibilidad, precio local y prep time sin tocar el catalogo maestro."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-[1.5rem] border border-border">
@@ -426,19 +436,25 @@ export function AdminCatalogProducts({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44 rounded-xl">
-                              <DropdownMenuItem onSelect={() => openEditDialog(product)}>Editar producto</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => runWithRefresh(() => duplicateProductAction(product.id, tenantSlug))}>Duplicar</DropdownMenuItem>
-                              <DropdownMenuItem
-                                onSelect={() => {
-                                  openEditDialog(product)
-                                }}
-                              >
-                                Ver detalle
+                              <DropdownMenuItem onSelect={() => openEditDialog(product)}>
+                                {canEditGlobalCatalog ? "Editar producto" : "Configurar sucursal"}
                               </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onSelect={() => runWithRefresh(() => toggleProductStatusAction(product.id, tenantSlug, product.status))}>
-                                {product.status === "Activo" ? "Pausar" : "Activar"}
-                              </DropdownMenuItem>
+                              {canEditGlobalCatalog ? (
+                                <>
+                                  <DropdownMenuItem onSelect={() => runWithRefresh(() => duplicateProductAction(product.id, tenantSlug))}>Duplicar</DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      openEditDialog(product)
+                                    }}
+                                  >
+                                    Ver detalle
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onSelect={() => runWithRefresh(() => toggleProductStatusAction(product.id, tenantSlug, product.status))}>
+                                    {product.status === "Activo" ? "Pausar" : "Activar"}
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -469,13 +485,14 @@ export function AdminCatalogProducts({
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
-                <Input value={productFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Fire Smash Burger" />
+                <Input value={productFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Fire Smash Burger" disabled={!canEditGlobalCatalog} />
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Categoria</span>
                 <select
                   value={productFormValues.category}
                   onChange={(event) => handleFieldChange("category", event.target.value)}
+                  disabled={!canEditGlobalCatalog}
                   className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="">Selecciona una categoria</option>
@@ -493,6 +510,7 @@ export function AdminCatalogProducts({
               <textarea
                 value={productFormValues.description}
                 onChange={(event) => handleFieldChange("description", event.target.value)}
+                disabled={!canEditGlobalCatalog}
                 className="min-h-28 rounded-xl border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 placeholder="Describe el producto para el equipo y el storefront."
               />
@@ -501,13 +519,14 @@ export function AdminCatalogProducts({
             <div className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Precio base</span>
-                <Input value={productFormValues.basePrice} onChange={(event) => handleFieldChange("basePrice", event.target.value)} placeholder="Ej. $ 11.90" />
+                <Input value={productFormValues.basePrice} onChange={(event) => handleFieldChange("basePrice", event.target.value)} placeholder="Ej. $ 11.90" disabled={!canEditGlobalCatalog} />
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Estado</span>
                 <select
                   value={productFormValues.status}
                   onChange={(event) => handleFieldChange("status", event.target.value as ProductStatus)}
+                  disabled={!canEditGlobalCatalog}
                   className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="Activo">Activo</option>
@@ -523,6 +542,7 @@ export function AdminCatalogProducts({
                   value={productFormValues.primaryImagePath}
                   onChange={(event) => handleFieldChange("primaryImagePath", event.target.value)}
                   placeholder="tenants/tenant-id/products/product-id/primary/cover.jpg"
+                  disabled={!canEditGlobalCatalog}
                 />
               </label>
               <label className="grid gap-2 text-sm">
@@ -531,13 +551,14 @@ export function AdminCatalogProducts({
                   value={productFormValues.primaryImageAlt}
                   onChange={(event) => handleFieldChange("primaryImageAlt", event.target.value)}
                   placeholder="Describe la imagen principal"
+                  disabled={!canEditGlobalCatalog}
                 />
               </label>
             </div>
 
             <label className="grid gap-2 text-sm">
               <span className="font-medium text-card-foreground">Subir imagen principal</span>
-              <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePrimaryImageFileChange} />
+              <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePrimaryImageFileChange} disabled={!canEditGlobalCatalog} />
             </label>
 
             <div className="rounded-[1.25rem] border border-dashed border-border p-4">
@@ -617,7 +638,7 @@ export function AdminCatalogProducts({
               Cerrar
             </Button>
             <Button onClick={saveProduct} disabled={isSavingProduct || isRunningRowAction}>
-              {productDialogMode === "create" ? "Crear producto" : "Guardar cambios"}
+              {productDialogMode === "create" ? "Crear producto" : canEditGlobalCatalog ? "Guardar cambios" : "Guardar configuracion"}
             </Button>
           </DialogFooter>
         </DialogContent>

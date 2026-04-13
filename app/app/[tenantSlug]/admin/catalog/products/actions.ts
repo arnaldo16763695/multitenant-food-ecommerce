@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { randomUUID } from "node:crypto"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput } from "@/lib/domain/catalog"
 import {
   createCatalogProduct,
@@ -11,7 +12,9 @@ import {
   duplicateCatalogProduct,
   toggleCatalogProductStatus,
   updateCatalogProduct,
+  updateCatalogProductBranchOverrides,
 } from "@/lib/services/catalog"
+import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { buildProductPrimaryImagePath, getCatalogMediaBucket, getFileExtension } from "@/lib/supabase/storage"
@@ -87,6 +90,11 @@ async function uploadPrimaryProductImage(tenantId: string, productId: string, fi
 
 export async function createProductAction(tenantSlug: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageCatalogMaster(access.membership.role)) {
+    return { ok: false, error: "Solo owner y manager pueden crear productos." }
+  }
+
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
@@ -104,6 +112,11 @@ export async function createProductAction(tenantSlug: string, payload: CatalogPr
 
 export async function createProductWithImageAction(tenantSlug: string, formData: FormData): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageCatalogMaster(access.membership.role)) {
+    return { ok: false, error: "Solo owner y manager pueden crear productos." }
+  }
+
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
@@ -153,7 +166,15 @@ export async function updateProductAction(productId: string, tenantSlug: string,
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await updateCatalogProduct(supabase, access.membership.tenantId, productId, payload)
+  const result = canManageCatalogMaster(access.membership.role)
+    ? await updateCatalogProduct(supabase, access.membership.tenantId, productId, payload)
+    : await updateCatalogProductBranchOverrides(
+        supabase,
+        access.membership.tenantId,
+        productId,
+        payload.branchOverrides ?? [],
+        await getActiveBranchIdsForMembership(supabase, access.membership.id)
+      )
 
   if (result.ok) {
     revalidateCatalogPaths(tenantSlug)
@@ -184,14 +205,22 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     branchOverrides: parseBranchOverrides(formData),
   }
 
-  if (imageFile instanceof File && imageFile.size > 0) {
+  if (canManageCatalogMaster(access.membership.role) && imageFile instanceof File && imageFile.size > 0) {
     primaryImagePath = await uploadPrimaryProductImage(access.membership.tenantId, productId, imageFile, previousImagePath || undefined)
   }
 
-  const result = await updateCatalogProduct(supabase, access.membership.tenantId, productId, {
-    ...payload,
-    primaryImagePath,
-  })
+  const result = canManageCatalogMaster(access.membership.role)
+    ? await updateCatalogProduct(supabase, access.membership.tenantId, productId, {
+        ...payload,
+        primaryImagePath,
+      })
+    : await updateCatalogProductBranchOverrides(
+        supabase,
+        access.membership.tenantId,
+        productId,
+        payload.branchOverrides ?? [],
+        await getActiveBranchIdsForMembership(supabase, access.membership.id)
+      )
 
   if (result.ok) {
     revalidateCatalogPaths(tenantSlug)
@@ -202,6 +231,11 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
 
 export async function toggleProductStatusAction(productId: string, tenantSlug: string, currentStatus: "Activo" | "Draft"): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageCatalogMaster(access.membership.role)) {
+    return { ok: false, error: "Solo owner y manager pueden cambiar el estado global del producto." }
+  }
+
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
@@ -219,6 +253,11 @@ export async function toggleProductStatusAction(productId: string, tenantSlug: s
 
 export async function duplicateProductAction(productId: string, tenantSlug: string): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageCatalogMaster(access.membership.role)) {
+    return { ok: false, error: "Solo owner y manager pueden duplicar productos." }
+  }
+
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {

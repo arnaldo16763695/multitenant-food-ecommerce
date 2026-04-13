@@ -155,6 +155,42 @@ async function upsertBranchProductOverrides(
   return { ok: true }
 }
 
+export async function updateCatalogProductBranchOverrides(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  branchOverrides: readonly CatalogBranchOverrideInput[],
+  allowedBranchIds: readonly string[]
+): Promise<CatalogMutationResult> {
+  if (!allowedBranchIds.length) {
+    return { ok: false, error: "No tienes sucursales activas asignadas para operar productos." }
+  }
+
+  const scopedOverrides = branchOverrides.filter((override) => allowedBranchIds.includes(override.branchId))
+
+  if (!scopedOverrides.length) {
+    return { ok: false, error: "No enviamos overrides validos para tus sucursales asignadas." }
+  }
+
+  const rows = scopedOverrides.map((override) => ({
+    branch_id: override.branchId,
+    product_id: productId,
+    availability_status: override.availabilityStatus,
+    price_override: normalizeCatalogPrice(override.priceOverride) ?? null,
+    prep_time_minutes: normalizePrepTimeMinutes(override.prepTimeMinutes),
+  }))
+
+  const upsertResult = await supabase.from("branch_product_overrides").upsert(rows, {
+    onConflict: "branch_id,product_id",
+  })
+
+  if (upsertResult.error) {
+    return { ok: false, error: upsertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
 async function resolveCategoryId(supabase: SupabaseClient, tenantId: string, categoryName: string) {
   const normalizedCategoryName = categoryName.trim()
 

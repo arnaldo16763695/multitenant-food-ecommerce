@@ -42,7 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { canAccessAdminSection } from "@/lib/auth/permissions"
+import { canAccessAdminSection, canManageCatalogMaster } from "@/lib/auth/permissions"
 import { NavUser } from "./nav-user"
 
 type AdminNavigationItem = {
@@ -181,6 +181,8 @@ export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
     return `${baseAdminPath}${href === "/overview" ? "" : href}`
   }
 
+  const canManageMasterCatalog = canManageCatalogMaster(role)
+
   const visibleNavigation = adminNavigation.filter((item) => {
     if (item.href === "/overview") return canAccessAdminSection(role, "overview")
     if (item.href === "/catalog") return canAccessAdminSection(role, "catalog")
@@ -233,7 +235,12 @@ export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
                   item={{
                     ...item,
                     href: buildAdminHref(item.href),
-                    children: item.children?.map((child) => ({ ...child, href: buildAdminHref(child.href) })),
+                    children:
+                      item.href === "/catalog" && !canManageMasterCatalog
+                        ? item.children
+                            ?.filter((child) => child.href === "/catalog/products")
+                            .map((child) => ({ ...child, href: buildAdminHref(child.href) }))
+                        : item.children?.map((child) => ({ ...child, href: buildAdminHref(child.href) })),
                   }}
                   pathname={pathname}
                 />
