@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
+  catalogBranches,
   catalogCategories,
   catalogModifierGroups,
   catalogProducts,
+  type CatalogBranchOption,
   type CatalogCategory,
   type CatalogModifierGroup,
   type CatalogProduct,
@@ -16,6 +18,7 @@ import {
   slugifyCatalogValue,
   toCatalogDbVisibility,
   toCatalogDbStatus,
+  type CatalogBranchOverrideInput,
   type CatalogCategoryMutationInput,
   type CatalogMutationResult,
   type CatalogProductMutationInput,
@@ -23,6 +26,7 @@ import {
 } from "@/lib/domain/catalog"
 
 type CatalogModuleData = {
+  readonly branches: readonly CatalogBranchOption[]
   readonly products: readonly CatalogProduct[]
   readonly categories: readonly CatalogCategory[]
   readonly modifierGroups: readonly CatalogModifierGroup[]
@@ -53,6 +57,7 @@ type BranchProductOverrideRow = {
 }
 
 export const MOCK_CATALOG_MODULE: CatalogModuleData = {
+  branches: catalogBranches,
   products: catalogProducts,
   categories: catalogCategories,
   modifierGroups: catalogModifierGroups,
@@ -70,6 +75,84 @@ function mapAvailabilityStatus(status: BranchProductOverrideRow["availability_st
   if (status === "paused") return "Pausado" as const
 
   return "Sin stock" as const
+}
+
+function normalizePrepTimeMinutes(value: string) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return null
+  }
+
+  const numericValue = Number(trimmedValue)
+
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return null
+  }
+
+  return Math.round(numericValue)
+}
+
+async function buildBranchProductOverridesPayload(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  branchOverrides?: readonly CatalogBranchOverrideInput[]
+) {
+  const branchesResult = await supabase
+    .from("branches")
+    .select("id, name")
+    .eq("tenant_id", tenantId)
+    .returns<BranchRow[]>()
+
+  if (branchesResult.error) {
+    return { ok: false as const, error: branchesResult.error.message }
+  }
+
+  const branches = branchesResult.data ?? []
+  const overrideMap = new Map((branchOverrides ?? []).map((override) => [override.branchId, override]))
+
+  return {
+    ok: true as const,
+    rows: branches.map((branch) => {
+      const override = overrideMap.get(branch.id)
+
+      return {
+        branch_id: branch.id,
+        product_id: productId,
+        availability_status: override?.availabilityStatus ?? "available",
+        price_override: normalizeCatalogPrice(override?.priceOverride ?? "") ?? null,
+        prep_time_minutes: normalizePrepTimeMinutes(override?.prepTimeMinutes ?? ""),
+      }
+    }),
+  }
+}
+
+async function upsertBranchProductOverrides(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  branchOverrides?: readonly CatalogBranchOverrideInput[]
+): Promise<CatalogMutationResult> {
+  const payloadResult = await buildBranchProductOverridesPayload(supabase, tenantId, productId, branchOverrides)
+
+  if (!payloadResult.ok) {
+    return { ok: false, error: payloadResult.error }
+  }
+
+  if (!payloadResult.rows.length) {
+    return { ok: true }
+  }
+
+  const upsertResult = await supabase.from("branch_product_overrides").upsert(payloadResult.rows, {
+    onConflict: "branch_id,product_id",
+  })
+
+  if (upsertResult.error) {
+    return { ok: false, error: upsertResult.error.message }
+  }
+
+  return { ok: true }
 }
 
 async function resolveCategoryId(supabase: SupabaseClient, tenantId: string, categoryName: string) {
@@ -205,9 +288,13 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
       .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId)?.name)
       .filter((value): value is string => Boolean(value)),
     branchStatuses: (branchProductOverridesMap.get(product.id) ?? []).map((override) => ({
+      branchId: override.branch_id,
       branchName: branchMap.get(override.branch_id)?.name ?? "Sucursal",
+      availabilityStatus: override.availability_status,
       availability: mapAvailabilityStatus(override.availability_status),
+      priceOverride: override.price_override == null ? "" : String(override.price_override),
       price: formatCurrency(override.price_override ?? product.base_price),
+      prepTimeMinutes: override.prep_time_minutes == null ? "" : String(override.prep_time_minutes),
       prepTime: override.prep_time_minutes ? `${override.prep_time_minutes} min` : "-",
     })),
   }))
@@ -238,6 +325,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   }
 
   return {
+    branches: branches.length ? branches.map((branch) => ({ id: branch.id, name: branch.name })) : catalogBranches,
     products: mappedProducts.length ? mappedProducts : catalogProducts,
     categories: mappedCategories.length ? mappedCategories : catalogCategories,
     modifierGroups: mappedModifierGroups.length ? mappedModifierGroups : catalogModifierGroups,
@@ -268,25 +356,35 @@ export async function createCatalogProductWithOptions(
     resolveUniqueSlug(supabase, tenantId, payload.name),
   ])
 
-  const insertResult = await supabase.from("products").insert({
-    id: options?.productId,
-    tenant_id: tenantId,
-    category_id: categoryId,
-    name: payload.name.trim(),
-    slug: productSlug,
-    description: payload.description.trim(),
-    base_price: normalizedPrice,
-    status: toCatalogDbStatus(payload.status),
-    primary_image_path: payload.primaryImagePath?.trim() || null,
-    primary_image_alt: payload.primaryImageAlt?.trim() || null,
-    tags: ["New"],
-  })
+  const insertResult = await supabase
+    .from("products")
+    .insert({
+      id: options?.productId,
+      tenant_id: tenantId,
+      category_id: categoryId,
+      name: payload.name.trim(),
+      slug: productSlug,
+      description: payload.description.trim(),
+      base_price: normalizedPrice,
+      status: toCatalogDbStatus(payload.status),
+      primary_image_path: payload.primaryImagePath?.trim() || null,
+      primary_image_alt: payload.primaryImageAlt?.trim() || null,
+      tags: ["New"],
+    })
+    .select("id")
+    .single<{ id: string }>()
 
   if (insertResult.error) {
     return { ok: false, error: insertResult.error.message }
   }
 
-  return { ok: true, entityId: options?.productId }
+  const branchOverridesResult = await upsertBranchProductOverrides(supabase, tenantId, insertResult.data.id, payload.branchOverrides)
+
+  if (!branchOverridesResult.ok) {
+    return branchOverridesResult
+  }
+
+  return { ok: true, entityId: insertResult.data.id }
 }
 
 export async function updateCatalogProduct(
@@ -323,6 +421,12 @@ export async function updateCatalogProduct(
 
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
+  }
+
+  const branchOverridesResult = await upsertBranchProductOverrides(supabase, tenantId, productId, payload.branchOverrides)
+
+  if (!branchOverridesResult.ok) {
+    return branchOverridesResult
   }
 
   return { ok: true }
@@ -363,19 +467,47 @@ export async function duplicateCatalogProduct(supabase: SupabaseClient, tenantId
   const duplicateName = `${productResult.data.name} Copy`
   const duplicateSlug = await resolveUniqueSlug(supabase, tenantId, duplicateName)
 
-  const insertResult = await supabase.from("products").insert({
-    tenant_id: tenantId,
-    category_id: productResult.data.category_id,
-    name: duplicateName,
-    slug: duplicateSlug,
-    description: productResult.data.description,
-    base_price: productResult.data.base_price,
-    status: "draft",
-    tags: ["Copy"],
-  })
+  const insertResult = await supabase
+    .from("products")
+    .insert({
+      tenant_id: tenantId,
+      category_id: productResult.data.category_id,
+      name: duplicateName,
+      slug: duplicateSlug,
+      description: productResult.data.description,
+      base_price: productResult.data.base_price,
+      status: "draft",
+      tags: ["Copy"],
+    })
+    .select("id")
+    .single<{ id: string }>()
 
   if (insertResult.error) {
     return { ok: false, error: insertResult.error.message }
+  }
+
+  const sourceOverridesResult = await supabase
+    .from("branch_product_overrides")
+    .select("branch_id, availability_status, price_override, prep_time_minutes")
+    .eq("product_id", productId)
+    .returns<Omit<BranchProductOverrideRow, "product_id">[]>()
+
+  const branchOverrides = (sourceOverridesResult.data ?? []).map((override) => ({
+    branchId: override.branch_id,
+    availabilityStatus: override.availability_status,
+    priceOverride: override.price_override == null ? "" : String(override.price_override),
+    prepTimeMinutes: override.prep_time_minutes == null ? "" : String(override.prep_time_minutes),
+  }))
+
+  const branchOverridesResult = await upsertBranchProductOverrides(
+    supabase,
+    tenantId,
+    insertResult.data.id,
+    branchOverrides
+  )
+
+  if (!branchOverridesResult.ok) {
+    return branchOverridesResult
   }
 
   return { ok: true }

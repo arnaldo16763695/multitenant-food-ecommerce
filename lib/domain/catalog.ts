@@ -1,6 +1,14 @@
 import type { CatalogProduct } from "@/lib/config/admin-catalog"
 
 export type CatalogProductStatus = CatalogProduct["status"]
+export type CatalogBranchAvailabilityStatus = CatalogProduct["branchStatuses"][number]["availabilityStatus"]
+
+export type CatalogBranchOverrideInput = {
+  readonly branchId: string
+  readonly availabilityStatus: CatalogBranchAvailabilityStatus
+  readonly priceOverride: string
+  readonly prepTimeMinutes: string
+}
 
 export type CatalogProductMutationInput = {
   readonly name: string
@@ -10,6 +18,7 @@ export type CatalogProductMutationInput = {
   readonly status: CatalogProductStatus
   readonly primaryImagePath?: string
   readonly primaryImageAlt?: string
+  readonly branchOverrides?: readonly CatalogBranchOverrideInput[]
 }
 
 export type CatalogCategoryVisibility = "Publica" | "Oculta"

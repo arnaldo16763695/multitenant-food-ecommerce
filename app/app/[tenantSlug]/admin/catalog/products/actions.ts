@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { randomUUID } from "node:crypto"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
-import { type CatalogMutationResult, type CatalogProductMutationInput } from "@/lib/domain/catalog"
+import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput } from "@/lib/domain/catalog"
 import {
   createCatalogProduct,
   createCatalogProductWithOptions,
@@ -19,6 +19,42 @@ import { buildProductPrimaryImagePath, getCatalogMediaBucket, getFileExtension }
 function revalidateCatalogPaths(tenantSlug: string) {
   revalidatePath(`/app/${tenantSlug}/admin/catalog`)
   revalidatePath(`/app/${tenantSlug}/admin/catalog/products`)
+}
+
+function parseBranchOverrides(formData: FormData): readonly CatalogBranchOverrideInput[] {
+  const rawValue = formData.get("branchOverrides")
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue
+      .filter((value): value is CatalogBranchOverrideInput => {
+        return (
+          Boolean(value) &&
+          typeof value === "object" &&
+          typeof value.branchId === "string" &&
+          typeof value.availabilityStatus === "string" &&
+          typeof value.priceOverride === "string" &&
+          typeof value.prepTimeMinutes === "string"
+        )
+      })
+      .map((value) => ({
+        branchId: value.branchId,
+        availabilityStatus: value.availabilityStatus,
+        priceOverride: value.priceOverride,
+        prepTimeMinutes: value.prepTimeMinutes,
+      }))
+  } catch {
+    return []
+  }
 }
 
 async function uploadPrimaryProductImage(tenantId: string, productId: string, file: File, previousPath?: string) {
@@ -85,6 +121,7 @@ export async function createProductWithImageAction(tenantSlug: string, formData:
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
+    branchOverrides: parseBranchOverrides(formData),
   }
 
   if (imageFile instanceof File && imageFile.size > 0) {
@@ -144,6 +181,7 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
+    branchOverrides: parseBranchOverrides(formData),
   }
 
   if (imageFile instanceof File && imageFile.size > 0) {

@@ -11,7 +11,7 @@ type AdminCatalogProductsPageProps = {
 export default async function AdminCatalogProductsPage({ params }: AdminCatalogProductsPageProps) {
   const { tenantSlug } = await params
   await requireAdminSectionAccess(tenantSlug, "catalog")
-  const { products, categories } = await getAdminCatalogModule(tenantSlug)
+  const { products, categories, branches } = await getAdminCatalogModule(tenantSlug)
 
-  return <AdminCatalogProducts tenantSlug={tenantSlug} initialProducts={products} initialCategories={categories} />
+  return <AdminCatalogProducts tenantSlug={tenantSlug} initialProducts={products} initialCategories={categories} initialBranches={branches} />
 }

@@ -5,7 +5,7 @@ import Image from "next/image"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { catalogCategories, catalogProducts, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
+import { catalogBranches, catalogCategories, catalogProducts, type CatalogBranchOption, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
 import {
   createProductWithImageAction,
   duplicateProductAction,
@@ -47,13 +47,22 @@ type ProductFormValues = {
   readonly status: ProductStatus
   readonly primaryImagePath: string
   readonly primaryImageAlt: string
+  readonly branchOverrides: readonly {
+    branchId: string
+    branchName: string
+    availabilityStatus: "available" | "paused" | "out_of_stock"
+    priceOverride: string
+    prepTimeMinutes: string
+  }[]
 }
 
 type ProductDialogMode = "create" | "edit"
 
 const DEFAULT_PRODUCT_STATUS: ProductStatus = "Draft"
 
-function buildFormValues(product: CatalogProduct): ProductFormValues {
+function buildFormValues(product: CatalogProduct, branches: readonly CatalogBranchOption[]): ProductFormValues {
+  const branchOverridesMap = new Map(product.branchStatuses.map((branchStatus) => [branchStatus.branchId, branchStatus]))
+
   return {
     id: product.id,
     name: product.name,
@@ -61,12 +70,23 @@ function buildFormValues(product: CatalogProduct): ProductFormValues {
     description: product.description,
     basePrice: product.basePrice,
     status: product.status,
-    primaryImagePath: product.primaryImageUrl ?? "",
+    primaryImagePath: product.primaryImagePath ?? "",
     primaryImageAlt: product.name,
+    branchOverrides: branches.map((branch) => {
+      const branchOverride = branchOverridesMap.get(branch.id)
+
+      return {
+        branchId: branch.id,
+        branchName: branch.name,
+        availabilityStatus: branchOverride?.availabilityStatus ?? "available",
+        priceOverride: branchOverride?.priceOverride ?? "",
+        prepTimeMinutes: branchOverride?.prepTimeMinutes ?? "",
+      }
+    }),
   }
 }
 
-function buildEmptyProduct(index: number): ProductFormValues {
+function buildEmptyProduct(index: number, branches: readonly CatalogBranchOption[]): ProductFormValues {
   return {
     id: `draft-product-${index + 1}`,
     name: "",
@@ -76,6 +96,13 @@ function buildEmptyProduct(index: number): ProductFormValues {
     status: DEFAULT_PRODUCT_STATUS,
     primaryImagePath: "",
     primaryImageAlt: "",
+    branchOverrides: branches.map((branch) => ({
+      branchId: branch.id,
+      branchName: branch.name,
+      availabilityStatus: "available",
+      priceOverride: "",
+      prepTimeMinutes: "",
+    })),
   }
 }
 
@@ -93,9 +120,15 @@ type AdminCatalogProductsProps = {
   readonly tenantSlug: string
   readonly initialProducts?: readonly CatalogProduct[]
   readonly initialCategories?: readonly CatalogCategory[]
+  readonly initialBranches?: readonly CatalogBranchOption[]
 }
 
-export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProducts, initialCategories = catalogCategories }: AdminCatalogProductsProps) {
+export function AdminCatalogProducts({
+  tenantSlug,
+  initialProducts = catalogProducts,
+  initialCategories = catalogCategories,
+  initialBranches = catalogBranches,
+}: AdminCatalogProductsProps) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedCategory, setSelectedCategory] = React.useState("Todos")
@@ -107,8 +140,8 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   const [primaryImagePreviewUrl, setPrimaryImagePreviewUrl] = React.useState<string | null>(null)
   const [isSavingProduct, startSavingProduct] = React.useTransition()
   const [isRunningRowAction, startRowAction] = React.useTransition()
-  const [productFormValues, setProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length))
-  const [initialProductFormValues, setInitialProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length))
+  const [productFormValues, setProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length, initialBranches))
+  const [initialProductFormValues, setInitialProductFormValues] = React.useState<ProductFormValues>(() => buildEmptyProduct(initialProducts.length, initialBranches))
 
   const products = initialProducts
 
@@ -144,7 +177,7 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   }, [initialProductFormValues, productFormValues])
 
   function openCreateDialog() {
-    const emptyProduct = buildEmptyProduct(products.length)
+    const emptyProduct = buildEmptyProduct(products.length, initialBranches)
     setProductDialogMode("create")
     setInitialProductFormValues(emptyProduct)
     setProductFormValues(emptyProduct)
@@ -155,7 +188,7 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
   }
 
   function openEditDialog(product: CatalogProduct) {
-    const nextValues = buildFormValues(product)
+    const nextValues = buildFormValues(product, initialBranches)
     setProductDialogMode("edit")
     setInitialProductFormValues(nextValues)
     setProductFormValues(nextValues)
@@ -203,6 +236,20 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
     }))
   }
 
+  function handleBranchOverrideChange(
+    branchId: string,
+    field: "availabilityStatus" | "priceOverride" | "prepTimeMinutes",
+    value: string
+  ) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      branchOverrides: currentValues.branchOverrides.map((branchOverride) =>
+        branchOverride.branchId === branchId ? { ...branchOverride, [field]: value } : branchOverride
+      ),
+    }))
+  }
+
   function saveProduct() {
     if (!productFormValues.name.trim() || !productFormValues.category.trim() || !productFormValues.basePrice.trim()) {
       setFormErrorMessage("Completa nombre, categoria y precio base valido.")
@@ -219,6 +266,17 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
       formData.set("primaryImagePath", productFormValues.primaryImagePath)
       formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
       formData.set("previousPrimaryImagePath", initialProductFormValues.primaryImagePath)
+      formData.set(
+        "branchOverrides",
+        JSON.stringify(
+          productFormValues.branchOverrides.map((branchOverride) => ({
+            branchId: branchOverride.branchId,
+            availabilityStatus: branchOverride.availabilityStatus,
+            priceOverride: branchOverride.priceOverride,
+            prepTimeMinutes: branchOverride.prepTimeMinutes,
+          }))
+        )
+      )
 
       if (selectedPrimaryImageFile) {
         formData.set("primaryImageFile", selectedPrimaryImageFile)
@@ -495,6 +553,59 @@ export function AdminCatalogProducts({ tenantSlug, initialProducts = catalogProd
                     width={640}
                   />
                 ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-card-foreground">Configuracion por sucursal</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Define disponibilidad, precio local y tiempo de preparacion sin duplicar el producto maestro.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {productFormValues.branchOverrides.map((branchOverride) => (
+                  <div key={branchOverride.branchId} className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.2fr_1fr_1fr_1fr]">
+                    <div>
+                      <p className="text-sm font-medium text-card-foreground">{branchOverride.branchName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Operacion local de esta sucursal</p>
+                    </div>
+
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-card-foreground">Disponibilidad</span>
+                      <select
+                        value={branchOverride.availabilityStatus}
+                        onChange={(event) => handleBranchOverrideChange(branchOverride.branchId, "availabilityStatus", event.target.value)}
+                        className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        <option value="available">Disponible</option>
+                        <option value="paused">Pausado</option>
+                        <option value="out_of_stock">Sin stock</option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-card-foreground">Precio local</span>
+                      <Input
+                        value={branchOverride.priceOverride}
+                        onChange={(event) => handleBranchOverrideChange(branchOverride.branchId, "priceOverride", event.target.value)}
+                        placeholder="Usa precio base"
+                      />
+                    </label>
+
+                    <label className="grid gap-2 text-sm">
+                      <span className="font-medium text-card-foreground">Prep time</span>
+                      <Input
+                        value={branchOverride.prepTimeMinutes}
+                        onChange={(event) => handleBranchOverrideChange(branchOverride.branchId, "prepTimeMinutes", event.target.value)}
+                        placeholder="Ej. 12"
+                      />
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
 

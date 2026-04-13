@@ -1,10 +1,11 @@
 import { cache } from "react";
 
-import type { CatalogCategory, CatalogModifierGroup, CatalogProduct } from "@/lib/config/admin-catalog";
+import type { CatalogBranchOption, CatalogCategory, CatalogModifierGroup, CatalogProduct } from "@/lib/config/admin-catalog";
 import { MOCK_CATALOG_MODULE, getCatalogModuleFromSupabase } from "@/lib/services/catalog";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type CatalogModuleData = {
+  readonly branches: readonly CatalogBranchOption[];
   readonly products: readonly CatalogProduct[];
   readonly categories: readonly CatalogCategory[];
   readonly modifierGroups: readonly CatalogModifierGroup[];

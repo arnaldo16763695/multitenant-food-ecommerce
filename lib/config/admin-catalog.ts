@@ -1,7 +1,16 @@
+export type CatalogBranchOption = {
+  readonly id: string
+  readonly name: string
+}
+
 export type CatalogBranchStatus = {
+  readonly branchId: string
   readonly branchName: string
+  readonly availabilityStatus: "available" | "paused" | "out_of_stock"
   readonly availability: "Disponible" | "Pausado" | "Sin stock"
+  readonly priceOverride: string
   readonly price: string
+  readonly prepTimeMinutes: string
   readonly prepTime: string
 }
 
@@ -48,9 +57,9 @@ export const catalogProducts: readonly CatalogProduct[] = [
     modifierGroups: ["Punto de carne", "Extras", "Salsas"],
     tags: ["Best seller", "Combo ready"],
     branchStatuses: [
-      { branchName: "Centro", availability: "Disponible", price: "$ 11.90", prepTime: "12 min" },
-      { branchName: "Norte", availability: "Pausado", price: "$ 12.40", prepTime: "15 min" },
-      { branchName: "Este", availability: "Disponible", price: "$ 11.90", prepTime: "13 min" },
+      { branchId: "branch-centro", branchName: "Centro", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 11.90", prepTimeMinutes: "12", prepTime: "12 min" },
+      { branchId: "branch-norte", branchName: "Norte", availabilityStatus: "paused", availability: "Pausado", priceOverride: "12.40", price: "$ 12.40", prepTimeMinutes: "15", prepTime: "15 min" },
+      { branchId: "branch-este", branchName: "Este", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 11.90", prepTimeMinutes: "13", prepTime: "13 min" },
     ],
   },
   {
@@ -65,9 +74,9 @@ export const catalogProducts: readonly CatalogProduct[] = [
     modifierGroups: ["Bebidas", "Salsas"],
     tags: ["Lunch", "High rotation"],
     branchStatuses: [
-      { branchName: "Centro", availability: "Disponible", price: "$ 14.50", prepTime: "14 min" },
-      { branchName: "Norte", availability: "Disponible", price: "$ 14.90", prepTime: "16 min" },
-      { branchName: "Este", availability: "Sin stock", price: "$ 14.50", prepTime: "-" },
+      { branchId: "branch-centro", branchName: "Centro", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 14.50", prepTimeMinutes: "14", prepTime: "14 min" },
+      { branchId: "branch-norte", branchName: "Norte", availabilityStatus: "available", availability: "Disponible", priceOverride: "14.90", price: "$ 14.90", prepTimeMinutes: "16", prepTime: "16 min" },
+      { branchId: "branch-este", branchName: "Este", availabilityStatus: "out_of_stock", availability: "Sin stock", priceOverride: "", price: "$ 14.50", prepTimeMinutes: "", prepTime: "-" },
     ],
   },
   {
@@ -82,9 +91,9 @@ export const catalogProducts: readonly CatalogProduct[] = [
     modifierGroups: ["Extras", "Aderezos"],
     tags: ["Healthy", "Seasonal"],
     branchStatuses: [
-      { branchName: "Centro", availability: "Pausado", price: "$ 9.80", prepTime: "11 min" },
-      { branchName: "Norte", availability: "Disponible", price: "$ 10.10", prepTime: "12 min" },
-      { branchName: "Este", availability: "Disponible", price: "$ 9.80", prepTime: "11 min" },
+      { branchId: "branch-centro", branchName: "Centro", availabilityStatus: "paused", availability: "Pausado", priceOverride: "", price: "$ 9.80", prepTimeMinutes: "11", prepTime: "11 min" },
+      { branchId: "branch-norte", branchName: "Norte", availabilityStatus: "available", availability: "Disponible", priceOverride: "10.10", price: "$ 10.10", prepTimeMinutes: "12", prepTime: "12 min" },
+      { branchId: "branch-este", branchName: "Este", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 9.80", prepTimeMinutes: "11", prepTime: "11 min" },
     ],
   },
   {
@@ -99,11 +108,17 @@ export const catalogProducts: readonly CatalogProduct[] = [
     modifierGroups: ["Tamano"],
     tags: ["Upsell"],
     branchStatuses: [
-      { branchName: "Centro", availability: "Disponible", price: "$ 2.90", prepTime: "2 min" },
-      { branchName: "Norte", availability: "Disponible", price: "$ 2.90", prepTime: "2 min" },
-      { branchName: "Este", availability: "Disponible", price: "$ 3.10", prepTime: "2 min" },
+      { branchId: "branch-centro", branchName: "Centro", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 2.90", prepTimeMinutes: "2", prepTime: "2 min" },
+      { branchId: "branch-norte", branchName: "Norte", availabilityStatus: "available", availability: "Disponible", priceOverride: "", price: "$ 2.90", prepTimeMinutes: "2", prepTime: "2 min" },
+      { branchId: "branch-este", branchName: "Este", availabilityStatus: "available", availability: "Disponible", priceOverride: "3.10", price: "$ 3.10", prepTimeMinutes: "2", prepTime: "2 min" },
     ],
   },
+] as const
+
+export const catalogBranches: readonly CatalogBranchOption[] = [
+  { id: "branch-centro", name: "Centro" },
+  { id: "branch-norte", name: "Norte" },
+  { id: "branch-este", name: "Este" },
 ] as const
 
 export const catalogCategories: readonly CatalogCategory[] = [
