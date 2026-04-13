@@ -29,6 +29,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       eyebrow="Public storefront"
       title={storefront.tenant.name}
       description="Comparte este storefront con tus clientes y llevalos directo a una experiencia de compra por sucursal, sin pasar por el admin ni por pasos extra."
+      requiresBranchSelection={storefront.branches.length > 1 && !requestedBranchId}
       activeBranchId={storefront.activeBranch?.id}
       activeBranchLabel={storefront.activeBranch?.name ?? "Sin sucursal activa"}
       branches={storefront.branches}

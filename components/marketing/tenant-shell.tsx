@@ -3,6 +3,7 @@ import { Newsreader } from "next/font/google"
 import { Clock3, Flame, MapPinned, ShoppingBag } from "lucide-react"
 
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import { StorefrontBranchEntry } from "@/components/marketing/storefront-branch-entry"
 import { StorefrontBranchSelector } from "@/components/marketing/storefront-branch-selector"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontMenuGrid } from "@/components/marketing/storefront-menu-grid"
@@ -18,6 +19,7 @@ type TenantShellProps = {
   readonly title: string
   readonly eyebrow: string
   readonly description: string
+  readonly requiresBranchSelection?: boolean
   readonly activeBranchId?: string | null
   readonly activeBranchLabel?: string
   readonly branches?: readonly {
@@ -65,6 +67,7 @@ export function TenantShell({
   title,
   eyebrow,
   description,
+  requiresBranchSelection = false,
   activeBranchId,
   activeBranchLabel,
   branches,
@@ -86,7 +89,13 @@ export function TenantShell({
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName={title} branchId={activeBranchId ?? null} branchLabel={publicBranchLabel} customerSession={customerSession} />
+        <StorefrontHeader
+          tenantSlug={tenantSlug}
+          brandName={title}
+          branchId={requiresBranchSelection ? null : (activeBranchId ?? null)}
+          branchLabel={requiresBranchSelection ? "Selecciona sucursal" : publicBranchLabel}
+          customerSession={customerSession}
+        />
 
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
           <div
@@ -107,11 +116,13 @@ export function TenantShell({
                   </h1>
                   <p className="max-w-2xl text-base leading-8 text-stone-200 sm:text-lg">{description}</p>
                   <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-                    <Link className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400" href={bagHref}>
-                      <ShoppingBag className="size-4" />
-                      Ver bolsa
-                    </Link>
-                    {branches && branches.length > 1 && activeBranchId ? (
+                    {!requiresBranchSelection ? (
+                      <Link className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400" href={bagHref}>
+                        <ShoppingBag className="size-4" />
+                        Ver bolsa
+                      </Link>
+                    ) : null}
+                    {branches && branches.length > 1 && activeBranchId && !requiresBranchSelection ? (
                       <StorefrontBranchSelector activeBranchId={activeBranchId} branches={branches} />
                     ) : null}
                   </div>
@@ -121,7 +132,7 @@ export function TenantShell({
                   <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
                     <MapPinned className="mb-3 size-4 text-orange-200" />
                     <p className="text-xs uppercase tracking-[0.22em] text-stone-300">Sucursal</p>
-                    <p className="mt-2 text-sm font-semibold text-white">{publicBranchLabel}</p>
+                    <p className="mt-2 text-sm font-semibold text-white">{requiresBranchSelection ? "Elige una sucursal para continuar" : publicBranchLabel}</p>
                   </div>
                   <div className="rounded-[1.2rem] border border-white/10 bg-white/5 p-4">
                     <Clock3 className="mb-3 size-4 text-orange-200" />
@@ -138,6 +149,10 @@ export function TenantShell({
             </div>
           </div>
         </section>
+
+        {requiresBranchSelection && branches && branches.length > 1 ? (
+          <StorefrontBranchEntry tenantSlug={tenantSlug} branches={branches} />
+        ) : null}
 
         <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-[2rem] border border-stone-200 bg-white/85 p-6 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
@@ -179,7 +194,7 @@ export function TenantShell({
               </div>
             </div>
 
-            <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
+            {!requiresBranchSelection ? <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} /> : null}
           </div>
         </section>
       </div>

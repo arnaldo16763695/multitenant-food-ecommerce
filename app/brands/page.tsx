@@ -2,7 +2,7 @@ import Link from "next/link"
 import { DM_Serif_Display, Manrope } from "next/font/google"
 import { ArrowRight, Clock3, MapPinned, Search, SlidersHorizontal, Sparkles, Store } from "lucide-react"
 
-import { featuredBrands } from "@/lib/config/platform"
+import { getPublicBrandsDirectory } from "@/lib/data/public-brands"
 
 const displayFont = DM_Serif_Display({
   subsets: ["latin"],
@@ -29,12 +29,13 @@ function normalizeValue(value?: string) {
 
 export default async function BrandsPage({ searchParams }: BrandsPageProps) {
   const { q, cuisine } = await searchParams
+  const brands = await getPublicBrandsDirectory()
   const query = normalizeValue(q)
   const selectedCuisine = cuisineFilters.includes((cuisine ?? "Todo") as (typeof cuisineFilters)[number])
     ? ((cuisine ?? "Todo") as (typeof cuisineFilters)[number])
     : "Todo"
 
-  const filteredBrands = featuredBrands.filter((brand) => {
+  const filteredBrands = brands.filter((brand) => {
     const matchesCuisine = selectedCuisine === "Todo" ? true : brand.cuisine === selectedCuisine
     const matchesQuery =
       !query ||
@@ -240,7 +241,7 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
                   <div className="mt-6 flex flex-wrap gap-2">
                     <Link
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
-                      href={`/app/${brand.slug}`}
+                      href={brand.storefrontHref}
                     >
                       Ver tienda
                       <ArrowRight className="size-4" />
