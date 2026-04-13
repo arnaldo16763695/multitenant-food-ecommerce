@@ -2,6 +2,8 @@ export type PlatformRole = "platform_owner" | "platform_admin"
 
 export type BusinessSignupStatus = "pending" | "approved" | "rejected" | "provisioned"
 
+export type BusinessSignupDecision = "approved" | "rejected"
+
 export type PlatformTenantSummary = {
   readonly id: string
   readonly name: string
@@ -22,6 +24,7 @@ export type BusinessSignupSummary = {
   readonly branchCountEstimate: number | null
   readonly status: BusinessSignupStatus
   readonly createdAt: string
+  readonly reviewedAt: string | null
   readonly provisionedTenantId: string | null
 }
 
@@ -34,4 +37,10 @@ export type CreateBusinessSignupInput = {
   readonly businessType: string
   readonly branchCountEstimate: number | null
   readonly notes?: string
+}
+
+export type UpdateBusinessSignupDecisionInput = {
+  readonly signupId: string
+  readonly decision: BusinessSignupDecision
+  readonly reviewedByProfileId: string
 }

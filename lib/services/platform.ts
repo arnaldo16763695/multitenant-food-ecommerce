@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type {
+  BusinessSignupDecision,
   BusinessSignupStatus,
   BusinessSignupSummary,
   CreateBusinessSignupInput,
   PlatformTenantSummary,
+  UpdateBusinessSignupDecisionInput,
 } from "@/lib/domain/platform-admin"
 
 type TenantRow = {
@@ -33,6 +35,7 @@ type BusinessSignupRow = {
   branch_count_estimate: number | null
   status: BusinessSignupStatus
   created_at: string
+  reviewed_at: string | null
   provisioned_tenant_id: string | null
 }
 
@@ -79,7 +82,7 @@ export async function getPlatformTenants(supabase: SupabaseClient): Promise<read
 export async function getBusinessSignups(supabase: SupabaseClient): Promise<readonly BusinessSignupSummary[]> {
   const signupsResult = await supabase
     .from("business_signups")
-    .select("id, company_name, owner_full_name, owner_email, owner_phone, slug_requested, business_type, branch_count_estimate, status, created_at, provisioned_tenant_id")
+    .select("id, company_name, owner_full_name, owner_email, owner_phone, slug_requested, business_type, branch_count_estimate, status, created_at, reviewed_at, provisioned_tenant_id")
     .order("created_at", { ascending: false })
     .returns<BusinessSignupRow[]>()
 
@@ -98,6 +101,7 @@ export async function getBusinessSignups(supabase: SupabaseClient): Promise<read
     branchCountEstimate: signup.branch_count_estimate,
     status: signup.status,
     createdAt: signup.created_at,
+    reviewedAt: signup.reviewed_at,
     provisionedTenantId: signup.provisioned_tenant_id,
   }))
 }
@@ -159,6 +163,55 @@ export async function createBusinessSignup(
 
   if (insertResult.error) {
     return { ok: false, error: insertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function updateBusinessSignupDecision(
+  supabase: SupabaseClient,
+  input: UpdateBusinessSignupDecisionInput
+): Promise<{ ok: boolean; error?: string }> {
+  const currentSignupResult = await supabase
+    .from("business_signups")
+    .select("id, status, provisioned_tenant_id")
+    .eq("id", input.signupId)
+    .limit(1)
+    .maybeSingle<{ id: string; status: BusinessSignupStatus; provisioned_tenant_id: string | null }>()
+
+  if (currentSignupResult.error || !currentSignupResult.data) {
+    return { ok: false, error: "No encontramos la solicitud." }
+  }
+
+  if (currentSignupResult.data.status === input.decision) {
+    return { ok: true }
+  }
+
+  if (currentSignupResult.data.status === "provisioned") {
+    return { ok: false, error: "La solicitud ya fue provisionada y no puede volver a este estado." }
+  }
+
+  if (currentSignupResult.data.provisioned_tenant_id) {
+    return { ok: false, error: "La solicitud ya esta asociada a un tenant provisionado." }
+  }
+
+  if (currentSignupResult.data.status !== "pending") {
+    return { ok: false, error: "Solo las solicitudes pendientes pueden aprobarse o rechazarse." }
+  }
+
+  const nextStatus: BusinessSignupDecision = input.decision
+  const updateResult = await supabase
+    .from("business_signups")
+    .update({
+      status: nextStatus,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by_profile_id: input.reviewedByProfileId,
+    })
+    .eq("id", input.signupId)
+    .eq("status", "pending")
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
   }
 
   return { ok: true }
