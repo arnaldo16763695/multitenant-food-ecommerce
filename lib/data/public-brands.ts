@@ -33,22 +33,6 @@ type BranchRow = {
   is_active: boolean
 }
 
-function buildFallbackDirectory() {
-  return featuredBrands.map<BrandDirectoryItem>((brand) => ({
-    id: brand.id,
-    name: brand.name,
-    slug: brand.slug,
-    cuisine: brand.cuisine,
-    headline: brand.headline,
-    nearestBranch: brand.nearestBranch,
-    etaMinutes: brand.etaMinutes,
-    accent: brand.accent,
-    heroImageUrl: brand.heroImageUrl,
-    storefrontHref: `/app/${brand.slug}`,
-    activeBranchCount: 1,
-  }))
-}
-
 function getFeaturedBrandMeta(tenantSlug: string) {
   return featuredBrands.find((brand) => brand.slug === tenantSlug) ?? null
 }
@@ -68,7 +52,7 @@ export const getPublicBrandsDirectory = cache(async (): Promise<readonly BrandDi
   const supabase = createSupabaseAdminClient()
 
   if (!supabase) {
-    return buildFallbackDirectory()
+    return []
   }
 
   const [tenantsResult, branchesResult] = await Promise.all([
@@ -87,14 +71,14 @@ export const getPublicBrandsDirectory = cache(async (): Promise<readonly BrandDi
   ])
 
   if (tenantsResult.error || branchesResult.error) {
-    return buildFallbackDirectory()
+    return []
   }
 
   const tenants = tenantsResult.data ?? []
   const branches = branchesResult.data ?? []
 
   if (!tenants.length) {
-    return buildFallbackDirectory()
+    return []
   }
 
   const branchesByTenant = branches.reduce<Map<string, BranchRow[]>>((map, branch) => {

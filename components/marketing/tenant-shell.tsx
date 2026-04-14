@@ -40,28 +40,6 @@ type TenantShellProps = {
   }[]
 }
 
-const fallbackHeroImage =
-  "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=80"
-
-const fallbackMenu = [
-  {
-    id: "fallback-1",
-    name: "Smash de la casa",
-    description: "Carne doble, queso fundido y salsa ahumada.",
-    basePrice: "$ 11.90",
-    category: "Menu",
-    imageUrl: fallbackHeroImage,
-  },
-  {
-    id: "fallback-2",
-    name: "Combo rush",
-    description: "Principal, papas y bebida lista para pickup.",
-    basePrice: "$ 14.50",
-    category: "Menu",
-    imageUrl: fallbackHeroImage,
-  },
-] as const
-
 export function TenantShell({
   tenantSlug,
   title,
@@ -80,8 +58,8 @@ export function TenantShell({
   const publicBranchLabel = activeBranchLabel ?? "Sin sucursal activa"
   const publicEta = etaMinutes ?? 18
   const publicShareUrl = shareUrl ?? `https://vzfood.com/app/${tenantSlug}`
-  const publicMenu = menu ?? fallbackMenu
-  const visibleHeroImage = heroImageUrl ?? fallbackHeroImage
+  const publicMenu = menu ?? []
+  const visibleHeroImage = heroImageUrl ?? null
   const bagHref = activeBranchId ? `/app/${tenantSlug}/bag?branch=${activeBranchId}` : `/app/${tenantSlug}/bag`
 
   return (
@@ -100,7 +78,11 @@ export function TenantShell({
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
           <div
             className="relative min-h-[28rem] bg-cover bg-center"
-            style={{ backgroundImage: `linear-gradient(90deg, rgba(28,25,23,0.88) 0%, rgba(28,25,23,0.62) 38%, rgba(28,25,23,0.22) 100%), url(${visibleHeroImage})` }}
+            style={{
+              backgroundImage: visibleHeroImage
+                ? `linear-gradient(90deg, rgba(28,25,23,0.88) 0%, rgba(28,25,23,0.62) 38%, rgba(28,25,23,0.22) 100%), url(${visibleHeroImage})`
+                : "linear-gradient(135deg, rgba(28,25,23,0.96) 0%, rgba(120,53,15,0.9) 46%, rgba(251,146,60,0.78) 100%)",
+            }}
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.24),_transparent_32%)]" />
             <div className="relative flex h-full flex-col justify-between gap-10 p-6 text-white md:p-8 lg:min-h-[34rem] lg:p-10">
@@ -194,7 +176,19 @@ export function TenantShell({
               </div>
             </div>
 
-            {!requiresBranchSelection ? <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} /> : null}
+            {!requiresBranchSelection ? (
+              publicMenu.length ? (
+                <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
+              ) : (
+                <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menu vacio</p>
+                  <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aun no tiene productos publicados.</h3>
+                  <p className="mt-3 text-sm leading-7 text-stone-600">
+                    Vuelve mas tarde o prueba otra sucursal si esta marca opera con multiples ubicaciones.
+                  </p>
+                </div>
+              )
+            ) : null}
           </div>
         </section>
       </div>

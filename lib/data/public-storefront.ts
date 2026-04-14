@@ -1,6 +1,5 @@
 import { cache } from "react"
 
-import { featuredBrands } from "@/lib/config/platform"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 type StorefrontTenant = {
@@ -88,10 +87,6 @@ function formatCurrency(value: number | string) {
   return `$ ${Number(value).toFixed(2)}`
 }
 
-function getFallbackBrand(tenantSlug: string) {
-  return featuredBrands.find((brand) => brand.slug === tenantSlug) ?? featuredBrands[0]
-}
-
 function buildShareUrl(tenant: StorefrontTenant) {
   return tenant.customDomain ? `https://${tenant.customDomain}` : `https://vzfood.com/app/${tenant.slug}`
 }
@@ -113,36 +108,7 @@ export const getPublicStorefrontBySlug = cache(
     const supabase = createSupabaseAdminClient()
 
     if (!supabase) {
-      const fallbackBrand = getFallbackBrand(tenantSlug)
-      const fallbackBranch = {
-        id: `${fallbackBrand.slug}-branch-default`,
-        name: fallbackBrand.nearestBranch,
-      } satisfies StorefrontBranch
-
-      return {
-        tenant: {
-          id: fallbackBrand.id,
-          name: fallbackBrand.name,
-          slug: fallbackBrand.slug,
-          customDomain: null,
-          storefrontEnabled: true,
-          heroImageUrl: fallbackBrand.heroImageUrl,
-        },
-        branches: [fallbackBranch],
-        activeBranch: fallbackBranch,
-        etaMinutes: fallbackBrand.etaMinutes,
-        menu: [
-          {
-            id: `${fallbackBrand.slug}-item-1`,
-            name: "Smash de la casa",
-            description: "Carne doble, queso fundido y salsa ahumada.",
-            basePrice: "$ 11.90",
-            category: "Burgers",
-            imageUrl: fallbackBrand.heroImageUrl,
-          },
-        ],
-        shareUrl: `https://vzfood.com/app/${fallbackBrand.slug}`,
-      }
+      return null
     }
 
     const tenantResult = await supabase
@@ -200,16 +166,7 @@ export const getPublicStorefrontBySlug = cache(
         : { data: [], error: null }
 
     if (branchesResult.error || categoriesResult.error || productsResult.error || branchOverridesResult.error) {
-      const fallbackBrand = getFallbackBrand(tenant.slug)
-
-      return {
-        tenant,
-        branches,
-        activeBranch,
-        etaMinutes: fallbackBrand.etaMinutes,
-        menu: [],
-        shareUrl: buildShareUrl(tenant),
-      }
+      return null
     }
 
     const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
@@ -232,13 +189,11 @@ export const getPublicStorefrontBySlug = cache(
         }
       })
 
-    const fallbackBrand = getFallbackBrand(tenant.slug)
-
     return {
       tenant,
       branches,
       activeBranch,
-      etaMinutes: fallbackBrand.etaMinutes,
+      etaMinutes: 20,
       menu,
       shareUrl: buildShareUrl(tenant),
     }
