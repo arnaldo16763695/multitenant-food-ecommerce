@@ -17,6 +17,7 @@ type BranchRow = {
   id: string
   name: string
   is_active: boolean
+  hero_image_url: string | null
 }
 
 type MembershipRow = {
@@ -70,7 +71,7 @@ export function canManageStaff(role: string) {
 export async function getStaffBranches(supabase: SupabaseClient, tenantId: string): Promise<readonly StaffBranchOption[]> {
   const branchesResult = await supabase
     .from("branches")
-    .select("id, name, is_active")
+    .select("id, name, is_active, hero_image_url")
     .eq("tenant_id", tenantId)
     .order("name", { ascending: true })
     .returns<BranchRow[]>()
@@ -83,6 +84,7 @@ export async function getStaffBranches(supabase: SupabaseClient, tenantId: strin
     id: branch.id,
     name: branch.name,
     isActive: branch.is_active,
+    heroImageUrl: branch.hero_image_url,
   }))
 }
 
@@ -110,10 +112,10 @@ export async function getActiveBranchesForMembership(
 ): Promise<readonly StaffBranchOption[]> {
   const branchMembershipsResult = await supabase
     .from("branch_memberships")
-    .select("branch_id, branches!inner(id, name)")
+    .select("branch_id, branches!inner(id, name, hero_image_url)")
     .eq("tenant_membership_id", membershipId)
     .eq("is_active", true)
-    .returns<{ branch_id: string; branches: { id: string; name: string } | null }[]>()
+    .returns<{ branch_id: string; branches: { id: string; name: string; hero_image_url: string | null } | null }[]>()
 
   if (branchMembershipsResult.error) {
     throw new Error(branchMembershipsResult.error.message)
@@ -124,6 +126,7 @@ export async function getActiveBranchesForMembership(
       id: assignment.branch_id,
       name: assignment.branches?.name ?? "Sucursal",
       isActive: true,
+      heroImageUrl: assignment.branches?.hero_image_url ?? null,
     }))
     .sort((left, right) => left.name.localeCompare(right.name))
 }

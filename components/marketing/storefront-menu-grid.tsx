@@ -26,6 +26,12 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMen
   const addItem = useShoppingBagStore((state) => state.addItem)
   const categories = React.useMemo(() => ["Todas", ...new Set(menu.map((item) => item.category))], [menu])
   const [activeCategory, setActiveCategory] = React.useState("Todas")
+  const categoryCountMap = React.useMemo(() => {
+    return menu.reduce<Map<string, number>>((map, item) => {
+      map.set(item.category, (map.get(item.category) ?? 0) + 1)
+      return map
+    }, new Map())
+  }, [menu])
   const visibleItems = React.useMemo(() => {
     if (activeCategory === "Todas") {
       return menu
@@ -36,9 +42,22 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMen
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="sticky top-3 z-20 -mx-2 px-2">
+        <div className="overflow-hidden rounded-[1.7rem] border border-orange-200/70 bg-white/88 shadow-[0_16px_40px_rgba(120,53,15,0.1)] backdrop-blur-xl">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-orange-300/70 to-transparent" />
+          <div className="flex items-center justify-between gap-3 border-b border-stone-200/70 px-4 py-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-700">Categorias</p>
+              <p className="mt-1 text-sm text-stone-600">Filtra el menu sin perder el contexto mientras haces scroll.</p>
+            </div>
+            <div className="hidden rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700 sm:inline-flex">
+              {activeCategory === "Todas" ? `${menu.length} visibles` : `${visibleItems.length} en ${activeCategory}`}
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {categories.map((category) => {
-          const categoryCount = category === "Todas" ? menu.length : menu.filter((item) => item.category === category).length
+          const categoryCount = category === "Todas" ? menu.length : (categoryCountMap.get(category) ?? 0)
           const isActive = activeCategory === category
 
           return (
@@ -46,18 +65,27 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMen
               key={category}
               type="button"
               onClick={() => setActiveCategory(category)}
-              className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${
+              className={`group shrink-0 rounded-full border px-4 py-3 text-left transition ${
                 isActive
-                  ? "border-orange-500 bg-orange-500 text-white shadow-[0_16px_40px_rgba(234,88,12,0.24)]"
-                  : "border-stone-200 bg-white text-stone-900 shadow-[0_12px_30px_rgba(28,25,23,0.05)] hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-[0_18px_44px_rgba(28,25,23,0.1)]"
+                  ? "border-orange-500 bg-orange-500 text-white shadow-[0_14px_34px_rgba(234,88,12,0.24)]"
+                  : "border-stone-200 bg-stone-50/80 text-stone-900 hover:-translate-y-0.5 hover:border-stone-300 hover:bg-white hover:shadow-[0_16px_34px_rgba(28,25,23,0.08)]"
               }`}
             >
-              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${isActive ? "text-orange-100" : "text-stone-500"}`}>Categoria</p>
-              <p className="mt-3 text-xl font-semibold tracking-tight">{category}</p>
-              <p className={`mt-2 text-sm ${isActive ? "text-orange-50/90" : "text-stone-600"}`}>{categoryCount} productos visibles</p>
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-semibold tracking-tight ${isActive ? "text-white" : "text-stone-900"}`}>{category}</span>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    isActive ? "bg-white/16 text-orange-50" : "bg-white text-stone-500 group-hover:text-stone-700"
+                  }`}
+                >
+                  {categoryCount}
+                </span>
+              </div>
             </button>
           )
         })}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

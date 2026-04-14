@@ -20,6 +20,10 @@ export function buildTenantHeroImagePath(tenantId: string, fileName: string) {
   return `tenants/${tenantId}/branding/hero/${fileName}`
 }
 
+export function buildBranchHeroImagePath(tenantId: string, branchId: string, fileName: string) {
+  return `tenants/${tenantId}/branches/${branchId}/hero/${fileName}`
+}
+
 export function getFileExtension(fileName: string) {
   const segments = fileName.split(".")
   const candidate = segments.at(-1)?.toLowerCase()

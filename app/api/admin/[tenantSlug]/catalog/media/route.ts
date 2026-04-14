@@ -6,6 +6,7 @@ import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
+  buildBranchHeroImagePath,
   buildCategoryImagePath,
   buildProductPrimaryImagePath,
   buildTenantHeroImagePath,
@@ -20,12 +21,12 @@ type CatalogMediaRouteContext = {
   }>
 }
 
-type CatalogMediaEntityType = "category" | "product" | "tenant-hero"
+type CatalogMediaEntityType = "category" | "product" | "tenant-hero" | "branch-hero"
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
 function isCatalogMediaEntityType(value: string): value is CatalogMediaEntityType {
-  return value === "category" || value === "product" || value === "tenant-hero"
+  return value === "category" || value === "product" || value === "tenant-hero" || value === "branch-hero"
 }
 
 function buildCatalogMediaPath(tenantId: string, entityType: CatalogMediaEntityType, entityId: string, fileName: string) {
@@ -35,6 +36,10 @@ function buildCatalogMediaPath(tenantId: string, entityType: CatalogMediaEntityT
 
   if (entityType === "tenant-hero") {
     return buildTenantHeroImagePath(tenantId, fileName)
+  }
+
+  if (entityType === "branch-hero") {
+    return buildBranchHeroImagePath(tenantId, entityId, fileName)
   }
 
   return buildProductPrimaryImagePath(tenantId, entityId, fileName)

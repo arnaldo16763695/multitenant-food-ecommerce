@@ -26,6 +26,7 @@ export type StaffBranchOption = {
   readonly id: string
   readonly name: string
   readonly isActive: boolean
+  readonly heroImageUrl: string | null
 }
 
 export type StaffMutationResult = {

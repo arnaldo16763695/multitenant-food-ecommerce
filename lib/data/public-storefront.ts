@@ -12,6 +12,7 @@ type StorefrontTenant = {
 type StorefrontBranch = {
   readonly id: string
   readonly name: string
+  readonly heroImageUrl: string | null
 }
 
 type TenantProduct = {
@@ -44,6 +45,7 @@ type TenantRow = {
 type BranchRow = {
   id: string
   name: string
+  hero_image_url: string | null
 }
 
 type ProductRow = {
@@ -129,7 +131,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
   }
 
   const [branchesResult, categoriesResult, productsResult] = await Promise.all([
-    supabase.from("branches").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
+    supabase.from("branches").select("id, name, hero_image_url").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
     supabase
       .from("products")
@@ -143,6 +145,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
   const branches = (branchesResult.data ?? []).map((branch) => ({
     id: branch.id,
     name: branch.name,
+    heroImageUrl: branch.hero_image_url,
   }))
 
   const activeBranch = resolveActiveBranch(branches, preferredBranchId)
