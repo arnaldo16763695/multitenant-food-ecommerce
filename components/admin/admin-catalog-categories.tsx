@@ -6,7 +6,7 @@ import { MoreHorizontal, Plus, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { createCategoryWithImageAction, updateCategoryWithImageAction } from "@/app/app/[tenantSlug]/admin/catalog/categories/actions"
-import { catalogCategories, type CatalogCategory } from "@/lib/config/admin-catalog"
+import { type CatalogCategory } from "@/lib/config/admin-catalog"
 import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
@@ -70,7 +70,7 @@ function buildCategoryFormValues(category: CatalogCategory, index: number): Cate
   }
 }
 
-export function AdminCatalogCategories({ tenantSlug, initialCategories = catalogCategories }: AdminCatalogCategoriesProps) {
+export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: AdminCatalogCategoriesProps) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = React.useState("")
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = React.useState(false)
@@ -270,7 +270,9 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = catalog
           </div>
           {filteredCategories.length === 0 ? (
             <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-              No encontramos categorias con ese filtro.
+              {initialCategories.length === 0
+                ? "Este tenant aun no tiene categorias cargadas. Crea la primera para empezar a organizar el menu."
+                : "No encontramos categorias con ese filtro."}
             </div>
           ) : null}
         </CardContent>

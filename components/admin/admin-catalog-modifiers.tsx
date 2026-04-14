@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Plus, Search } from "lucide-react"
 
-import { catalogModifierGroups, type CatalogModifierGroup } from "@/lib/config/admin-catalog"
+import { type CatalogModifierGroup } from "@/lib/config/admin-catalog"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +16,7 @@ type AdminCatalogModifiersProps = {
   readonly initialModifierGroups?: readonly CatalogModifierGroup[]
 }
 
-export function AdminCatalogModifiers({ initialModifierGroups = catalogModifierGroups }: AdminCatalogModifiersProps) {
+export function AdminCatalogModifiers({ initialModifierGroups = [] }: AdminCatalogModifiersProps) {
   const [searchQuery, setSearchQuery] = React.useState("")
 
   const filteredModifierGroups = React.useMemo(() => {
@@ -88,7 +88,9 @@ export function AdminCatalogModifiers({ initialModifierGroups = catalogModifierG
           </div>
           {filteredModifierGroups.length === 0 ? (
             <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-              No encontramos grupos de modificadores con ese filtro.
+              {initialModifierGroups.length === 0
+                ? "Este tenant aun no tiene grupos de modificadores. Crea el primero cuando quieras configurar extras o variantes."
+                : "No encontramos grupos de modificadores con ese filtro."}
             </div>
           ) : null}
         </CardContent>

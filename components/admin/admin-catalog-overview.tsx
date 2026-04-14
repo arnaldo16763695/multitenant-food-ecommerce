@@ -12,7 +12,7 @@ type AdminCatalogOverviewProps = {
   readonly products: readonly CatalogProduct[]
   readonly categories: readonly CatalogCategory[]
   readonly modifierGroups: readonly CatalogModifierGroup[]
-  readonly source: "supabase" | "mock"
+  readonly source: "supabase"
 }
 
 export function AdminCatalogOverview({ tenantSlug, products, categories, modifierGroups, source }: AdminCatalogOverviewProps) {
@@ -23,7 +23,7 @@ export function AdminCatalogOverview({ tenantSlug, products, categories, modifie
       eyebrow="Catalogo"
       title="Centro del menu por tenant"
       description="El catalogo ahora funciona como modulo contenedor. Desde aqui entras a productos, categorias y modificadores con una estructura mas clara y escalable para CRUD reales."
-      badge={source === "supabase" ? "Datos cargados desde Supabase" : "Modo mock hasta configurar Supabase"}
+      badge={source === "supabase" ? "Datos cargados desde Supabase" : "Datos cargados desde Supabase"}
     >
       <section className="grid gap-4 lg:grid-cols-3">
         <Card>
@@ -33,7 +33,7 @@ export function AdminCatalogOverview({ tenantSlug, products, categories, modifie
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {products.length} productos base listos para evolucionar a datos reales.
+              {products.length} productos cargados en este tenant.
             </div>
             <Button asChild className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/products`}>
@@ -51,7 +51,7 @@ export function AdminCatalogOverview({ tenantSlug, products, categories, modifie
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {categories.length} categorias listas para orden y control de visibilidad.
+              {categories.length} categorias cargadas para orden y control de visibilidad.
             </div>
             <Button asChild variant="outline" className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/categories`}>
@@ -69,7 +69,7 @@ export function AdminCatalogOverview({ tenantSlug, products, categories, modifie
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-sm text-muted-foreground">
-              {modifierGroups.length} grupos preparados para reglas min/max y asignacion por producto.
+              {modifierGroups.length} grupos cargados para reglas y asignacion por producto.
             </div>
             <Button asChild variant="outline" className="w-full justify-between rounded-xl">
               <Link href={`${baseCatalogPath}/modifiers`}>
@@ -87,8 +87,8 @@ export function AdminCatalogOverview({ tenantSlug, products, categories, modifie
             <CardTitle>Estado actual</CardTitle>
           </CardHeader>
           <CardContent className="text-sm leading-7 text-muted-foreground">
-            La base visual ya no mezcla todas las entidades del menu en una sola pantalla. Ahora el siguiente paso sano
-            es convertir cada submodulo en un CRUD real conectado a Supabase.
+            La base visual ya no mezcla todas las entidades del menu en una sola pantalla. Cada submodulo responde a
+            los datos reales del tenant y muestra vacio cuando todavia no existe informacion.
           </CardContent>
         </Card>
         <Card>
