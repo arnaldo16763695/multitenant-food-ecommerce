@@ -28,6 +28,7 @@ export type BusinessSignupSummary = {
   readonly createdAt: string
   readonly reviewedAt: string | null
   readonly provisionedTenantId: string | null
+  readonly provisionedTenantSlug: string | null
 }
 
 export type CreateBusinessSignupInput = {

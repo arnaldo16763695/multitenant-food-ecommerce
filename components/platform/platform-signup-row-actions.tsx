@@ -3,6 +3,7 @@
 import * as React from "react"
 import { CheckCircle2, Copy, LoaderCircle, Rocket, XCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 import { provisionBusinessSignupAction, updateBusinessSignupDecisionAction } from "@/app/platform/signups/actions"
 import { Button } from "@/components/ui/button"
@@ -13,12 +14,14 @@ type PlatformSignupRowActionsProps = {
   readonly signupId: string
   readonly status: BusinessSignupStatus
   readonly provisionedTenantId: string | null
+  readonly provisionedTenantSlug: string | null
 }
 
 export function PlatformSignupRowActions({
   signupId,
   status,
   provisionedTenantId,
+  provisionedTenantSlug,
 }: PlatformSignupRowActionsProps) {
   const router = useRouter()
   const [errorMessage, setErrorMessage] = React.useState("")
@@ -99,11 +102,19 @@ export function PlatformSignupRowActions({
     )
   }
 
-  if (status === "provisioned" && provisionedTenantId) {
+  if (status === "provisioned" && provisionedTenantId && provisionedTenantSlug) {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-        <Copy className="size-3.5" />
-        Provisionado
+      <div className="flex flex-col items-end gap-2">
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/app/${provisionedTenantSlug}/admin/onboarding`}>
+            <Copy />
+            Abrir panel
+          </Link>
+        </Button>
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+          <Copy className="size-3.5" />
+          Provisionado
+        </div>
       </div>
     )
   }

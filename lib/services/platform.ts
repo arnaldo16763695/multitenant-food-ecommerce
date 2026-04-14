@@ -44,6 +44,9 @@ type BusinessSignupRow = {
   created_at: string
   reviewed_at: string | null
   provisioned_tenant_id: string | null
+  tenants: {
+    slug: string
+  } | null
 }
 
 type ExistingProfileRow = {
@@ -194,7 +197,7 @@ export async function getPlatformTenants(supabase: SupabaseClient): Promise<read
 export async function getBusinessSignups(supabase: SupabaseClient): Promise<readonly BusinessSignupSummary[]> {
   const signupsResult = await supabase
     .from("business_signups")
-    .select("id, company_name, owner_full_name, owner_email, owner_phone, slug_requested, business_type, branch_count_estimate, status, created_at, reviewed_at, provisioned_tenant_id")
+    .select("id, company_name, owner_full_name, owner_email, owner_phone, slug_requested, business_type, branch_count_estimate, status, created_at, reviewed_at, provisioned_tenant_id, tenants:provisioned_tenant_id(slug)")
     .order("created_at", { ascending: false })
     .returns<BusinessSignupRow[]>()
 
@@ -215,6 +218,7 @@ export async function getBusinessSignups(supabase: SupabaseClient): Promise<read
     createdAt: signup.created_at,
     reviewedAt: signup.reviewed_at,
     provisionedTenantId: signup.provisioned_tenant_id,
+    provisionedTenantSlug: signup.tenants?.slug ?? null,
   }))
 }
 

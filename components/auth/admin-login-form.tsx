@@ -26,6 +26,7 @@ type MembershipLookupRow = {
 
 type TenantLookupRow = {
   slug: string
+  onboarding_completed_at: string | null
 }
 
 type PlatformMembershipLookupRow = {
@@ -91,13 +92,17 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
 
     const tenantResult = await supabase
       .from("tenants")
-      .select("slug")
+      .select("slug, onboarding_completed_at")
       .eq("id", membershipResult.data.tenant_id)
       .limit(1)
       .maybeSingle<TenantLookupRow>()
 
     if (tenantResult.error || !tenantResult.data) {
       return "/auth/admin/login"
+    }
+
+    if (membershipResult.data.role === "owner" && !tenantResult.data.onboarding_completed_at) {
+      return `/app/${tenantResult.data.slug}/admin/onboarding`
     }
 
     return getDefaultRouteForRole(tenantResult.data.slug, membershipResult.data.role)

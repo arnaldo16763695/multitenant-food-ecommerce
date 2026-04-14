@@ -17,6 +17,11 @@ type AdminAccessContext = {
     tenantId: string
     role: string
   }
+  readonly tenant: {
+    id: string
+    slug: string
+    onboardingCompletedAt: string | null
+  }
 }
 
 type ProfileRow = {
@@ -27,6 +32,8 @@ type ProfileRow = {
 
 type TenantRow = {
   id: string
+  slug: string
+  onboarding_completed_at: string | null
 }
 
 type MembershipRow = {
@@ -52,7 +59,7 @@ async function requireTenantMembershipAccess(tenantSlug: string, nextPath: strin
 
   const [profileResult, tenantResult] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").eq("auth_user_id", user.id).limit(1).maybeSingle<ProfileRow>(),
-    supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>(),
+    supabase.from("tenants").select("id, slug, onboarding_completed_at").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>(),
   ])
 
   if (profileResult.error || !profileResult.data || tenantResult.error || !tenantResult.data) {
@@ -86,6 +93,11 @@ async function requireTenantMembershipAccess(tenantSlug: string, nextPath: strin
       id: membershipResult.data.id,
       tenantId: membershipResult.data.tenant_id,
       role: membershipResult.data.role,
+    },
+    tenant: {
+      id: tenantResult.data.id,
+      slug: tenantResult.data.slug,
+      onboardingCompletedAt: tenantResult.data.onboarding_completed_at,
     },
   }
 }

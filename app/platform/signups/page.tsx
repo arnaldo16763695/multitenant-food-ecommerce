@@ -110,6 +110,7 @@ export default async function PlatformSignupsPage() {
                       signupId={signup.id}
                       status={signup.status}
                       provisionedTenantId={signup.provisionedTenantId}
+                      provisionedTenantSlug={signup.provisionedTenantSlug}
                     />
                   </TableCell>
                 </TableRow>
