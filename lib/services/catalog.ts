@@ -205,6 +205,43 @@ async function resolveCategoryId(supabase: SupabaseClient, tenantId: string, cat
   return categoryResult.data?.id ?? null
 }
 
+async function validateProductCategory(supabase: SupabaseClient, tenantId: string, categoryName: string) {
+  const availableCategoriesResult = await supabase
+    .from("categories")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .returns<{ id: string }[]>()
+
+  if (availableCategoriesResult.error) {
+    return {
+      ok: false as const,
+      error: availableCategoriesResult.error.message,
+    }
+  }
+
+  if (!(availableCategoriesResult.data ?? []).length) {
+    return {
+      ok: false as const,
+      error: "Primero crea al menos una categoria para poder registrar productos en este tenant.",
+    }
+  }
+
+  const categoryId = await resolveCategoryId(supabase, tenantId, categoryName)
+
+  if (!categoryId) {
+    return {
+      ok: false as const,
+      error: "Selecciona una categoria valida antes de guardar el producto.",
+    }
+  }
+
+  return {
+    ok: true as const,
+    categoryId,
+  }
+}
+
 async function resolveUniqueCategorySlug(supabase: SupabaseClient, tenantId: string, baseName: string, excludeCategoryId?: string) {
   const baseSlug = slugifyCatalogValue(baseName) || `category-${Date.now()}`
   let candidateSlug = baseSlug
@@ -379,17 +416,21 @@ export async function createCatalogProductWithOptions(
     return { ok: false, error: "Completa nombre, categoria y precio base valido." }
   }
 
-  const [categoryId, productSlug] = await Promise.all([
-    resolveCategoryId(supabase, tenantId, payload.category),
+  const [categoryValidationResult, productSlug] = await Promise.all([
+    validateProductCategory(supabase, tenantId, payload.category),
     resolveUniqueSlug(supabase, tenantId, payload.name),
   ])
+
+  if (!categoryValidationResult.ok) {
+    return { ok: false, error: categoryValidationResult.error }
+  }
 
   const insertResult = await supabase
     .from("products")
     .insert({
       id: options?.productId,
       tenant_id: tenantId,
-      category_id: categoryId,
+      category_id: categoryValidationResult.categoryId,
       name: payload.name.trim(),
       slug: productSlug,
       description: payload.description.trim(),
@@ -427,15 +468,19 @@ export async function updateCatalogProduct(
     return { ok: false, error: "Completa nombre, categoria y precio base valido." }
   }
 
-  const [categoryId, productSlug] = await Promise.all([
-    resolveCategoryId(supabase, tenantId, payload.category),
+  const [categoryValidationResult, productSlug] = await Promise.all([
+    validateProductCategory(supabase, tenantId, payload.category),
     resolveUniqueSlug(supabase, tenantId, payload.name, productId),
   ])
+
+  if (!categoryValidationResult.ok) {
+    return { ok: false, error: categoryValidationResult.error }
+  }
 
   const updateResult = await supabase
     .from("products")
     .update({
-      category_id: categoryId,
+      category_id: categoryValidationResult.categoryId,
       name: payload.name.trim(),
       slug: productSlug,
       description: payload.description.trim(),

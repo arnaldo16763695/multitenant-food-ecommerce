@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -148,6 +149,7 @@ export function AdminCatalogProducts({
 
   const products = initialProducts
   const canEditGlobalCatalog = canManageCatalogMaster(role)
+  const hasCategories = initialCategories.length > 0
 
   const categoryFilters = React.useMemo(() => {
     return ["Todos", ...new Set(initialCategories.map((category) => category.name))].filter(Boolean)
@@ -354,7 +356,7 @@ export function AdminCatalogProducts({
                 Filtros
               </Button>
               {canEditGlobalCatalog ? (
-                <Button className="h-9 rounded-xl" onClick={openCreateDialog}>
+                <Button className="h-9 rounded-xl" onClick={openCreateDialog} disabled={!hasCategories}>
                   <Plus />
                   Nuevo producto
                 </Button>
@@ -389,6 +391,16 @@ export function AdminCatalogProducts({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {canEditGlobalCatalog && !hasCategories ? (
+              <div className="mb-4 rounded-[1.5rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+                Aun no puedes crear productos en este tenant porque no existen categorias.{" "}
+                <Link className="font-semibold underline underline-offset-4" href={`/app/${tenantSlug}/admin/catalog/categories`}>
+                  Crea la primera categoria aqui
+                </Link>
+                .
+              </div>
+            ) : null}
+
             <div className="overflow-hidden rounded-[1.5rem] border border-border">
               <Table>
                 <TableHeader className="bg-secondary/50">
@@ -467,7 +479,9 @@ export function AdminCatalogProducts({
 
             {filteredProducts.length === 0 ? (
               <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-                {products.length === 0
+                {!hasCategories
+                  ? "Este tenant aun no tiene categorias. Crea la primera categoria y luego podras registrar productos."
+                  : products.length === 0
                   ? "Este tenant aun no tiene productos cargados. Crea el primero para empezar a operar el catalogo."
                   : "No encontramos productos con ese filtro. Ajusta la busqueda o la categoria."}
               </div>
@@ -494,10 +508,10 @@ export function AdminCatalogProducts({
                 <select
                   value={productFormValues.category}
                   onChange={(event) => handleFieldChange("category", event.target.value)}
-                  disabled={!canEditGlobalCatalog}
+                  disabled={!canEditGlobalCatalog || !hasCategories}
                   className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
-                  <option value="">Selecciona una categoria</option>
+                  <option value="">{hasCategories ? "Selecciona una categoria" : "Primero crea una categoria"}</option>
                   {categoryOptions.map((categoryName) => (
                     <option key={categoryName} value={categoryName}>
                       {categoryName}
