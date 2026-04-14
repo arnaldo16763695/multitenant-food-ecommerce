@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache"
 
 import { requirePlatformAccess } from "@/lib/auth/platform"
-import { provisionBusinessSignup, updateBusinessSignupDecision } from "@/lib/services/platform"
+import {
+  provisionBusinessSignup,
+  regenerateBusinessSignupAccess,
+  updateBusinessSignupDecision,
+} from "@/lib/services/platform"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 import type { BusinessSignupDecision } from "@/lib/domain/platform-admin"
@@ -48,4 +52,15 @@ export async function provisionBusinessSignupAction(signupId: string) {
   }
 
   return result
+}
+
+export async function regenerateBusinessSignupAccessAction(signupId: string) {
+  await requirePlatformAccess("/platform/signups")
+  const adminClient = createSupabaseAdminClient()
+
+  if (!adminClient) {
+    throw new Error("Supabase admin client is not configured.")
+  }
+
+  return regenerateBusinessSignupAccess(adminClient, signupId)
 }

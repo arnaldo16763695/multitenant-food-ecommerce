@@ -5,7 +5,11 @@ import { CheckCircle2, Copy, LoaderCircle, Rocket, XCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
-import { provisionBusinessSignupAction, updateBusinessSignupDecisionAction } from "@/app/platform/signups/actions"
+import {
+  provisionBusinessSignupAction,
+  regenerateBusinessSignupAccessAction,
+  updateBusinessSignupDecisionAction,
+} from "@/app/platform/signups/actions"
 import { Button } from "@/components/ui/button"
 
 import type { BusinessSignupStatus } from "@/lib/domain/platform-admin"
@@ -71,6 +75,27 @@ export function PlatformSignupRowActions({
     })
   }
 
+  function handleRegenerateAccess() {
+    setErrorMessage("")
+    setFeedbackMessage("")
+
+    startTransition(async () => {
+      const result = await regenerateBusinessSignupAccessAction(signupId)
+
+      if (!result.ok || !result.invitationUrl) {
+        setErrorMessage(result.error ?? "No pudimos generar el acceso del owner.")
+        return
+      }
+
+      try {
+        await navigator.clipboard.writeText(result.invitationUrl)
+        setFeedbackMessage("El link de acceso del owner fue copiado al portapapeles.")
+      } catch {
+        setFeedbackMessage("El link fue generado, pero no pudimos copiarlo automaticamente.")
+      }
+    })
+  }
+
   if (status === "pending") {
     return (
       <div className="flex flex-col items-end gap-2">
@@ -105,12 +130,20 @@ export function PlatformSignupRowActions({
   if (status === "provisioned" && provisionedTenantId && provisionedTenantSlug) {
     return (
       <div className="flex flex-col items-end gap-2">
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/app/${provisionedTenantSlug}/admin/onboarding`}>
-            <Copy />
-            Abrir panel
-          </Link>
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/app/${provisionedTenantSlug}/admin/onboarding`}>
+              <Copy />
+              Abrir panel
+            </Link>
+          </Button>
+          <Button size="sm" disabled={isPending} onClick={handleRegenerateAccess}>
+            {isPending ? <LoaderCircle className="animate-spin" /> : <Copy />}
+            Copiar acceso
+          </Button>
+        </div>
+        {feedbackMessage ? <p className="max-w-80 text-right text-xs text-emerald-700">{feedbackMessage}</p> : null}
+        {errorMessage ? <p className="max-w-80 text-right text-xs text-destructive">{errorMessage}</p> : null}
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
           <Copy className="size-3.5" />
           Provisionado

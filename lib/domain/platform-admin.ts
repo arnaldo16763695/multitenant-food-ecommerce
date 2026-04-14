@@ -61,3 +61,10 @@ export type ProvisionBusinessSignupResult = {
   readonly delivery?: BusinessSignupProvisionDelivery
   readonly error?: string
 }
+
+export type RegenerateBusinessSignupAccessResult = {
+  readonly ok: boolean
+  readonly tenantSlug?: string
+  readonly invitationUrl?: string
+  readonly error?: string
+}

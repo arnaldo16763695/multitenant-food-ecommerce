@@ -7,6 +7,7 @@ import { slugifyCatalogValue } from "@/lib/domain/catalog"
 
 import type {
   BusinessSignupDecision,
+  RegenerateBusinessSignupAccessResult,
   ProvisionBusinessSignupInput,
   ProvisionBusinessSignupResult,
   BusinessSignupStatus,
@@ -525,5 +526,67 @@ export async function provisionBusinessSignup(
     tenantSlug,
     invitationUrl: accessLinkResult.invitationUrl,
     delivery: emailResult.deliveredBy,
+  }
+}
+
+export async function regenerateBusinessSignupAccess(
+  supabase: SupabaseClient,
+  signupId: string
+): Promise<RegenerateBusinessSignupAccessResult> {
+  const signupResult = await supabase
+    .from("business_signups")
+    .select("id, company_name, owner_full_name, owner_email, status, provisioned_tenant_id, tenants:provisioned_tenant_id(slug)")
+    .eq("id", signupId)
+    .limit(1)
+    .maybeSingle<{
+      id: string
+      company_name: string
+      owner_full_name: string
+      owner_email: string
+      status: BusinessSignupStatus
+      provisioned_tenant_id: string | null
+      tenants: {
+        slug: string
+      } | null
+    }>()
+
+  if (signupResult.error || !signupResult.data) {
+    return { ok: false, error: "No encontramos la solicitud." }
+  }
+
+  if (signupResult.data.status !== "provisioned" || !signupResult.data.provisioned_tenant_id || !signupResult.data.tenants?.slug) {
+    return { ok: false, error: "Solo puedes generar acceso para solicitudes ya provisionadas." }
+  }
+
+  const ownerEmail = normalizeEmail(signupResult.data.owner_email)
+  const ownerFullName = signupResult.data.owner_full_name.trim()
+
+  const existingProfileResult = await supabase
+    .from("profiles")
+    .select("id, auth_user_id, email, full_name")
+    .ilike("email", ownerEmail)
+    .limit(1)
+    .maybeSingle<ExistingProfileRow>()
+
+  if (existingProfileResult.error || !existingProfileResult.data) {
+    return { ok: false, error: existingProfileResult.error?.message ?? "No encontramos el perfil del owner provisionado." }
+  }
+
+  const accessLinkResult = await generateBusinessOwnerAccessLink(
+    supabase,
+    signupResult.data.tenants.slug,
+    ownerEmail,
+    ownerFullName,
+    existingProfileResult.data
+  )
+
+  if (!accessLinkResult.ok) {
+    return { ok: false, error: accessLinkResult.error }
+  }
+
+  return {
+    ok: true,
+    tenantSlug: signupResult.data.tenants.slug,
+    invitationUrl: accessLinkResult.invitationUrl,
   }
 }
