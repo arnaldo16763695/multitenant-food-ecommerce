@@ -9,10 +9,14 @@ type StorefrontLoginPageProps = {
   readonly params: Promise<{
     tenantSlug: string
   }>
+  readonly searchParams: Promise<{
+    reason?: string
+  }>
 }
 
-export default async function StorefrontLoginPage({ params }: StorefrontLoginPageProps) {
+export default async function StorefrontLoginPage({ params, searchParams }: StorefrontLoginPageProps) {
   const { tenantSlug } = await params
+  const resolvedSearchParams = await searchParams
   const customerContext = await getCustomerAccountContext()
 
   if (customerContext) {
@@ -42,7 +46,7 @@ export default async function StorefrontLoginPage({ params }: StorefrontLoginPag
             </p>
           </div>
 
-          <CustomerLoginForm tenantSlug={tenantSlug} />
+          <CustomerLoginForm tenantSlug={tenantSlug} reason={resolvedSearchParams.reason} />
         </section>
       </div>
     </main>

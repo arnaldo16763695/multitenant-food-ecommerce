@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -146,6 +147,7 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
           Inicia sesion con un usuario que tenga membership activa en el tenant.{" "}
           {reason === "membership" ? "No encontramos acceso para este tenant." : null}
           {reason === "password-set" ? "La contrasena fue creada correctamente. Ya puedes entrar." : null}
+          {reason === "password-reset" ? "Tu password fue actualizado correctamente. Ya puedes entrar." : null}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -158,6 +160,10 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
             <span className="font-medium text-card-foreground">Password</span>
             <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Tu password" required />
           </label>
+
+          <Link className="text-right text-sm font-semibold text-orange-700 hover:underline" href="/auth/admin/forgot-password">
+            Olvide mi password
+          </Link>
 
           {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
 

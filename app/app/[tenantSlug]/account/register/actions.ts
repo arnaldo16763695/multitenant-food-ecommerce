@@ -1,5 +1,6 @@
 "use server"
 
+import { getAppUrl } from "@/lib/auth/app-url"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { sendCustomerConfirmationEmail } from "@/lib/email/customer-auth"
 
@@ -87,10 +88,6 @@ export async function provisionCustomerAccountAction(input: ProvisionCustomerAcc
   }
 
   return { ok: true }
-}
-
-function getAppUrl() {
-  return process.env.APP_URL || "http://localhost:3000"
 }
 
 export async function registerCustomerAccountAction(input: RegisterCustomerAccountInput): Promise<ProvisionCustomerAccountResult> {
