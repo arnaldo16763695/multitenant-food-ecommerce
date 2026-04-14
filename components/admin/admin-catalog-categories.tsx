@@ -6,6 +6,7 @@ import { MoreHorizontal, Plus, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { createCategoryWithImageAction, updateCategoryWithImageAction } from "@/app/app/[tenantSlug]/admin/catalog/categories/actions"
+import { uploadCatalogMedia } from "@/lib/catalog/upload-client"
 import { type CatalogCategory } from "@/lib/config/admin-catalog"
 import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 
@@ -168,10 +169,23 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
       formData.set("sortOrder", String(categoryFormValues.sortOrder))
       formData.set("imagePath", categoryFormValues.imagePath)
       formData.set("imageAlt", categoryFormValues.imageAlt)
-      formData.set("previousImagePath", initialCategoryFormValues.imagePath)
 
       if (selectedImageFile) {
-        formData.set("imageFile", selectedImageFile)
+        const uploadResult = await uploadCatalogMedia({
+          tenantSlug,
+          entityType: "category",
+          file: selectedImageFile,
+          entityId: categoryDialogMode === "edit" ? categoryFormValues.id : undefined,
+          previousPath: initialCategoryFormValues.imagePath || undefined,
+        })
+
+        if (!uploadResult.ok) {
+          setFormErrorMessage(uploadResult.error)
+          return
+        }
+
+        formData.set("categoryId", uploadResult.entityId)
+        formData.set("imagePath", uploadResult.path)
       }
 
       const result =

@@ -51,13 +51,13 @@ export function TenantShell({
   branches,
   etaMinutes,
   menu,
-  shareUrl,
+  shareUrl: _shareUrl,
   heroImageUrl,
   customerSession,
 }: TenantShellProps) {
+  void _shareUrl
   const publicBranchLabel = activeBranchLabel ?? "Sin sucursal activa"
   const publicEta = etaMinutes ?? 18
-  const publicShareUrl = shareUrl ?? `https://vzfood.com/app/${tenantSlug}`
   const publicMenu = menu ?? []
   const visibleHeroImage = heroImageUrl ?? null
   const bagHref = activeBranchId ? `/app/${tenantSlug}/bag?branch=${activeBranchId}` : `/app/${tenantSlug}/bag`
@@ -136,60 +136,48 @@ export function TenantShell({
           <StorefrontBranchEntry tenantSlug={tenantSlug} branches={branches} />
         ) : null}
 
-        <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-          <div className="rounded-[2rem] border border-stone-200 bg-white/85 p-6 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Storefront</p>
-            <h2 className={`${displayFont.className} mt-4 text-4xl font-medium text-stone-950`}>Productos claros, decision rapida y bolsa siempre visible.</h2>
-            <p className="mt-4 text-sm leading-7 text-stone-600">
-              Este storefront ya prioriza el patron correcto: hero comercial con imagen propia del negocio, senales operativas arriba y un grid de productos directo debajo.
-            </p>
-            <div className="mt-6 space-y-3 text-sm text-stone-600">
-              <div className="rounded-[1.2rem] bg-stone-50 p-4">Imagen hero configurable por la marca</div>
-              <div className="rounded-[1.2rem] bg-stone-50 p-4">Grid de productos con accion directa</div>
-              <div className="rounded-[1.2rem] bg-stone-50 p-4 break-all">{publicShareUrl}</div>
+        <section className="space-y-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menu</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">Nuestros productos</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-stone-600">
+                Explora el catalogo completo, filtra por categorias y arma tu pedido sin perder de vista la sucursal activa.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-sm">
+              <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href="/brands">
+                Marketplace
+              </Link>
+              <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/orders`}>
+                Mis pedidos
+              </Link>
+              {!customerSession ? (
+                <>
+                  <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/login`}>
+                    Iniciar sesion
+                  </Link>
+                  <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
+                    Registrarme
+                  </Link>
+                </>
+              ) : null}
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menu</p>
-                <h2 className="mt-2 text-3xl font-semibold tracking-tight text-stone-950">Nuestros productos</h2>
+          {!requiresBranchSelection ? (
+            publicMenu.length ? (
+              <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
+            ) : (
+              <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menu vacio</p>
+                <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aun no tiene productos publicados.</h3>
+                <p className="mt-3 text-sm leading-7 text-stone-600">
+                  Vuelve mas tarde o prueba otra sucursal si esta marca opera con multiples ubicaciones.
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2 text-sm">
-                <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href="/brands">
-                  Marketplace
-                </Link>
-                <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/orders`}>
-                  Mis pedidos
-                </Link>
-                {!customerSession ? (
-                  <>
-                    <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/login`}>
-                      Iniciar sesion
-                    </Link>
-                    <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
-                      Registrarme
-                    </Link>
-                  </>
-                ) : null}
-              </div>
-            </div>
-
-            {!requiresBranchSelection ? (
-              publicMenu.length ? (
-                <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
-              ) : (
-                <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menu vacio</p>
-                  <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aun no tiene productos publicados.</h3>
-                  <p className="mt-3 text-sm leading-7 text-stone-600">
-                    Vuelve mas tarde o prueba otra sucursal si esta marca opera con multiples ubicaciones.
-                  </p>
-                </div>
-              )
-            ) : null}
-          </div>
+            )
+          ) : null}
         </section>
       </div>
     </main>

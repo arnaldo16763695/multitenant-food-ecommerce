@@ -14,6 +14,7 @@ import {
   updateProductWithImageAction,
 } from "@/app/app/[tenantSlug]/admin/catalog/products/actions"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
+import { uploadCatalogMedia } from "@/lib/catalog/upload-client"
 import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
@@ -271,7 +272,6 @@ export function AdminCatalogProducts({
       formData.set("status", productFormValues.status)
       formData.set("primaryImagePath", productFormValues.primaryImagePath)
       formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
-      formData.set("previousPrimaryImagePath", initialProductFormValues.primaryImagePath)
       formData.set(
         "branchOverrides",
         JSON.stringify(
@@ -285,10 +285,27 @@ export function AdminCatalogProducts({
       )
 
       if (selectedPrimaryImageFile) {
-        formData.set("primaryImageFile", selectedPrimaryImageFile)
+        const uploadResult = await uploadCatalogMedia({
+          tenantSlug,
+          entityType: "product",
+          file: selectedPrimaryImageFile,
+          entityId: productDialogMode === "edit" ? productFormValues.id : undefined,
+          previousPath: initialProductFormValues.primaryImagePath || undefined,
+        })
+
+        if (!uploadResult.ok) {
+          setFormErrorMessage(uploadResult.error)
+          return
+        }
+
+        formData.set("productId", uploadResult.entityId)
+        formData.set("primaryImagePath", uploadResult.path)
       }
 
-      const result = productDialogMode === "create" ? await createProductWithImageAction(tenantSlug, formData) : await updateProductWithImageAction(productFormValues.id, tenantSlug, formData)
+      const result =
+        productDialogMode === "create"
+          ? await createProductWithImageAction(tenantSlug, formData)
+          : await updateProductWithImageAction(productFormValues.id, tenantSlug, formData)
 
       if (!result.ok) {
         setFormErrorMessage(result.error ?? "No pudimos guardar el producto.")

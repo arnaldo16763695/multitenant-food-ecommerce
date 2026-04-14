@@ -1,6 +1,8 @@
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
+import { AdminStorefrontSettings } from "@/components/admin/admin-storefront-settings"
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type AdminSettingsPageProps = {
   readonly params: Promise<{
@@ -10,7 +12,27 @@ type AdminSettingsPageProps = {
 
 export default async function AdminSettingsPage({ params }: AdminSettingsPageProps) {
   const { tenantSlug } = await params
-  await requireAdminSectionAccess(tenantSlug, "settings")
+  const access = await requireAdminSectionAccess(tenantSlug, "settings")
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const tenantResult = await supabase
+    .from("tenants")
+    .select("name, storefront_enabled, hero_image_url")
+    .eq("id", access.membership.tenantId)
+    .limit(1)
+    .maybeSingle<{
+      name: string
+      storefront_enabled: boolean
+      hero_image_url: string | null
+    }>()
+
+  if (tenantResult.error || !tenantResult.data) {
+    throw new Error(tenantResult.error?.message ?? "No pudimos cargar la configuracion del tenant.")
+  }
 
   return (
     <AdminPageShell
@@ -18,6 +40,13 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
       title="Preferencias y governance del tenant"
       description="Aqui deberian vivir branding del admin, ajustes del negocio, permisos, integraciones y reglas operativas globales del tenant."
     >
+      <AdminStorefrontSettings
+        tenantSlug={tenantSlug}
+        tenantName={tenantResult.data.name}
+        initialStorefrontEnabled={tenantResult.data.storefront_enabled}
+        initialHeroImageUrl={tenantResult.data.hero_image_url}
+      />
+
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>

@@ -1,5 +1,3 @@
-import { cache } from "react"
-
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 type StorefrontTenant = {
@@ -103,104 +101,102 @@ function resolveActiveBranch(branches: readonly StorefrontBranch[], preferredBra
   return branches.find((branch) => branch.id === preferredBranchId) ?? branches[0]
 }
 
-export const getPublicStorefrontBySlug = cache(
-  async (tenantSlug: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> => {
-    const supabase = createSupabaseAdminClient()
+export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> {
+  const supabase = createSupabaseAdminClient()
 
-    if (!supabase) {
-      return null
-    }
-
-    const tenantResult = await supabase
-      .from("tenants")
-      .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
-      .eq("slug", tenantSlug)
-      .limit(1)
-      .maybeSingle<TenantRow>()
-
-    if (tenantResult.error || !tenantResult.data || !tenantResult.data.storefront_enabled) {
-      return null
-    }
-
-    const tenant: StorefrontTenant = {
-      id: tenantResult.data.id,
-      name: tenantResult.data.name,
-      slug: tenantResult.data.slug,
-      customDomain: tenantResult.data.custom_domain,
-      storefrontEnabled: tenantResult.data.storefront_enabled,
-      heroImageUrl: tenantResult.data.hero_image_url,
-    }
-
-    const [branchesResult, categoriesResult, productsResult] = await Promise.all([
-      supabase.from("branches").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
-      supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
-      supabase
-        .from("products")
-        .select("id, name, description, base_price, category_id, primary_image_path, status")
-        .eq("tenant_id", tenant.id)
-        .eq("status", "active")
-        .order("name", { ascending: true })
-        .returns<ProductRow[]>(),
-    ])
-
-    const branches = (branchesResult.data ?? []).map((branch) => ({
-      id: branch.id,
-      name: branch.name,
-    }))
-
-    const activeBranch = resolveActiveBranch(branches, preferredBranchId)
-    const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
-    const products = productsResult.data ?? []
-
-    const branchOverridesResult =
-      activeBranch && products.length
-        ? await supabase
-            .from("branch_product_overrides")
-            .select("product_id, availability_status, price_override")
-            .eq("branch_id", activeBranch.id)
-            .in(
-              "product_id",
-              products.map((product) => product.id)
-            )
-            .returns<BranchProductOverrideRow[]>()
-        : { data: [], error: null }
-
-    if (branchesResult.error || categoriesResult.error || productsResult.error || branchOverridesResult.error) {
-      return null
-    }
-
-    const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
-
-    const menu: TenantProduct[] = products
-      .filter((product) => {
-        const branchOverride = branchOverrideMap.get(product.id)
-        return branchOverride ? branchOverride.availability_status === "available" : true
-      })
-      .map((product) => {
-        const branchOverride = branchOverrideMap.get(product.id)
-
-        return {
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          basePrice: formatCurrency(branchOverride?.price_override ?? product.base_price),
-          category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
-          imageUrl: getStoragePublicUrl(product.primary_image_path),
-        }
-      })
-
-    return {
-      tenant,
-      branches,
-      activeBranch,
-      etaMinutes: 20,
-      menu,
-      shareUrl: buildShareUrl(tenant),
-    }
+  if (!supabase) {
+    return null
   }
-)
 
-export const getPublicStorefrontByDomain = cache(async (host: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> => {
+  const tenantResult = await supabase
+    .from("tenants")
+    .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
+    .eq("slug", tenantSlug)
+    .limit(1)
+    .maybeSingle<TenantRow>()
+
+  if (tenantResult.error || !tenantResult.data || !tenantResult.data.storefront_enabled) {
+    return null
+  }
+
+  const tenant: StorefrontTenant = {
+    id: tenantResult.data.id,
+    name: tenantResult.data.name,
+    slug: tenantResult.data.slug,
+    customDomain: tenantResult.data.custom_domain,
+    storefrontEnabled: tenantResult.data.storefront_enabled,
+    heroImageUrl: tenantResult.data.hero_image_url,
+  }
+
+  const [branchesResult, categoriesResult, productsResult] = await Promise.all([
+    supabase.from("branches").select("id, name").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
+    supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
+    supabase
+      .from("products")
+      .select("id, name, description, base_price, category_id, primary_image_path, status")
+      .eq("tenant_id", tenant.id)
+      .eq("status", "active")
+      .order("name", { ascending: true })
+      .returns<ProductRow[]>(),
+  ])
+
+  const branches = (branchesResult.data ?? []).map((branch) => ({
+    id: branch.id,
+    name: branch.name,
+  }))
+
+  const activeBranch = resolveActiveBranch(branches, preferredBranchId)
+  const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
+  const products = productsResult.data ?? []
+
+  const branchOverridesResult =
+    activeBranch && products.length
+      ? await supabase
+          .from("branch_product_overrides")
+          .select("product_id, availability_status, price_override")
+          .eq("branch_id", activeBranch.id)
+          .in(
+            "product_id",
+            products.map((product) => product.id)
+          )
+          .returns<BranchProductOverrideRow[]>()
+      : { data: [], error: null }
+
+  if (branchesResult.error || categoriesResult.error || productsResult.error || branchOverridesResult.error) {
+    return null
+  }
+
+  const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
+
+  const menu: TenantProduct[] = products
+    .filter((product) => {
+      const branchOverride = branchOverrideMap.get(product.id)
+      return branchOverride ? branchOverride.availability_status === "available" : true
+    })
+    .map((product) => {
+      const branchOverride = branchOverrideMap.get(product.id)
+
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        basePrice: formatCurrency(branchOverride?.price_override ?? product.base_price),
+        category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
+        imageUrl: getStoragePublicUrl(product.primary_image_path),
+      }
+    })
+
+  return {
+    tenant,
+    branches,
+    activeBranch,
+    etaMinutes: 20,
+    menu,
+    shareUrl: buildShareUrl(tenant),
+  }
+}
+
+export async function getPublicStorefrontByDomain(host: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> {
   const normalizedHost = host.toLowerCase().split(":")[0]
   const supabase = createSupabaseAdminClient()
 
@@ -221,4 +217,4 @@ export const getPublicStorefrontByDomain = cache(async (host: string, preferredB
   }
 
   return getPublicStorefrontBySlug(tenantResult.data.slug, preferredBranchId)
-})
+}

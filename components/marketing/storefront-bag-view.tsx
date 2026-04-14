@@ -26,6 +26,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
   const menuHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const checkoutHref = branchId ? `/app/${tenantSlug}/checkout?branch=${branchId}` : `/app/${tenantSlug}/checkout`
+  const primaryStorefrontButtonClassName =
+    "border-orange-600 bg-orange-600 text-white hover:bg-orange-500 hover:text-white disabled:border-stone-300 disabled:bg-stone-300 disabled:text-stone-500"
 
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)]">
@@ -46,7 +48,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                   <ShoppingBag className="mx-auto mb-4 size-8 text-stone-400" />
                   <p className="text-lg font-semibold text-stone-950">Tu bolsa esta vacia.</p>
                   <p className="mt-2 text-sm leading-7 text-stone-600">Agrega productos desde el storefront para empezar tu pedido.</p>
-                  <Button asChild className="mt-5 rounded-full">
+                  <Button asChild className={`mt-5 rounded-full ${primaryStorefrontButtonClassName}`}>
                     <Link href={menuHref}>Volver al menu</Link>
                   </Button>
                 </div>
@@ -101,7 +103,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                 </div>
               </div>
 
-              <Button asChild className="h-10 w-full rounded-full" disabled={items.length === 0 || !branchId}>
+              <Button asChild className={`h-10 w-full rounded-full ${primaryStorefrontButtonClassName}`} disabled={items.length === 0 || !branchId}>
                 <Link href={checkoutHref}>Continuar al checkout</Link>
               </Button>
               <Button variant="outline" className="h-10 w-full rounded-full" disabled={items.length === 0 || !branchId} onClick={() => clearBranchBag(tenantSlug, activeBranchId)}>

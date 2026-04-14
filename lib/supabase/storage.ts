@@ -16,6 +16,10 @@ export function buildProductGalleryImagePath(tenantId: string, productId: string
   return `tenants/${tenantId}/products/${productId}/gallery/${fileName}`
 }
 
+export function buildTenantHeroImagePath(tenantId: string, fileName: string) {
+  return `tenants/${tenantId}/branding/hero/${fileName}`
+}
+
 export function getFileExtension(fileName: string) {
   const segments = fileName.split(".")
   const candidate = segments.at(-1)?.toLowerCase()
@@ -35,4 +39,33 @@ export function getCatalogMediaPublicUrl(path: string | null | undefined) {
   }
 
   return `${supabaseUrl}/storage/v1/object/public/${CATALOG_MEDIA_BUCKET}/${path}`
+}
+
+export function getCatalogMediaPathFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
+  const normalizedValue = value.trim()
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  if (normalizedValue.startsWith("tenants/")) {
+    return normalizedValue
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue)
+    const storagePrefix = `/storage/v1/object/public/${CATALOG_MEDIA_BUCKET}/`
+
+    if (!parsedUrl.pathname.startsWith(storagePrefix)) {
+      return null
+    }
+
+    return decodeURIComponent(parsedUrl.pathname.slice(storagePrefix.length))
+  } catch {
+    return null
+  }
 }

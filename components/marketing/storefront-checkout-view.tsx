@@ -39,6 +39,8 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const menuHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
+  const primaryStorefrontButtonClassName =
+    "border-orange-600 bg-orange-600 text-white hover:bg-orange-500 hover:text-white disabled:border-stone-300 disabled:bg-stone-300 disabled:text-stone-500"
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -137,7 +139,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
 
                 {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
 
-                <Button className="h-10 rounded-full" disabled={isSubmitting || items.length === 0 || !branchId} type="submit">
+                <Button className={`h-10 rounded-full ${primaryStorefrontButtonClassName}`} disabled={isSubmitting || items.length === 0 || !branchId} type="submit">
                   {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}
                   {isSubmitting ? "Procesando pedido..." : "Enviar pedido"}
                 </Button>

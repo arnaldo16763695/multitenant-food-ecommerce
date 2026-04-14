@@ -1,5 +1,3 @@
-import { cache } from "react"
-
 import { featuredBrands } from "@/lib/config/platform"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
@@ -48,7 +46,7 @@ function buildAccent(index: number) {
   return accents[index % accents.length]
 }
 
-export const getPublicBrandsDirectory = cache(async (): Promise<readonly BrandDirectoryItem[]> => {
+export async function getPublicBrandsDirectory(): Promise<readonly BrandDirectoryItem[]> {
   const supabase = createSupabaseAdminClient()
 
   if (!supabase) {
@@ -114,4 +112,4 @@ export const getPublicBrandsDirectory = cache(async (): Promise<readonly BrandDi
       activeBranchCount: tenantBranches.length,
     } satisfies BrandDirectoryItem
   })
-})
+}

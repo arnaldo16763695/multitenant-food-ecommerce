@@ -9,13 +9,6 @@ const supabaseHostname = process.env.NEXT_PUBLIC_SUPABASE_URL
   : undefined
 
 const nextConfig: NextConfig = {
-  experimental: {
-    serverActions: {
-      // Product/category image uploads currently travel through Server Actions.
-      // We raise the default 1 MB limit so normal catalog media does not fail at runtime.
-      bodySizeLimit: "8mb",
-    },
-  },
   images: {
     remotePatterns: [
       {
