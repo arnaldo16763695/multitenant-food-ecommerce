@@ -1,10 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import {
-  catalogBranches,
-  catalogCategories,
-  catalogModifierGroups,
-  catalogProducts,
   type CatalogBranchOption,
   type CatalogCategory,
   type CatalogModifierGroup,
@@ -30,7 +26,7 @@ type CatalogModuleData = {
   readonly products: readonly CatalogProduct[]
   readonly categories: readonly CatalogCategory[]
   readonly modifierGroups: readonly CatalogModifierGroup[]
-  readonly source: "supabase" | "mock"
+  readonly source: "supabase"
 }
 
 type CategoryRow = { id: string; name: string; is_visible: boolean; image_path: string | null; sort_order: number }
@@ -56,12 +52,12 @@ type BranchProductOverrideRow = {
   prep_time_minutes: number | null
 }
 
-export const MOCK_CATALOG_MODULE: CatalogModuleData = {
-  branches: catalogBranches,
-  products: catalogProducts,
-  categories: catalogCategories,
-  modifierGroups: catalogModifierGroups,
-  source: "mock",
+export const EMPTY_CATALOG_MODULE: CatalogModuleData = {
+  branches: [],
+  products: [],
+  categories: [],
+  modifierGroups: [],
+  source: "supabase",
 }
 
 function formatCurrency(value: number | string | null) {
@@ -264,7 +260,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   ])
 
   if (branchesResult.error || categoriesResult.error || productsResult.error || modifierGroupsResult.error) {
-    return MOCK_CATALOG_MODULE
+    return EMPTY_CATALOG_MODULE
   }
 
   const branches = branchesResult.data ?? []
@@ -288,7 +284,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   ])
 
   if (productModifierGroupsResult.error || branchProductOverridesResult.error) {
-    return MOCK_CATALOG_MODULE
+    return EMPTY_CATALOG_MODULE
   }
 
   const productModifierGroups = productModifierGroupsResult.data ?? []
@@ -356,15 +352,11 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     appliedTo: `${modifierUsageCount.get(group.id) ?? 0} productos`,
   }))
 
-  if (!mappedProducts.length && !mappedCategories.length && !mappedModifierGroups.length) {
-    return MOCK_CATALOG_MODULE
-  }
-
   return {
-    branches: branches.length ? branches.map((branch) => ({ id: branch.id, name: branch.name })) : catalogBranches,
-    products: mappedProducts.length ? mappedProducts : catalogProducts,
-    categories: mappedCategories.length ? mappedCategories : catalogCategories,
-    modifierGroups: mappedModifierGroups.length ? mappedModifierGroups : catalogModifierGroups,
+    branches: branches.map((branch) => ({ id: branch.id, name: branch.name })),
+    products: mappedProducts,
+    categories: mappedCategories,
+    modifierGroups: mappedModifierGroups,
     source: "supabase",
   }
 }

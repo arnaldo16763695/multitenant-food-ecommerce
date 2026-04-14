@@ -5,7 +5,7 @@ import Image from "next/image"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { catalogBranches, catalogCategories, catalogProducts, type CatalogBranchOption, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
+import { type CatalogBranchOption, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
 import {
   createProductWithImageAction,
   duplicateProductAction,
@@ -127,9 +127,9 @@ type AdminCatalogProductsProps = {
 
 export function AdminCatalogProducts({
   tenantSlug,
-  initialProducts = catalogProducts,
-  initialCategories = catalogCategories,
-  initialBranches = catalogBranches,
+  initialProducts = [],
+  initialCategories = [],
+  initialBranches = [],
   role,
 }: AdminCatalogProductsProps) {
   const router = useRouter()
@@ -467,7 +467,9 @@ export function AdminCatalogProducts({
 
             {filteredProducts.length === 0 ? (
               <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-                No encontramos productos con ese filtro. Ajusta la busqueda o la categoria.
+                {products.length === 0
+                  ? "Este tenant aun no tiene productos cargados. Crea el primero para empezar a operar el catalogo."
+                  : "No encontramos productos con ese filtro. Ajusta la busqueda o la categoria."}
               </div>
             ) : null}
           </CardContent>
