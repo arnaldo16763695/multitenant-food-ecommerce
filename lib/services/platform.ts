@@ -1,7 +1,14 @@
+import { randomUUID } from "node:crypto"
+
 import type { SupabaseClient } from "@supabase/supabase-js"
+
+import { sendBusinessOwnerProvisioningEmail } from "@/lib/email/business-owner-provisioning"
+import { slugifyCatalogValue } from "@/lib/domain/catalog"
 
 import type {
   BusinessSignupDecision,
+  ProvisionBusinessSignupInput,
+  ProvisionBusinessSignupResult,
   BusinessSignupStatus,
   BusinessSignupSummary,
   CreateBusinessSignupInput,
@@ -37,6 +44,111 @@ type BusinessSignupRow = {
   created_at: string
   reviewed_at: string | null
   provisioned_tenant_id: string | null
+}
+
+type ExistingProfileRow = {
+  id: string
+  auth_user_id: string
+  email: string | null
+  full_name: string | null
+}
+
+function getAppUrl() {
+  const explicitAppUrl = process.env.APP_URL?.trim()
+  const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
+  const vercelPreviewUrl = process.env.VERCEL_URL?.trim()
+
+  if (explicitAppUrl) {
+    return explicitAppUrl
+  }
+
+  if (vercelProductionUrl) {
+    return `https://${vercelProductionUrl}`
+  }
+
+  if (vercelPreviewUrl) {
+    return `https://${vercelPreviewUrl}`
+  }
+
+  return "http://localhost:3000"
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function buildTemporaryPassword() {
+  return `${randomUUID()}Aa1!`
+}
+
+async function generateBusinessOwnerAccessLink(
+  adminClient: SupabaseClient,
+  tenantSlug: string,
+  email: string,
+  fullName: string,
+  existingProfile?: ExistingProfileRow
+) {
+  const redirectTo = `${getAppUrl()}/auth/admin/setup-password?next=${encodeURIComponent(`/app/${tenantSlug}/admin`)}`
+
+  if (existingProfile) {
+    const linkResult = await adminClient.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: {
+        redirectTo: `${getAppUrl()}/app/${tenantSlug}/admin`,
+      },
+    })
+
+    if (linkResult.error || !linkResult.data?.properties?.action_link) {
+      return {
+        ok: false as const,
+        error: linkResult.error?.message ?? "No pudimos generar el acceso del owner.",
+      }
+    }
+
+    return {
+      ok: true as const,
+      authUserId: existingProfile.auth_user_id,
+      invitationUrl: linkResult.data.properties.action_link,
+    }
+  }
+
+  const createUserResult = await adminClient.auth.admin.createUser({
+    email,
+    password: buildTemporaryPassword(),
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+    },
+  })
+
+  if (createUserResult.error || !createUserResult.data.user?.id) {
+    return {
+      ok: false as const,
+      error: createUserResult.error?.message ?? "No pudimos crear la cuenta del owner.",
+    }
+  }
+
+  const linkResult = await adminClient.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: {
+      redirectTo,
+    },
+  })
+
+  if (linkResult.error || !linkResult.data?.properties?.action_link) {
+    return {
+      ok: false as const,
+      error: linkResult.error?.message ?? "No pudimos generar el enlace para definir la contrasena.",
+    }
+  }
+
+  return {
+    ok: true as const,
+    authUserId: createUserResult.data.user.id,
+    invitationUrl: linkResult.data.properties.action_link,
+  }
 }
 
 function normalizeSlug(value: string) {
@@ -215,4 +327,199 @@ export async function updateBusinessSignupDecision(
   }
 
   return { ok: true }
+}
+
+export async function provisionBusinessSignup(
+  supabase: SupabaseClient,
+  input: ProvisionBusinessSignupInput
+): Promise<ProvisionBusinessSignupResult> {
+  let createdTenantId: string | null = null
+
+  const signupResult = await supabase
+    .from("business_signups")
+    .select("id, company_name, owner_full_name, owner_email, slug_requested, status, provisioned_tenant_id")
+    .eq("id", input.signupId)
+    .limit(1)
+    .maybeSingle<{
+      id: string
+      company_name: string
+      owner_full_name: string
+      owner_email: string
+      slug_requested: string
+      status: BusinessSignupStatus
+      provisioned_tenant_id: string | null
+    }>()
+
+  if (signupResult.error || !signupResult.data) {
+    return { ok: false, error: "No encontramos la solicitud." }
+  }
+
+  if (signupResult.data.provisioned_tenant_id || signupResult.data.status === "provisioned") {
+    return { ok: false, error: "La solicitud ya fue provisionada." }
+  }
+
+  if (signupResult.data.status !== "approved") {
+    return { ok: false, error: "Solo las solicitudes aprobadas pueden provisionarse." }
+  }
+
+  const tenantSlug = normalizeSlug(signupResult.data.slug_requested || signupResult.data.company_name)
+  const ownerEmail = normalizeEmail(signupResult.data.owner_email)
+  const ownerFullName = signupResult.data.owner_full_name.trim()
+  const companyName = signupResult.data.company_name.trim()
+
+  const existingTenantResult = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", tenantSlug)
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (existingTenantResult.error) {
+    return { ok: false, error: existingTenantResult.error.message }
+  }
+
+  if (existingTenantResult.data) {
+    return { ok: false, error: "Ya existe un tenant con ese slug." }
+  }
+
+  const existingProfileResult = await supabase
+    .from("profiles")
+    .select("id, auth_user_id, email, full_name")
+    .ilike("email", ownerEmail)
+    .limit(1)
+    .maybeSingle<ExistingProfileRow>()
+
+  if (existingProfileResult.error) {
+    return { ok: false, error: existingProfileResult.error.message }
+  }
+
+  const accessLinkResult = await generateBusinessOwnerAccessLink(
+    supabase,
+    tenantSlug,
+    ownerEmail,
+    ownerFullName,
+    existingProfileResult.data ?? undefined
+  )
+
+  if (!accessLinkResult.ok) {
+    return { ok: false, error: accessLinkResult.error }
+  }
+
+  const profileResult = await supabase
+    .from("profiles")
+    .upsert(
+      {
+        auth_user_id: accessLinkResult.authUserId,
+        email: ownerEmail,
+        full_name: ownerFullName,
+      },
+      {
+        onConflict: "auth_user_id",
+      }
+    )
+    .select("id")
+    .single<{ id: string }>()
+
+  if (profileResult.error || !profileResult.data) {
+    return { ok: false, error: profileResult.error?.message ?? "No pudimos preparar el perfil del owner." }
+  }
+
+  const tenantInsertResult = await supabase
+    .from("tenants")
+    .insert({
+      name: companyName,
+      slug: tenantSlug,
+      status: "active",
+      storefront_enabled: true,
+    })
+    .select("id")
+    .single<{ id: string }>()
+
+  if (tenantInsertResult.error || !tenantInsertResult.data) {
+    return { ok: false, error: tenantInsertResult.error?.message ?? "No pudimos crear el tenant." }
+  }
+
+  createdTenantId = tenantInsertResult.data.id
+
+  const branchInsertResult = await supabase
+    .from("branches")
+    .insert({
+      tenant_id: tenantInsertResult.data.id,
+      name: "Principal",
+      slug: slugifyCatalogValue("Principal") || "principal",
+      is_active: true,
+    })
+    .select("id")
+    .single<{ id: string }>()
+
+  if (branchInsertResult.error || !branchInsertResult.data) {
+    if (createdTenantId) {
+      await supabase.from("tenants").delete().eq("id", createdTenantId)
+    }
+    return { ok: false, error: branchInsertResult.error?.message ?? "No pudimos crear la sucursal principal." }
+  }
+
+  const membershipInsertResult = await supabase
+    .from("tenant_memberships")
+    .insert({
+      tenant_id: tenantInsertResult.data.id,
+      profile_id: profileResult.data.id,
+      role: "owner",
+      is_active: true,
+    })
+    .select("id")
+    .single<{ id: string }>()
+
+  if (membershipInsertResult.error || !membershipInsertResult.data) {
+    if (createdTenantId) {
+      await supabase.from("tenants").delete().eq("id", createdTenantId)
+    }
+    return { ok: false, error: membershipInsertResult.error?.message ?? "No pudimos crear la membership del owner." }
+  }
+
+  const branchMembershipResult = await supabase.from("branch_memberships").insert({
+    branch_id: branchInsertResult.data.id,
+    tenant_membership_id: membershipInsertResult.data.id,
+    role: "owner",
+    is_active: true,
+  })
+
+  if (branchMembershipResult.error) {
+    if (createdTenantId) {
+      await supabase.from("tenants").delete().eq("id", createdTenantId)
+    }
+    return { ok: false, error: branchMembershipResult.error.message }
+  }
+
+  const signupUpdateResult = await supabase
+    .from("business_signups")
+    .update({
+      status: "provisioned",
+      reviewed_at: new Date().toISOString(),
+      reviewed_by_profile_id: input.provisionedByProfileId,
+      provisioned_tenant_id: tenantInsertResult.data.id,
+    })
+    .eq("id", input.signupId)
+
+  if (signupUpdateResult.error) {
+    if (createdTenantId) {
+      await supabase.from("tenants").delete().eq("id", createdTenantId)
+    }
+    return { ok: false, error: signupUpdateResult.error.message }
+  }
+
+  const emailResult = await sendBusinessOwnerProvisioningEmail({
+    email: ownerEmail,
+    fullName: ownerFullName,
+    companyName,
+    adminUrl: accessLinkResult.invitationUrl,
+  })
+
+  return {
+    ok: true,
+    tenantId: tenantInsertResult.data.id,
+    tenantSlug,
+    invitationUrl: accessLinkResult.invitationUrl,
+    delivery: emailResult.deliveredBy,
+  }
 }

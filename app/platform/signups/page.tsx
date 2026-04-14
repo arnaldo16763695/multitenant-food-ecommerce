@@ -106,7 +106,11 @@ export default async function PlatformSignupsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <PlatformSignupRowActions signupId={signup.id} status={signup.status} />
+                    <PlatformSignupRowActions
+                      signupId={signup.id}
+                      status={signup.status}
+                      provisionedTenantId={signup.provisionedTenantId}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
