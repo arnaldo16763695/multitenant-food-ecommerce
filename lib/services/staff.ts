@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { buildAdminAuthCallbackUrl, buildAdminSetupPasswordUrl } from "@/lib/auth/admin-access"
 import type {
   AdminStaffMember,
   ManageableStaffRole,
@@ -52,26 +53,6 @@ type MembershipIdentityRow = {
   id: string
   role: StaffRole
   is_active: boolean
-}
-
-function getAppUrl() {
-  const explicitAppUrl = process.env.APP_URL?.trim()
-  const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
-  const vercelPreviewUrl = process.env.VERCEL_URL?.trim()
-
-  if (explicitAppUrl) {
-    return explicitAppUrl
-  }
-
-  if (vercelProductionUrl) {
-    return `https://${vercelProductionUrl}`
-  }
-
-  if (vercelPreviewUrl) {
-    return `https://${vercelPreviewUrl}`
-  }
-
-  return "http://localhost:3000"
 }
 
 function normalizeEmail(email: string) {
@@ -203,14 +184,15 @@ async function generateStaffAccessLink(
   fullName: string,
   existingProfile?: ExistingProfileRow
 ) {
-  const redirectTo = `${getAppUrl()}/auth/admin/setup-password?next=${encodeURIComponent(`/app/${tenantSlug}/admin`)}`
+  const nextPath = `/app/${tenantSlug}/admin`
+  const redirectTo = buildAdminSetupPasswordUrl(nextPath)
 
   if (existingProfile) {
     const linkResult = await adminClient.auth.admin.generateLink({
       type: "magiclink",
       email,
       options: {
-        redirectTo: `${getAppUrl()}/app/${tenantSlug}/admin`,
+        redirectTo: buildAdminAuthCallbackUrl(nextPath),
       },
     })
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { buildAdminAuthCallbackUrl, buildAdminSetupPasswordUrl } from "@/lib/auth/admin-access"
 import { sendBusinessOwnerProvisioningEmail } from "@/lib/email/business-owner-provisioning"
 import { slugifyCatalogValue } from "@/lib/domain/catalog"
 
@@ -57,26 +58,6 @@ type ExistingProfileRow = {
   full_name: string | null
 }
 
-function getAppUrl() {
-  const explicitAppUrl = process.env.APP_URL?.trim()
-  const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()
-  const vercelPreviewUrl = process.env.VERCEL_URL?.trim()
-
-  if (explicitAppUrl) {
-    return explicitAppUrl
-  }
-
-  if (vercelProductionUrl) {
-    return `https://${vercelProductionUrl}`
-  }
-
-  if (vercelPreviewUrl) {
-    return `https://${vercelPreviewUrl}`
-  }
-
-  return "http://localhost:3000"
-}
-
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -92,14 +73,15 @@ async function generateBusinessOwnerAccessLink(
   fullName: string,
   existingProfile?: ExistingProfileRow
 ) {
-  const redirectTo = `${getAppUrl()}/auth/admin/setup-password?next=${encodeURIComponent(`/app/${tenantSlug}/admin`)}`
+  const nextPath = `/app/${tenantSlug}/admin`
+  const redirectTo = buildAdminSetupPasswordUrl(nextPath)
 
   if (existingProfile) {
     const linkResult = await adminClient.auth.admin.generateLink({
       type: "magiclink",
       email,
       options: {
-        redirectTo: `${getAppUrl()}/app/${tenantSlug}/admin`,
+        redirectTo: buildAdminAuthCallbackUrl(nextPath),
       },
     })
 
