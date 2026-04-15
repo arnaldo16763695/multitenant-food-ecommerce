@@ -34,7 +34,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Shopping bag" branchId={branchId} branchLabel={branchLabel} customerSession={customerSession} />
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Bolsa de compra" branchId={branchId} branchLabel={branchLabel} customerSession={customerSession} />
 
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
@@ -46,10 +46,10 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
               {items.length === 0 ? (
                 <div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-50/80 px-6 py-12 text-center">
                   <ShoppingBag className="mx-auto mb-4 size-8 text-stone-400" />
-                  <p className="text-lg font-semibold text-stone-950">Tu bolsa esta vacia.</p>
+                  <p className="text-lg font-semibold text-stone-950">Tu bolsa está vacía.</p>
                   <p className="mt-2 text-sm leading-7 text-stone-600">Agrega productos desde el storefront para empezar tu pedido.</p>
                   <Button asChild className={`mt-5 rounded-full ${primaryStorefrontButtonClassName}`}>
-                    <Link href={menuHref}>Volver al menu</Link>
+                    <Link href={menuHref}>Volver al menú</Link>
                   </Button>
                 </div>
               ) : (
@@ -89,7 +89,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <CardHeader>
               <CardTitle>Resumen</CardTitle>
-              <CardDescription>Base del siguiente paso: checkout, direccion y metodo de pago.</CardDescription>
+              <CardDescription>Base del siguiente paso: checkout, dirección y método de pago.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="rounded-[1.5rem] bg-stone-50/80 p-4">

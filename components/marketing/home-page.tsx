@@ -32,18 +32,18 @@ const publicFlow = [
 const platformHighlights = [
   {
     icon: Store,
-    title: "Marketplace publico",
+    title: "Marketplace público",
     description: "Una entrada general para descubrir marcas y pasar al storefront correcto.",
   },
   {
     icon: MapPinned,
     title: "Sucursal real",
-    description: "Cada link puede entrar con una branch preseleccionada para operar sin friccion.",
+    description: "Cada link puede entrar con una branch preseleccionada para operar sin fricción.",
   },
   {
     icon: ShieldCheck,
     title: "Backoffice separado",
-    description: "Admin, staff y kitchen viven fuera de la experiencia publica del cliente.",
+    description: "Admin, staff y kitchen viven fuera de la experiencia pública del cliente.",
   },
 ] as const
 
@@ -92,13 +92,13 @@ export function HomePage() {
                   Descubre tiendas, entra a la sucursal correcta y pide con contexto real.
                 </h1>
                 <p className="max-w-2xl text-base leading-8 text-stone-200 sm:text-lg">
-                  La ruta raiz ya no es una pantalla tecnica. Es la entrada publica al ecosistema: descubre marcas, abre su storefront y aterriza en la branch que realmente operara tu pedido.
+                  La ruta raíz ya no es una pantalla técnica. Es la entrada pública al ecosistema: descubre marcas, abre su storefront y aterriza en la branch que realmente operará tu pedido.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Link className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400" href="/brands">
-                  Ver tiendas publicas
+                  Ver tiendas públicas
                   <ArrowRight className="size-4" />
                 </Link>
                 <Link className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/15" href="/app/demo-brand">
@@ -123,8 +123,8 @@ export function HomePage() {
             <article className="rounded-[2rem] border border-stone-950/10 bg-white/80 p-6 shadow-[0_22px_70px_rgba(120,53,15,0.08)] backdrop-blur">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Como entra el publico</p>
-                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">Una entrada general, varios caminos utiles.</h2>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Cómo entra el público</p>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">Una entrada general, varios caminos útiles.</h2>
                 </div>
                 <div className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-800">
                   Root /
@@ -149,7 +149,7 @@ export function HomePage() {
             <article className="rounded-[2rem] border border-stone-950/10 bg-[linear-gradient(180deg,_#fff7ed_0%,_#fffdf8_100%)] p-6 shadow-[0_22px_70px_rgba(120,53,15,0.08)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Rutas publicas</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Rutas públicas</p>
                   <h2 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">Arquitectura clara para el cliente.</h2>
                 </div>
                 <Users className="size-5 text-orange-700" />
@@ -162,15 +162,15 @@ export function HomePage() {
                 </div>
                 <div className="rounded-[1.2rem] border border-stone-200 bg-white px-4 py-3">
                   <p className="font-semibold text-stone-950">`/brands`</p>
-                  <p className="mt-1 text-stone-600">Directorio publico de marcas y tiendas.</p>
+                  <p className="mt-1 text-stone-600">Directorio público de marcas y tiendas.</p>
                 </div>
                 <div className="rounded-[1.2rem] border border-stone-200 bg-white px-4 py-3">
                   <p className="font-semibold text-stone-950">`/app/[tenantSlug]`</p>
-                  <p className="mt-1 text-stone-600">Storefront publico de una marca.</p>
+                  <p className="mt-1 text-stone-600">Storefront público de una marca.</p>
                 </div>
                 <div className="rounded-[1.2rem] border border-stone-200 bg-white px-4 py-3">
                   <p className="font-semibold text-stone-950">`?branch=`</p>
-                  <p className="mt-1 text-stone-600">Entrada publica directa a una sucursal especifica.</p>
+                  <p className="mt-1 text-stone-600">Entrada pública directa a una sucursal específica.</p>
                 </div>
               </div>
             </article>
@@ -256,9 +256,9 @@ export function HomePage() {
         <section className="grid gap-6 rounded-[2.3rem] border border-stone-950/10 bg-white/75 p-6 shadow-[0_22px_70px_rgba(120,53,15,0.08)] backdrop-blur lg:grid-cols-[0.9fr_1.1fr] lg:p-8">
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Para negocios</p>
-            <h2 className="text-3xl font-semibold tracking-tight text-stone-950">La parte publica ya conversa con la operacion interna.</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-stone-950">La parte pública ya conversa con la operación interna.</h2>
             <p className="text-base leading-7 text-stone-600">
-              Un cliente entra por marketplace o link directo, cae en una sucursal concreta y esa decision ya viaja hasta admin y kitchen. La experiencia publica deja de estar separada de la realidad operativa.
+              Un cliente entra por marketplace o link directo, cae en una sucursal concreta y esa decisión ya viaja hasta admin y kitchen. La experiencia pública deja de estar separada de la realidad operativa.
             </p>
           </div>
 
@@ -266,17 +266,17 @@ export function HomePage() {
             <article className="rounded-[1.4rem] bg-stone-50 p-5">
               <Building2 className="mb-3 size-5 text-orange-700" />
               <p className="font-semibold text-stone-950">Admin</p>
-              <p className="mt-2 text-sm leading-6 text-stone-600">Control de pagos, sucursales, staff y links publicos por branch.</p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">Control de pagos, sucursales, staff y links públicos por branch.</p>
             </article>
             <article className="rounded-[1.4rem] bg-stone-50 p-5">
               <Users className="mb-3 size-5 text-orange-700" />
               <p className="font-semibold text-stone-950">Staff</p>
-              <p className="mt-2 text-sm leading-6 text-stone-600">Roles distintos para manager, branch manager y preparer segun la operacion.</p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">Roles distintos para manager, branch manager y preparer según la operación.</p>
             </article>
             <article className="rounded-[1.4rem] bg-stone-50 p-5">
               <MapPinned className="mb-3 size-5 text-orange-700" />
               <p className="font-semibold text-stone-950">Sucursal</p>
-              <p className="mt-2 text-sm leading-6 text-stone-600">Precios y disponibilidad viven en la branch activa, no en una demo generica.</p>
+              <p className="mt-2 text-sm leading-6 text-stone-600">Precios y disponibilidad viven en la branch activa, no en una demo genérica.</p>
             </article>
           </div>
         </section>

@@ -56,6 +56,49 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - For changes that affect architecture, data flow, auth, tenancy, or ordering logic, understand the surrounding code first.
 - If the repo lacks an established pattern, choose a clear convention and apply it consistently.
 
+## Specification-Driven Development (SDD)
+
+- This project follows `Specification-Driven Development` for non-trivial work. Do not jump from request to code when the change affects product behavior, data shape, auth, tenancy, storefront logic, staff workflows, or order lifecycle.
+- Treat the specification as the source of truth. Code should implement a clearly stated behavior, not an inferred or improvised interpretation.
+- For substantial work, define the specification first, even if only briefly in the working notes or response. Keep it concrete and testable.
+
+### Minimum Specification Checklist
+
+- `Problem`: What is broken, missing, or changing?
+- `Scope`: What surfaces are affected? (`admin`, `storefront`, `kitchen`, `platform`, `Supabase`, email flows, etc.)
+- `Actors`: Which roles are involved? (`owner`, `manager`, `branch_manager`, `cashier`, `preparer`, `customer`, platform admin)
+- `Business Rules`: What must always be true after the change?
+- `Data Impact`: Which tables, columns, policies, triggers, caches, or derived views are affected?
+- `UI/UX Impact`: What should the user now see, be allowed to do, or be prevented from doing?
+- `Failure Modes`: What should happen when the action fails, is unauthorized, or data is incomplete?
+- `Verification`: What concrete checks prove the specification was implemented correctly?
+
+### SDD Expectations For This Repo
+
+- For multi-tenant features, specify tenant boundaries explicitly. Never rely on "current context" without stating whether behavior is tenant-wide, branch-specific, or global platform behavior.
+- For branch-aware features, specify fallback rules explicitly. Example: "branch hero overrides tenant hero; if absent, fallback to tenant hero."
+- For order changes, specify state transitions explicitly. Example: which status can move to which next status, who can trigger it, and where it should become visible.
+- For permissions work, specify both backend enforcement and UI visibility. A role restriction is incomplete if only the UI is hidden but the action remains callable.
+- For storefront work, specify whether behavior is static, request-time, cached, or realtime. If caching exists, specify invalidation expectations.
+- For database changes, inspect the latest migrations and remote schema snapshot before finalizing the spec. Do not write schema-affecting code from memory.
+
+### Implementation Order Under SDD
+
+- Prefer this order when feasible:
+- `1.` Define or restate the target behavior.
+- `2.` Inspect the existing schema and surrounding code.
+- `3.` Identify invariants, permissions, and fallback rules.
+- `4.` Apply schema or backend changes first when the frontend depends on them.
+- `5.` Implement UI only after the data contract is clear.
+- `6.` Verify both the happy path and the most likely failure paths.
+
+### What To Avoid
+
+- Do not implement behavior first and rationalize the spec afterward.
+- Do not hide ambiguity behind generic code. If a workflow has hidden consequences, surface them in the spec.
+- Do not make silent cross-tenant or cross-branch assumptions.
+- Do not treat "looks correct in the UI" as sufficient verification for business-critical flows.
+
 ## Imports
 
 - Prefer `@/` imports for internal modules instead of deep relative paths when practical.
@@ -119,6 +162,16 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Do not add filler comments that merely restate the code.
 - If a block needs too much explanation, prefer refactoring first and then add a short clarifying comment if still needed.
 - Preserve useful existing comments unless they are outdated.
+
+## Spanish UI Copy
+
+- When the user-facing UI text is in Spanish, write correct Spanish. Do not treat accents, punctuation, and grammar as optional.
+- Preserve proper accents in common words such as `catálogo`, `categoría`, `configuración`, `sesión`, `sucursal`, `público`, `rápido`, `válido`, `menú`, and similar.
+- Use natural product Spanish for labels, buttons, descriptions, errors, and empty states. Avoid machine-translated or awkward phrasing.
+- Keep the register consistent across a surface. Do not mix formal and informal Spanish in the same flow unless there is a product reason.
+- Prefer concise, operational UI copy over overly literal translations.
+- Before finalizing a UI change with Spanish copy, quickly review visible strings for missing accents, broken agreement, duplicated words, and unnatural phrasing.
+- If nearby UI already contains incorrect Spanish, do not copy the mistake forward. Fix it when it is in scope.
 
 ## Code Organization
 

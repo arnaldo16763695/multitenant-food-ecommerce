@@ -135,7 +135,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Links publicos por sucursal</CardTitle>
+          <CardTitle>Links públicos por sucursal</CardTitle>
           <CardDescription>
             Comparte estos enlaces en QR, Google Maps, Instagram o WhatsApp para llevar al cliente directo al storefront correcto.
           </CardDescription>
@@ -172,7 +172,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
 
                 <div className="space-y-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">URL publica</p>
+                    <p className="text-sm font-semibold text-foreground">URL pública</p>
                     <p className="mt-1 break-all text-sm text-muted-foreground">{storefrontUrl}</p>
                   </div>
                   <div>
@@ -202,8 +202,8 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
             <DialogTitle>Hero por sucursal</DialogTitle>
             <DialogDescription>
               {selectedBranch
-                ? `Configura la portada publica de ${selectedBranch.name}. Si la dejas vacia, el storefront usara el hero general del tenant.`
-                : "Configura la portada publica de esta sucursal."}
+                ? `Configura la portada pública de ${selectedBranch.name}. Si la dejas vacía, el storefront usará el hero general del tenant.`
+                : "Configura la portada pública de esta sucursal."}
             </DialogDescription>
           </DialogHeader>
 

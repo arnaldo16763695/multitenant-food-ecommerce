@@ -139,10 +139,10 @@ export function TenantShell({
         <section className="space-y-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menu</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-700">Menú</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">Nuestros productos</h2>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-stone-600">
-                Explora el catalogo completo, filtra por categorias y arma tu pedido sin perder de vista la sucursal activa.
+                Explora el catálogo completo, filtra por categorías y arma tu pedido sin perder de vista la sucursal activa.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
@@ -155,7 +155,7 @@ export function TenantShell({
               {!customerSession ? (
                 <>
                   <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/login`}>
-                    Iniciar sesion
+                    Iniciar sesión
                   </Link>
                   <Link className="rounded-full border border-stone-200 bg-white px-4 py-2 font-semibold text-stone-800 transition hover:border-stone-950" href={`/app/${tenantSlug}/account/register`}>
                     Registrarme
@@ -170,10 +170,10 @@ export function TenantShell({
               <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
             ) : (
               <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menu vacio</p>
-                <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aun no tiene productos publicados.</h3>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menú vacío</p>
+                <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aún no tiene productos publicados.</h3>
                 <p className="mt-3 text-sm leading-7 text-stone-600">
-                  Vuelve mas tarde o prueba otra sucursal si esta marca opera con multiples ubicaciones.
+                  Vuelve más tarde o prueba otra sucursal si esta marca opera con múltiples ubicaciones.
                 </p>
               </div>
             )
