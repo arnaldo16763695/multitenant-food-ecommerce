@@ -21,13 +21,14 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
 
   const tenantResult = await supabase
     .from("tenants")
-    .select("name, storefront_enabled, hero_image_url")
+    .select("name, storefront_enabled, hero_image_url, logo_image_url")
     .eq("id", access.membership.tenantId)
     .limit(1)
     .maybeSingle<{
       name: string
       storefront_enabled: boolean
       hero_image_url: string | null
+      logo_image_url: string | null
     }>()
 
   if (tenantResult.error || !tenantResult.data) {
@@ -45,6 +46,7 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
         tenantName={tenantResult.data.name}
         initialStorefrontEnabled={tenantResult.data.storefront_enabled}
         initialHeroImageUrl={tenantResult.data.hero_image_url}
+        initialLogoImageUrl={tenantResult.data.logo_image_url}
       />
 
       <section className="grid gap-4 lg:grid-cols-2">

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ChevronDown, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -21,12 +22,13 @@ import type { CustomerAccountContext } from "@/lib/auth/customer"
 type StorefrontHeaderProps = {
   readonly tenantSlug: string
   readonly brandName: string
+  readonly brandLogoImageUrl?: string | null
   readonly branchId: string | null
   readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
 }
 
-export function StorefrontHeader({ tenantSlug, brandName, branchId, branchLabel, customerSession }: StorefrontHeaderProps) {
+export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, branchId, branchLabel, customerSession }: StorefrontHeaderProps) {
   const router = useRouter()
   const liveCartItemsCount = useShoppingBagCount(tenantSlug, branchId ?? "")
   const [isBagAnimating, setIsBagAnimating] = React.useState(false)
@@ -71,9 +73,7 @@ export function StorefrontHeader({ tenantSlug, brandName, branchId, branchLabel,
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <Link className="inline-flex items-center gap-3" href={homeHref}>
-              <div className="flex size-11 items-center justify-center rounded-[1.1rem] bg-stone-950 text-sm font-semibold text-white">
-                {brandName.slice(0, 2).toUpperCase()}
-              </div>
+              <TenantBrandMark name={brandName} logoImageUrl={brandLogoImageUrl} size="md" />
               <div>
                 <p className="text-sm font-semibold text-stone-950">{brandName}</p>
                 <div className="mt-1 flex items-center gap-2 text-xs text-stone-500">

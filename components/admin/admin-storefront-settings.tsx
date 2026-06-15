@@ -5,6 +5,7 @@ import { ImagePlus, LoaderCircle, Save, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { updateStorefrontBrandingAction } from "@/app/app/[tenantSlug]/admin/settings/actions"
+import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
 import { uploadCatalogMedia } from "@/lib/catalog/upload-client"
 import { getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
@@ -18,6 +19,7 @@ type AdminStorefrontSettingsProps = {
   readonly tenantName: string
   readonly initialStorefrontEnabled: boolean
   readonly initialHeroImageUrl: string | null
+  readonly initialLogoImageUrl: string | null
 }
 
 export function AdminStorefrontSettings({
@@ -25,12 +27,16 @@ export function AdminStorefrontSettings({
   tenantName,
   initialStorefrontEnabled,
   initialHeroImageUrl,
+  initialLogoImageUrl,
 }: AdminStorefrontSettingsProps) {
   const router = useRouter()
   const [storefrontEnabled, setStorefrontEnabled] = React.useState(initialStorefrontEnabled)
-  const [heroImageUrl, setHeroImageUrl] = React.useState(initialHeroImageUrl ?? "")
   const [selectedHeroFile, setSelectedHeroFile] = React.useState<File | null>(null)
+  const [heroImageUrl, setHeroImageUrl] = React.useState(initialHeroImageUrl ?? "")
   const [heroPreviewUrl, setHeroPreviewUrl] = React.useState(initialHeroImageUrl)
+  const [selectedLogoFile, setSelectedLogoFile] = React.useState<File | null>(null)
+  const [logoImageUrl, setLogoImageUrl] = React.useState(initialLogoImageUrl ?? "")
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState(initialLogoImageUrl)
   const [errorMessage, setErrorMessage] = React.useState("")
   const [successMessage, setSuccessMessage] = React.useState("")
   const [isSaving, startSaving] = React.useTransition()
@@ -49,10 +55,32 @@ export function AdminStorefrontSettings({
     setHeroPreviewUrl(URL.createObjectURL(file))
   }
 
+  function handleLogoFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+    setSelectedLogoFile(file)
+    setErrorMessage("")
+    setSuccessMessage("")
+
+    if (!file) {
+      setLogoPreviewUrl(logoImageUrl || null)
+      return
+    }
+
+    setLogoPreviewUrl(URL.createObjectURL(file))
+  }
+
   function clearHeroImage() {
     setSelectedHeroFile(null)
     setHeroImageUrl("")
     setHeroPreviewUrl(null)
+    setErrorMessage("")
+    setSuccessMessage("")
+  }
+
+  function clearLogoImage() {
+    setSelectedLogoFile(null)
+    setLogoImageUrl("")
+    setLogoPreviewUrl(null)
     setErrorMessage("")
     setSuccessMessage("")
   }
@@ -64,6 +92,7 @@ export function AdminStorefrontSettings({
     startSaving(async () => {
       const formData = new FormData()
       let nextHeroImageUrl = heroImageUrl.trim()
+      let nextLogoImageUrl = logoImageUrl.trim()
 
       if (selectedHeroFile) {
         const uploadResult = await uploadCatalogMedia({
@@ -81,19 +110,39 @@ export function AdminStorefrontSettings({
         nextHeroImageUrl = uploadResult.publicUrl ?? ""
       }
 
+      if (selectedLogoFile) {
+        const uploadResult = await uploadCatalogMedia({
+          tenantSlug,
+          entityType: "tenant-logo",
+          file: selectedLogoFile,
+          previousPath: getCatalogMediaPathFromUrl(logoImageUrl) ?? undefined,
+        })
+
+        if (!uploadResult.ok) {
+          setErrorMessage(uploadResult.error)
+          return
+        }
+
+        nextLogoImageUrl = uploadResult.publicUrl ?? ""
+      }
+
       formData.set("storefrontEnabled", storefrontEnabled ? "true" : "false")
       formData.set("heroImageUrl", nextHeroImageUrl)
+      formData.set("logoImageUrl", nextLogoImageUrl)
 
       const result = await updateStorefrontBrandingAction(tenantSlug, formData)
 
       if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos guardar la configuracion del storefront.")
+        setErrorMessage(result.error ?? "No pudimos guardar la configuración del storefront.")
         return
       }
 
       setHeroImageUrl(nextHeroImageUrl)
       setHeroPreviewUrl(nextHeroImageUrl || null)
       setSelectedHeroFile(null)
+      setLogoImageUrl(nextLogoImageUrl)
+      setLogoPreviewUrl(nextLogoImageUrl || null)
+      setSelectedLogoFile(null)
       setSuccessMessage("Storefront actualizado.")
       router.refresh()
     })
@@ -105,40 +154,58 @@ export function AdminStorefrontSettings({
         <CardHeader>
           <CardTitle>Branding del storefront</CardTitle>
           <CardDescription>
-            Controla si la tienda publica esta visible y define la imagen hero principal que veran tus clientes al entrar a la marca.
+            Controla si la tienda pública está visible y define el hero principal y el logo que verán tus clientes.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
           <div className="flex items-center justify-between rounded-[1.25rem] border border-border bg-muted/30 px-4 py-3">
             <div>
-              <p className="text-sm font-semibold text-card-foreground">Storefront publico</p>
-              <p className="text-sm text-muted-foreground">Activa o pausa la entrada publica del tenant sin tocar el admin interno.</p>
+              <p className="text-sm font-semibold text-card-foreground">Storefront público</p>
+              <p className="text-sm text-muted-foreground">Activa o pausa la entrada pública del tenant sin tocar el admin interno.</p>
             </div>
             <Switch checked={storefrontEnabled} onCheckedChange={setStorefrontEnabled} />
           </div>
 
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium text-card-foreground">URL de imagen hero</span>
-            <Input
-              value={heroImageUrl}
-              onChange={(event) => {
-                const nextValue = event.target.value
-                setHeroImageUrl(nextValue)
-                if (!selectedHeroFile) {
-                  setHeroPreviewUrl(nextValue || null)
-                }
-                setErrorMessage("")
-                setSuccessMessage("")
-              }}
-              placeholder="https://..."
-            />
-            <span className="text-xs leading-5 text-muted-foreground">Puedes pegar una URL externa o subir una imagen nueva para alojarla en Supabase Storage.</span>
-          </label>
+          <div className="grid gap-3 rounded-[1.25rem] border border-border bg-muted/20 p-4">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Logo de marca</p>
+              <p className="text-sm text-muted-foreground">Se usará en cabeceras y superficies públicas de la marca.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <TenantBrandMark name={tenantName} logoImageUrl={logoPreviewUrl} size="lg" />
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium text-card-foreground">Recomendado</p>
+                <p>PNG o WEBP con fondo transparente, en formato cuadrado u horizontal.</p>
+              </div>
+            </div>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-card-foreground">Subir logo</span>
+              <Input accept="image/png,image/jpeg,image/webp" onChange={handleLogoFileChange} type="file" />
+            </label>
+            <div>
+              <Button className="rounded-xl" disabled={isSaving || (!logoImageUrl && !selectedLogoFile)} onClick={clearLogoImage} type="button" variant="outline">
+                <Trash2 />
+                Quitar logo
+              </Button>
+            </div>
+          </div>
 
-          <label className="grid gap-2 text-sm">
-            <span className="font-medium text-card-foreground">Subir nueva imagen</span>
-            <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
-          </label>
+          <div className="grid gap-3 rounded-[1.25rem] border border-border bg-muted/20 p-4">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Hero principal</p>
+              <p className="text-sm text-muted-foreground">Esta imagen se guardará en Supabase Storage y se usará como portada general de la marca.</p>
+            </div>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-card-foreground">Subir nueva imagen</span>
+              <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
+            </label>
+            <div>
+              <Button className="rounded-xl" disabled={isSaving || (!heroImageUrl && !selectedHeroFile)} onClick={clearHeroImage} type="button" variant="outline">
+                <Trash2 />
+                Limpiar hero
+              </Button>
+            </div>
+          </div>
 
           {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
           {successMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
@@ -148,10 +215,6 @@ export function AdminStorefrontSettings({
               {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
               Guardar storefront
             </Button>
-            <Button className="rounded-xl" disabled={isSaving || (!heroImageUrl && !selectedHeroFile)} onClick={clearHeroImage} type="button" variant="outline">
-              <Trash2 />
-              Limpiar hero
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -159,7 +222,7 @@ export function AdminStorefrontSettings({
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Preview hero</CardTitle>
-          <CardDescription>Vista rapida del primer impacto visual que recibira el cliente en el storefront publico.</CardDescription>
+          <CardDescription>Vista rápida del primer impacto visual que recibirá el cliente en el storefront público.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div
@@ -177,10 +240,13 @@ export function AdminStorefrontSettings({
                 <span className="rounded-full border border-white/15 bg-black/20 px-3 py-1.5">{storefrontEnabled ? "Activo" : "Oculto"}</span>
               </div>
               <div className="space-y-3">
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-200">{tenantName}</p>
+                <div className="flex items-center gap-3">
+                  <TenantBrandMark name={tenantName} logoImageUrl={logoPreviewUrl} size="md" className="border-white/15 bg-white" />
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-200">{tenantName}</p>
+                </div>
                 <h3 className="max-w-xl text-4xl font-semibold tracking-tight">Hero comercial con imagen propia de la marca.</h3>
                 <p className="max-w-lg text-sm leading-7 text-stone-200">
-                  Este bloque es el que posiciona visualmente la sucursal y prepara el contexto antes de mostrar el menu.
+                  Este bloque es el que posiciona visualmente la sucursal y prepara el contexto antes de mostrar el menú.
                 </p>
               </div>
             </div>
@@ -193,7 +259,7 @@ export function AdminStorefrontSettings({
                 Estado actual:
                 {" "}
                 <span className="font-semibold text-card-foreground">
-                  {heroPreviewUrl ? "el storefront usara una imagen hero personalizada" : "el storefront usara el gradiente por defecto"}
+                  {heroPreviewUrl ? "el storefront usará una imagen hero personalizada" : "el storefront usará el gradiente por defecto"}
                 </span>
                 .
               </p>

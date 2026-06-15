@@ -29,6 +29,7 @@ type TenantShellProps = {
   readonly etaMinutes?: number
   readonly shareUrl?: string
   readonly heroImageUrl?: string | null
+  readonly logoImageUrl?: string | null
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
   readonly menu?: readonly {
     id: string
@@ -53,6 +54,7 @@ export function TenantShell({
   menu,
   shareUrl: _shareUrl,
   heroImageUrl,
+  logoImageUrl,
   customerSession,
 }: TenantShellProps) {
   void _shareUrl
@@ -70,6 +72,7 @@ export function TenantShell({
         <StorefrontHeader
           tenantSlug={tenantSlug}
           brandName={title}
+          brandLogoImageUrl={logoImageUrl}
           branchId={requiresBranchSelection ? null : (activeBranchId ?? null)}
           branchLabel={requiresBranchSelection ? "Selecciona sucursal" : publicBranchLabel}
           customerSession={customerSession}

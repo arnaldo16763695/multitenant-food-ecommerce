@@ -10,6 +10,7 @@ import {
   buildCategoryImagePath,
   buildProductPrimaryImagePath,
   buildTenantHeroImagePath,
+  buildTenantLogoImagePath,
   getCatalogMediaBucket,
   getCatalogMediaPublicUrl,
   getFileExtension,
@@ -21,12 +22,12 @@ type CatalogMediaRouteContext = {
   }>
 }
 
-type CatalogMediaEntityType = "category" | "product" | "tenant-hero" | "branch-hero"
+type CatalogMediaEntityType = "category" | "product" | "tenant-hero" | "tenant-logo" | "branch-hero"
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
 function isCatalogMediaEntityType(value: string): value is CatalogMediaEntityType {
-  return value === "category" || value === "product" || value === "tenant-hero" || value === "branch-hero"
+  return value === "category" || value === "product" || value === "tenant-hero" || value === "tenant-logo" || value === "branch-hero"
 }
 
 function buildCatalogMediaPath(tenantId: string, entityType: CatalogMediaEntityType, entityId: string, fileName: string) {
@@ -36,6 +37,10 @@ function buildCatalogMediaPath(tenantId: string, entityType: CatalogMediaEntityT
 
   if (entityType === "tenant-hero") {
     return buildTenantHeroImagePath(tenantId, fileName)
+  }
+
+  if (entityType === "tenant-logo") {
+    return buildTenantLogoImagePath(tenantId, fileName)
   }
 
   if (entityType === "branch-hero") {

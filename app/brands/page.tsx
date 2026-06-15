@@ -2,6 +2,7 @@ import Link from "next/link"
 import { DM_Serif_Display, Manrope } from "next/font/google"
 import { ArrowRight, Clock3, MapPinned, Search, SlidersHorizontal, Sparkles, Store } from "lucide-react"
 
+import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
 import { getPublicBrandsDirectory } from "@/lib/data/public-brands"
 
 const displayFont = DM_Serif_Display({
@@ -153,9 +154,12 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
                 <article key={brand.id} className="rounded-[1.35rem] border border-white/10 bg-white/5 p-4">
                   <div className={`mb-4 h-2 rounded-full bg-gradient-to-r ${brand.accent}`} />
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="flex items-start gap-3">
+                      <TenantBrandMark name={brand.name} logoImageUrl={brand.logoImageUrl} size="md" className="border-white/10 bg-white" />
+                      <div>
                       <p className="text-xs uppercase tracking-[0.24em] text-stone-400">{brand.cuisine}</p>
                       <h2 className={`${displayFont.className} mt-1 text-2xl font-normal`}>{brand.name}</h2>
+                      </div>
                     </div>
                     <div className="rounded-full bg-black/20 px-3 py-1 text-sm font-semibold text-orange-200">{brand.etaMinutes} min</div>
                   </div>
@@ -204,9 +208,12 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
                 <div className={`absolute inset-x-6 top-0 h-2 rounded-b-full bg-gradient-to-r ${brand.accent}`} />
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="flex items-start gap-3">
+                      <TenantBrandMark name={brand.name} logoImageUrl={brand.logoImageUrl} size="lg" />
+                      <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-stone-500">#{index + 1} en el directorio</p>
                       <h3 className={`${displayFont.className} mt-3 text-4xl leading-none font-normal text-stone-950`}>{brand.name}</h3>
+                      </div>
                     </div>
                     <div className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-right">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-500">ETA</p>

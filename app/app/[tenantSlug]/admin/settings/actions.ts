@@ -13,6 +13,7 @@ type UpdateStorefrontBrandingResult = {
 }
 
 function revalidateSettingsPaths(tenantSlug: string) {
+  revalidatePath(`/`)
   revalidatePath(`/app/${tenantSlug}`)
   revalidatePath(`/app/${tenantSlug}/admin`)
   revalidatePath(`/app/${tenantSlug}/admin/settings`)
@@ -34,11 +35,12 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
 
   const currentTenantResult = await supabase
     .from("tenants")
-    .select("hero_image_url")
+    .select("hero_image_url, logo_image_url")
     .eq("id", access.membership.tenantId)
     .limit(1)
     .maybeSingle<{
       hero_image_url: string | null
+      logo_image_url: string | null
     }>()
 
   if (currentTenantResult.error || !currentTenantResult.data) {
@@ -47,24 +49,14 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
 
   const storefrontEnabled = String(formData.get("storefrontEnabled") ?? "true") === "true"
   const heroImageUrl = String(formData.get("heroImageUrl") ?? "").trim()
-
-  if (heroImageUrl) {
-    try {
-      const parsedUrl = new URL(heroImageUrl)
-
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        return { ok: false, error: "La imagen hero debe usar una URL http o https valida." }
-      }
-    } catch {
-      return { ok: false, error: "La imagen hero debe usar una URL valida." }
-    }
-  }
+  const logoImageUrl = String(formData.get("logoImageUrl") ?? "").trim()
 
   const updateResult = await supabase
     .from("tenants")
     .update({
       storefront_enabled: storefrontEnabled,
       hero_image_url: heroImageUrl || null,
+      logo_image_url: logoImageUrl || null,
     })
     .eq("id", access.membership.tenantId)
     .select("id")
@@ -77,12 +69,17 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
 
   const currentHeroPath = getCatalogMediaPathFromUrl(currentTenantResult.data.hero_image_url)
   const nextHeroPath = getCatalogMediaPathFromUrl(heroImageUrl)
+  const currentLogoPath = getCatalogMediaPathFromUrl(currentTenantResult.data.logo_image_url)
+  const nextLogoPath = getCatalogMediaPathFromUrl(logoImageUrl)
 
-  if (currentHeroPath && currentHeroPath !== nextHeroPath) {
+  const stalePaths = [currentHeroPath, currentLogoPath].filter((path): path is string => Boolean(path))
+    .filter((path) => path !== nextHeroPath && path !== nextLogoPath)
+
+  if (stalePaths.length) {
     const adminClient = createSupabaseAdminClient()
 
     if (adminClient) {
-      await adminClient.storage.from(getCatalogMediaBucket()).remove([currentHeroPath])
+      await adminClient.storage.from(getCatalogMediaBucket()).remove(stalePaths)
     }
   }
 

@@ -20,6 +20,10 @@ export function buildTenantHeroImagePath(tenantId: string, fileName: string) {
   return `tenants/${tenantId}/branding/hero/${fileName}`
 }
 
+export function buildTenantLogoImagePath(tenantId: string, fileName: string) {
+  return `tenants/${tenantId}/branding/logo/${fileName}`
+}
+
 export function buildBranchHeroImagePath(tenantId: string, branchId: string, fileName: string) {
   return `tenants/${tenantId}/branches/${branchId}/hero/${fileName}`
 }

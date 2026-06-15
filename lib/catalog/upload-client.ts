@@ -1,4 +1,4 @@
-export type CatalogMediaEntityType = "category" | "product" | "tenant-hero" | "branch-hero"
+export type CatalogMediaEntityType = "category" | "product" | "tenant-hero" | "tenant-logo" | "branch-hero"
 
 type UploadCatalogMediaInput = {
   readonly tenantSlug: string

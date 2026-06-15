@@ -11,6 +11,7 @@ type BrandDirectoryItem = {
   readonly etaMinutes: number
   readonly accent: string
   readonly heroImageUrl: string | null
+  readonly logoImageUrl: string | null
   readonly storefrontHref: string
   readonly activeBranchCount: number
 }
@@ -22,6 +23,7 @@ type TenantRow = {
   custom_domain: string | null
   storefront_enabled: boolean
   hero_image_url: string | null
+  logo_image_url: string | null
 }
 
 type BranchRow = {
@@ -56,7 +58,7 @@ export async function getPublicBrandsDirectory(): Promise<readonly BrandDirector
   const [tenantsResult, branchesResult] = await Promise.all([
     supabase
       .from("tenants")
-      .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
+      .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url, logo_image_url")
       .eq("storefront_enabled", true)
       .order("name", { ascending: true })
       .returns<TenantRow[]>(),
@@ -108,6 +110,7 @@ export async function getPublicBrandsDirectory(): Promise<readonly BrandDirector
       etaMinutes: featuredMeta?.etaMinutes ?? 20,
       accent: featuredMeta?.accent ?? buildAccent(index),
       heroImageUrl: tenant.hero_image_url ?? featuredMeta?.heroImageUrl ?? null,
+      logoImageUrl: tenant.logo_image_url,
       storefrontHref: firstActiveBranch ? `/app/${tenant.slug}?branch=${firstActiveBranch.id}` : `/app/${tenant.slug}`,
       activeBranchCount: tenantBranches.length,
     } satisfies BrandDirectoryItem

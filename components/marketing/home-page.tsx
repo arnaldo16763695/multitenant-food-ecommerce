@@ -2,6 +2,7 @@ import Link from "next/link"
 import { DM_Serif_Display, Manrope } from "next/font/google"
 import { ArrowRight, Building2, ExternalLink, MapPinned, ShieldCheck, Store, TimerReset, Users } from "lucide-react"
 
+import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
 import { featuredBrands, platformName } from "@/lib/config/platform"
 
 const displayFont = DM_Serif_Display({
@@ -47,7 +48,33 @@ const platformHighlights = [
   },
 ] as const
 
-export function HomePage() {
+type HomePageBrand = {
+  readonly id: string
+  readonly name: string
+  readonly slug: string
+  readonly cuisine: string
+  readonly headline: string
+  readonly nearestBranch: string
+  readonly etaMinutes: number
+  readonly accent: string
+  readonly storefrontHref: string
+  readonly logoImageUrl?: string | null
+}
+
+type HomePageProps = {
+  readonly featuredDirectoryBrands?: readonly HomePageBrand[]
+}
+
+export function HomePage({ featuredDirectoryBrands = [] }: HomePageProps) {
+  const heroBrands =
+    featuredDirectoryBrands.length > 0
+      ? featuredDirectoryBrands
+      : featuredBrands.map((brand) => ({
+          ...brand,
+          storefrontHref: `/app/${brand.slug}`,
+          logoImageUrl: null,
+        }))
+
   return (
     <main className={`${bodyFont.className} relative isolate flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,_#f6efe4_0%,_#f4eadc_26%,_#f8f5ef_60%,_#fcfbf8_100%)] text-stone-950`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(180,83,9,0.18),_transparent_28%),radial-gradient(circle_at_85%_18%,_rgba(217,119,6,0.18),_transparent_24%),linear-gradient(rgba(120,53,15,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.05)_1px,transparent_1px)] [background-size:auto,auto,44px_44px,44px_44px]" />
@@ -190,7 +217,7 @@ export function HomePage() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {featuredBrands.map((brand, index) => (
+            {heroBrands.map((brand, index) => (
               <article
                 key={brand.id}
                 className="group relative overflow-hidden rounded-[2rem] border border-stone-950/10 bg-white/80 p-6 shadow-[0_22px_70px_rgba(120,53,15,0.08)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_28px_90px_rgba(120,53,15,0.14)]"
@@ -198,9 +225,12 @@ export function HomePage() {
                 <div className={`absolute inset-x-6 top-0 h-2 rounded-b-full bg-gradient-to-r ${brand.accent}`} />
                 <div className="relative flex h-full flex-col">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">#{index + 1} tienda destacada</p>
-                      <h3 className={`${displayFont.className} mt-3 text-4xl leading-none font-normal text-stone-950`}>{brand.name}</h3>
+                    <div className="flex items-start gap-3">
+                      <TenantBrandMark name={brand.name} logoImageUrl={brand.logoImageUrl} size="lg" />
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">#{index + 1} tienda destacada</p>
+                        <h3 className={`${displayFont.className} mt-3 text-4xl leading-none font-normal text-stone-950`}>{brand.name}</h3>
+                      </div>
                     </div>
                     <div className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-2 text-right">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-500">ETA</p>
@@ -235,14 +265,14 @@ export function HomePage() {
                   <div className="mt-6 flex flex-wrap gap-2">
                     <Link
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition group-hover:bg-orange-600"
-                      href={`/app/${brand.slug}`}
+                      href={brand.storefrontHref}
                     >
                       Ver tienda
                       <ArrowRight className="size-4" />
                     </Link>
                     <Link
                       className="inline-flex items-center justify-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
-                      href={`/brands`}
+                      href="/brands"
                     >
                       Comparar
                     </Link>

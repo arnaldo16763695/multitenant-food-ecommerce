@@ -7,6 +7,7 @@ type StorefrontTenant = {
   readonly customDomain: string | null
   readonly storefrontEnabled: boolean
   readonly heroImageUrl: string | null
+  readonly logoImageUrl: string | null
 }
 
 type StorefrontBranch = {
@@ -40,6 +41,7 @@ type TenantRow = {
   custom_domain: string | null
   storefront_enabled: boolean
   hero_image_url: string | null
+  logo_image_url: string | null
 }
 
 type BranchRow = {
@@ -112,7 +114,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
 
   const tenantResult = await supabase
     .from("tenants")
-    .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url")
+    .select("id, name, slug, custom_domain, storefront_enabled, hero_image_url, logo_image_url")
     .eq("slug", tenantSlug)
     .limit(1)
     .maybeSingle<TenantRow>()
@@ -128,6 +130,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     customDomain: tenantResult.data.custom_domain,
     storefrontEnabled: tenantResult.data.storefront_enabled,
     heroImageUrl: tenantResult.data.hero_image_url,
+    logoImageUrl: tenantResult.data.logo_image_url,
   }
 
   const [branchesResult, categoriesResult, productsResult] = await Promise.all([

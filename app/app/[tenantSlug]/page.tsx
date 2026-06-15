@@ -35,6 +35,7 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       branches={storefront.branches}
       etaMinutes={storefront.etaMinutes}
       heroImageUrl={storefront.activeBranch?.heroImageUrl ?? storefront.tenant.heroImageUrl}
+      logoImageUrl={storefront.tenant.logoImageUrl}
       customerSession={customerContext}
       menu={storefront.menu}
       shareUrl={storefront.shareUrl}
