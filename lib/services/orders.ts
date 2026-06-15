@@ -20,8 +20,8 @@ type CategoryRow = {
   id: string
   name: string
 }
-type OrderRow = {
-  id: string
+type AtomicOrderInsertRow = {
+  order_id: string
   order_number: number
 }
 
@@ -175,7 +175,7 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   }
 
   if (products.some((product) => product.status !== "active")) {
-    return { ok: false, error: "Uno o mÃ¡s productos ya no estÃ¡n disponibles para comprar." }
+    return { ok: false, error: "Uno o más productos ya no están disponibles para comprar." }
   }
 
   const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
@@ -201,11 +201,13 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
 
-  if (input.items.some((item) => {
-    const branchOverride = branchOverrideMap.get(item.id)
-    return branchOverride ? branchOverride.availability_status !== "available" : false
-  })) {
-    return { ok: false, error: "Uno o mÃ¡s productos ya no estÃ¡n disponibles en esta sucursal." }
+  if (
+    input.items.some((item) => {
+      const branchOverride = branchOverrideMap.get(item.id)
+      return branchOverride ? branchOverride.availability_status !== "available" : false
+    })
+  ) {
+    return { ok: false, error: "Uno o más productos ya no están disponibles en esta sucursal." }
   }
 
   const orderItemsPayload = input.items.map((item) => {
@@ -231,60 +233,27 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   const subtotal = orderItemsPayload.reduce((total, item) => total + item.line_total, 0)
 
   const orderResult = await supabase
-    .from("orders")
-    .insert({
-      tenant_id: tenantResult.data.id,
-      branch_id: input.branchId,
-      customer_id: input.customerId ?? null,
-      channel: "web",
-      fulfillment_type: input.fulfillmentType,
-      status: "pending_payment",
-      payment_status: "pending",
-      customer_name: input.customer.fullName.trim(),
-      customer_phone: input.customer.phone.trim(),
-      customer_email: input.customer.email.trim() || null,
-      delivery_address_snapshot: input.fulfillmentType === "delivery" ? {} : null,
-      subtotal_amount: subtotal,
-      discount_amount: 0,
-      delivery_fee: 0,
-      tax_amount: 0,
-      total_amount: subtotal,
-      currency: "MXN",
-      notes: input.customer.notes?.trim() || null,
+    .rpc("create_storefront_order_atomic", {
+      p_tenant_id: tenantResult.data.id,
+      p_branch_id: input.branchId,
+      p_customer_id: input.customerId ?? null,
+      p_fulfillment_type: input.fulfillmentType,
+      p_customer_name: input.customer.fullName.trim(),
+      p_customer_phone: input.customer.phone.trim(),
+      p_customer_email: input.customer.email.trim() || null,
+      p_customer_notes: input.customer.notes?.trim() || null,
+      p_subtotal: subtotal,
+      p_items: orderItemsPayload,
     })
-    .select("id, order_number")
-    .single<OrderRow>()
+    .single<AtomicOrderInsertRow>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: orderResult.error?.message ?? "No pudimos crear la orden." }
   }
 
-  const orderItemsInsertResult = await supabase.from("order_items").insert(
-    orderItemsPayload.map((item) => ({
-      ...item,
-      order_id: orderResult.data.id,
-    }))
-  )
-
-  if (orderItemsInsertResult.error) {
-    return { ok: false, error: orderItemsInsertResult.error.message }
-  }
-
-  const orderStatusHistoryResult = await supabase.from("order_status_history").insert({
-    order_id: orderResult.data.id,
-    from_status: null,
-    to_status: "pending_payment",
-    changed_by_profile_id: null,
-    source: "customer",
-  })
-
-  if (orderStatusHistoryResult.error) {
-    return { ok: false, error: orderStatusHistoryResult.error.message }
-  }
-
   return {
     ok: true,
-    orderId: orderResult.data.id,
+    orderId: orderResult.data.order_id,
     orderNumber: orderResult.data.order_number,
   }
 }
@@ -603,9 +572,16 @@ export async function assignKitchenOrder(
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .is("assigned_tenant_membership_id", null)
+    .select("id")
+    .limit(1)
+    .maybeSingle<{ id: string }>()
 
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
+  }
+
+  if (!updateResult.data) {
+    return { ok: false, error: "Esta orden ya fue tomada por otro miembro del staff." }
   }
 
   return { ok: true }
@@ -682,49 +658,20 @@ export async function updateAdminOrderStatus(
     return { ok: false, error: `No se puede cambiar de ${currentStatus} a ${nextStatus}.` }
   }
 
-  const updatePayload: {
-    status: OrderStatus
-    confirmed_at?: string | null
-    completed_at?: string | null
-    cancelled_at?: string | null
-    payment_status?: "pending" | "paid" | "failed" | "refunded"
-  } = {
-    status: nextStatus,
-  }
-
-  if (nextStatus === "confirmed") {
-    updatePayload.confirmed_at = new Date().toISOString()
-    updatePayload.payment_status = "paid"
-  }
-
-  if (nextStatus === "completed") {
-    updatePayload.completed_at = new Date().toISOString()
-  }
-
-  if (nextStatus === "cancelled") {
-    updatePayload.cancelled_at = new Date().toISOString()
-  }
-
-  const updateResult = await supabase
-    .from("orders")
-    .update(updatePayload)
-    .eq("tenant_id", tenantId)
-    .eq("id", orderId)
+  const updateResult = await supabase.rpc("update_order_status_atomic", {
+    p_tenant_id: tenantId,
+    p_order_id: orderId,
+    p_from_status: currentStatus,
+    p_to_status: nextStatus,
+    p_changed_by_profile_id: changedByProfileId ?? null,
+  })
 
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
   }
 
-  const historyResult = await supabase.from("order_status_history").insert({
-    order_id: orderId,
-    from_status: currentStatus,
-    to_status: nextStatus,
-    changed_by_profile_id: changedByProfileId ?? null,
-    source: "admin",
-  })
-
-  if (historyResult.error) {
-    return { ok: false, error: historyResult.error.message }
+  if (!updateResult.data) {
+    return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
   }
 
   return { ok: true }
@@ -784,20 +731,34 @@ export async function updateKitchenOrderItemPrepStatus(
   orderItemId: string,
   nextPrepStatus: "pending" | "ready"
 ): Promise<{ ok: boolean; error?: string }> {
+  const orderItemResult = await supabase
+    .from("order_items")
+    .select("id, order_id")
+    .eq("id", orderItemId)
+    .limit(1)
+    .maybeSingle<{ id: string; order_id: string }>()
+
+  if (orderItemResult.error || !orderItemResult.data) {
+    return { ok: false, error: "No encontramos el item de la orden." }
+  }
+
+  const belongsToTenant = await supabase
+    .from("orders")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("id", orderItemResult.data.order_id)
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (belongsToTenant.error || !belongsToTenant.data) {
+    return { ok: false, error: "El item no pertenece a una orden de este tenant." }
+  }
+
   const updateResult = await supabase
     .from("order_items")
     .update({ prep_status: nextPrepStatus })
     .eq("id", orderItemId)
-    .in(
-      "order_id",
-      (
-        await supabase
-          .from("orders")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .returns<{ id: string }[]>()
-      ).data?.map((order) => order.id) ?? []
-    )
+    .eq("order_id", orderItemResult.data.order_id)
 
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
@@ -809,9 +770,10 @@ export async function updateKitchenOrderItemPrepStatus(
 export async function canKitchenMarkOrderReady(supabase: SupabaseClient, tenantId: string, orderId: string) {
   const itemsResult = await supabase
     .from("order_items")
-    .select("prep_status, order_id")
+    .select("prep_status, order_id, orders!inner(id)")
     .eq("order_id", orderId)
-    .returns<{ prep_status: "pending" | "ready"; order_id: string }[]>()
+    .eq("orders.tenant_id", tenantId)
+    .returns<{ prep_status: "pending" | "ready"; order_id: string; orders: { id: string } | null }[]>()
 
   if (itemsResult.error) {
     return { ok: false, error: itemsResult.error.message }
@@ -820,13 +782,7 @@ export async function canKitchenMarkOrderReady(supabase: SupabaseClient, tenantI
   const items = itemsResult.data ?? []
 
   if (!items.length) {
-    return { ok: false, error: "La orden no tiene items para preparar." }
-  }
-
-  const belongsToTenant = await supabase.from("orders").select("id").eq("tenant_id", tenantId).eq("id", orderId).limit(1).maybeSingle<{ id: string }>()
-
-  if (belongsToTenant.error || !belongsToTenant.data) {
-    return { ok: false, error: "La orden no pertenece a este tenant." }
+    return { ok: false, error: "La orden no pertenece a este tenant o no tiene items para preparar." }
   }
 
   return {
