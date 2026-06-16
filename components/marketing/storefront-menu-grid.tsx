@@ -5,7 +5,6 @@ import Image from "next/image"
 import Link from "next/link"
 import { ShoppingBag } from "lucide-react"
 
-import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
 import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
@@ -50,7 +49,6 @@ type StorefrontMenuGridProps = {
 
 export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [] }: StorefrontMenuGridProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
-  const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
   const [sheetProductId, setSheetProductId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
   const storefrontHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
@@ -74,26 +72,6 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
     return menu.filter((item) => item.category === activeCategory)
   }, [activeCategory, menu])
   const sheetProduct = React.useMemo(() => visibleItems.find((item) => item.id === sheetProductId) ?? menu.find((item) => item.id === sheetProductId) ?? null, [menu, sheetProductId, visibleItems])
-
-  function requiresConfiguration(item: StorefrontMenuItem) {
-    return item.hasVariants || item.modifierGroups.length > 0
-  }
-
-  async function handleAddItem(productId: string) {
-    setPendingItemId(productId)
-
-    const result = await addCustomerBagItemAction({
-      tenantSlug,
-      branchId,
-      productId,
-    })
-
-    if (result.ok && result.item) {
-      upsertItem(result.item)
-    }
-
-    setPendingItemId(null)
-  }
 
   return (
     <div className="space-y-6">
@@ -174,11 +152,10 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                 <Button
                   size="lg"
                   className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
-                  disabled={pendingItemId === item.id}
-                  onClick={() => (requiresConfiguration(item) ? setSheetProductId(item.id) : void handleAddItem(item.id))}
+                  onClick={() => setSheetProductId(item.id)}
                 >
                   <ShoppingBag />
-                  {requiresConfiguration(item) ? "Agregar" : pendingItemId === item.id ? "Agregando..." : "Agregar"}
+                  Agregar
                 </Button>
               ) : (
                 <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">

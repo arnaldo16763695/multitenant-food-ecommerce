@@ -96,7 +96,12 @@ cross join (
     ('Bebidas', 'single', 1, 1),
     ('Tamano', 'single', 1, 1)
 ) as seed(name, selection_type, min_select, max_select)
-on conflict do nothing;
+ on conflict (tenant_id, name) do update set
+  selection_type = excluded.selection_type,
+  min_select = excluded.min_select,
+  max_select = excluded.max_select,
+  is_active = excluded.is_active,
+  updated_at = now();
 
 with tenant_ref as (
   select id from public.tenants where slug = 'demo-brand' limit 1
@@ -161,7 +166,7 @@ from (
     ('spark-cola', 'Tamano', 1)
 ) as relation(product_slug, modifier_group_name, sort_order)
 join public.products as product_ref on product_ref.slug = relation.product_slug
-join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = relation.modifier_group_name
+join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = relation.modifier_group_name and modifier_group_ref.tenant_id = product_ref.tenant_id
 on conflict (product_id, modifier_group_id) do update set
   sort_order = excluded.sort_order;
 
@@ -183,6 +188,7 @@ from (
     ('Tamano', 'Familiar', 3.20, 3)
 ) as option_seed(group_name, name, price_delta, sort_order)
 join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = option_seed.group_name
+join public.tenants as tenant_ref on tenant_ref.id = modifier_group_ref.tenant_id and tenant_ref.slug = 'demo-brand'
 on conflict (modifier_group_id, name) do update set
   price_delta = excluded.price_delta,
   is_active = excluded.is_active,
