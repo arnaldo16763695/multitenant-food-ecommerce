@@ -94,6 +94,7 @@ export async function getCustomerAccountContext(): Promise<CustomerAccountContex
     return null
   }
 
+  // A signed-in user can also act as a storefront customer, even if they originally entered through an admin flow.
   let profileResult = await supabase.from("profiles").select("id, full_name, email").eq("auth_user_id", user.id).limit(1).maybeSingle<ProfileRow>()
 
   if (profileResult.error || !profileResult.data) {
