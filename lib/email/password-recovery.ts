@@ -35,7 +35,7 @@ export async function sendPasswordRecoveryEmail({
 
   const resend = new Resend(resendApiKey)
 
-  await resend.emails.send({
+  const sendResult = await resend.emails.send({
     from: resendFromEmail,
     to: email,
     subject,
@@ -49,6 +49,10 @@ export async function sendPasswordRecoveryEmail({
       </div>
     `,
   })
+
+  if (sendResult.error) {
+    throw new Error(sendResult.error.message)
+  }
 
   return { deliveredBy: "resend" as const }
 }

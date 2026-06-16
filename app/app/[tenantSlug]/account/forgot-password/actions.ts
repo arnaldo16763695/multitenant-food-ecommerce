@@ -40,20 +40,6 @@ export async function requestCustomerPasswordRecoveryAction(payload: RequestCust
     .limit(1)
     .maybeSingle<CustomerRow>()
 
-  if (customerResult.error) {
-    return {
-      ok: false as const,
-      error: customerResult.error.message,
-    }
-  }
-
-  if (!customerResult.data) {
-    return {
-      ok: true as const,
-      delivery: "none" as const,
-    }
-  }
-
   const linkResult = await adminClient.auth.admin.generateLink({
     type: "recovery",
     email,
@@ -61,6 +47,13 @@ export async function requestCustomerPasswordRecoveryAction(payload: RequestCust
       redirectTo: buildCustomerResetPasswordUrl(payload.tenantSlug, `/app/${payload.tenantSlug}/account/login?reason=password-reset`),
     },
   })
+
+  if (linkResult.error?.message?.toLowerCase().includes("user not found")) {
+    return {
+      ok: true as const,
+      delivery: "none" as const,
+    }
+  }
 
   if (linkResult.error || !linkResult.data?.properties?.action_link) {
     return {
@@ -71,7 +64,7 @@ export async function requestCustomerPasswordRecoveryAction(payload: RequestCust
 
   const emailResult = await sendPasswordRecoveryEmail({
     email,
-    fullName: customerResult.data.full_name?.trim() || "cliente",
+    fullName: customerResult.data?.full_name?.trim() || "cliente",
     subject: `Restablece tu password en ${payload.tenantSlug}`,
     eyebrow: "VZ Food",
     headline: "Restablece tu acceso",
