@@ -3,7 +3,6 @@
 import * as React from "react"
 import Link from "next/link"
 import { LoaderCircle, LogIn } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 import { resendCustomerConfirmationAction } from "@/app/app/[tenantSlug]/account/register/actions"
 import { resolveCustomerNextPath } from "@/lib/auth/customer-navigation"
@@ -20,7 +19,6 @@ type CustomerLoginFormProps = {
 }
 
 export function CustomerLoginForm({ tenantSlug, nextPath, reason }: CustomerLoginFormProps) {
-  const router = useRouter()
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [errorMessage, setErrorMessage] = React.useState("")
@@ -68,8 +66,7 @@ export function CustomerLoginForm({ tenantSlug, nextPath, reason }: CustomerLogi
       return
     }
 
-    router.replace(resolveCustomerNextPath(tenantSlug, nextPath))
-    router.refresh()
+    window.location.assign(resolveCustomerNextPath(tenantSlug, nextPath))
   }
 
   return (

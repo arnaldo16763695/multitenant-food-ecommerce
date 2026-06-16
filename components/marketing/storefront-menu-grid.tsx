@@ -157,7 +157,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                 <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
                   <Link href={loginHref}>
                     <ShoppingBag />
-                    Inicia sesion
+                    Agregar
                   </Link>
                 </Button>
               )}
