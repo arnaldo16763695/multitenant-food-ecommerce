@@ -1,6 +1,7 @@
 "use server"
 
 import { createStorefrontOrder } from "@/lib/services/orders"
+import { clearCustomerBranchBag } from "@/lib/services/customer-bag"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import type { CheckoutBagItemInput, CreateOrderResult } from "@/lib/domain/order"
@@ -25,10 +26,14 @@ export async function createStorefrontOrderAction(payload: CheckoutPayload): Pro
 
   const customerContext = await getCustomerAccountContext()
 
-  return createStorefrontOrder(adminClient, {
+  if (!customerContext) {
+    return { ok: false, error: "Inicia sesión para continuar con el checkout." }
+  }
+
+  const result = await createStorefrontOrder(adminClient, {
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
-    customerId: customerContext?.customer.id ?? null,
+    customerId: customerContext.customer.id,
     fulfillmentType: payload.fulfillmentType,
     items: payload.items,
     customer: {
@@ -38,4 +43,14 @@ export async function createStorefrontOrderAction(payload: CheckoutPayload): Pro
       notes: payload.notes,
     },
   })
+
+  if (result.ok) {
+    await clearCustomerBranchBag(adminClient, {
+      tenantSlug: payload.tenantSlug,
+      branchId: payload.branchId,
+      customerId: customerContext.customer.id,
+    })
+  }
+
+  return result
 }

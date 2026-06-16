@@ -3,6 +3,7 @@ import { Newsreader } from "next/font/google"
 import { Clock3, Flame, MapPinned, ShoppingBag } from "lucide-react"
 
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { StorefrontBranchEntry } from "@/components/marketing/storefront-branch-entry"
 import { StorefrontBranchSelector } from "@/components/marketing/storefront-branch-selector"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
@@ -31,6 +32,7 @@ type TenantShellProps = {
   readonly heroImageUrl?: string | null
   readonly logoImageUrl?: string | null
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
+  readonly initialBagItems?: readonly ShoppingBagItem[]
   readonly menu?: readonly {
     id: string
     name: string
@@ -56,6 +58,7 @@ export function TenantShell({
   heroImageUrl,
   logoImageUrl,
   customerSession,
+  initialBagItems = [],
 }: TenantShellProps) {
   void _shareUrl
   const publicBranchLabel = activeBranchLabel ?? "Sin sucursal activa"
@@ -76,6 +79,7 @@ export function TenantShell({
           branchId={requiresBranchSelection ? null : (activeBranchId ?? null)}
           branchLabel={requiresBranchSelection ? "Selecciona sucursal" : publicBranchLabel}
           customerSession={customerSession}
+          initialBagCount={initialBagItems.reduce((count, item) => count + item.quantity, 0)}
         />
 
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
@@ -170,7 +174,13 @@ export function TenantShell({
 
           {!requiresBranchSelection ? (
             publicMenu.length ? (
-              <StorefrontMenuGrid tenantSlug={tenantSlug} branchId={activeBranchId ?? ""} menu={publicMenu} />
+              <StorefrontMenuGrid
+                tenantSlug={tenantSlug}
+                branchId={activeBranchId ?? ""}
+                menu={publicMenu}
+                customerSession={Boolean(customerSession)}
+                initialBagItems={initialBagItems}
+              />
             ) : (
               <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menú vacío</p>

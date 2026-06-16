@@ -1,6 +1,10 @@
+import { redirect } from "next/navigation"
+
 import { StorefrontCheckoutView } from "@/components/marketing/storefront-checkout-view"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getPublicStorefrontBySlug } from "@/lib/data/public-storefront"
+import { getCustomerBagItems } from "@/lib/services/customer-bag"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 type StorefrontCheckoutPageProps = {
   readonly params: Promise<{
@@ -14,8 +18,16 @@ type StorefrontCheckoutPageProps = {
 export default async function StorefrontCheckoutPage({ params, searchParams }: StorefrontCheckoutPageProps) {
   const { tenantSlug } = await params
   const { branch: requestedBranchId } = await searchParams
-  const storefront = await getPublicStorefrontBySlug(tenantSlug, requestedBranchId)
   const customerContext = await getCustomerAccountContext()
+
+  if (!customerContext) {
+    const checkoutPath = requestedBranchId ? `/app/${tenantSlug}/checkout?branch=${requestedBranchId}` : `/app/${tenantSlug}/checkout`
+    redirect(`/app/${tenantSlug}/account/login?reason=checkout-auth&next=${encodeURIComponent(checkoutPath)}`)
+  }
+
+  const storefront = await getPublicStorefrontBySlug(tenantSlug, requestedBranchId)
+  const supabase = createSupabaseAdminClient()
+  const initialBagItems = storefront?.activeBranch?.id && supabase ? await getCustomerBagItems(supabase, tenantSlug, storefront.activeBranch.id, customerContext.customer.id) : []
 
   return (
     <StorefrontCheckoutView
@@ -28,6 +40,7 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
         email: customerContext?.customer.email,
         phone: customerContext?.customer.phone,
       }}
+      initialBagItems={initialBagItems}
     />
   )
 }

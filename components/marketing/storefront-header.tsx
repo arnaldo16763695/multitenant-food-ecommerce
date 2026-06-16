@@ -26,11 +26,12 @@ type StorefrontHeaderProps = {
   readonly branchId: string | null
   readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
+  readonly initialBagCount?: number
 }
 
-export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, branchId, branchLabel, customerSession }: StorefrontHeaderProps) {
+export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, branchId, branchLabel, customerSession, initialBagCount = 0 }: StorefrontHeaderProps) {
   const router = useRouter()
-  const liveCartItemsCount = useShoppingBagCount(tenantSlug, branchId ?? "")
+  const liveCartItemsCount = useShoppingBagCount(tenantSlug, branchId ?? "", initialBagCount)
   const [isBagAnimating, setIsBagAnimating] = React.useState(false)
   const [isSigningOut, setIsSigningOut] = React.useState(false)
   const previousCountRef = React.useRef(liveCartItemsCount)

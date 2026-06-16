@@ -6,6 +6,7 @@ import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { resendCustomerConfirmationAction } from "@/app/app/[tenantSlug]/account/register/actions"
+import { resolveCustomerNextPath } from "@/lib/auth/customer-navigation"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 import { Button } from "@/components/ui/button"
@@ -14,10 +15,11 @@ import { Input } from "@/components/ui/input"
 
 type CustomerLoginFormProps = {
   readonly tenantSlug: string
+  readonly nextPath?: string
   readonly reason?: string
 }
 
-export function CustomerLoginForm({ tenantSlug, reason }: CustomerLoginFormProps) {
+export function CustomerLoginForm({ tenantSlug, nextPath, reason }: CustomerLoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -66,7 +68,7 @@ export function CustomerLoginForm({ tenantSlug, reason }: CustomerLoginFormProps
       return
     }
 
-    router.replace(`/app/${tenantSlug}/account`)
+    router.replace(resolveCustomerNextPath(tenantSlug, nextPath))
     router.refresh()
   }
 
@@ -76,6 +78,8 @@ export function CustomerLoginForm({ tenantSlug, reason }: CustomerLoginFormProps
         <CardTitle>Iniciar sesion</CardTitle>
         <CardDescription>
           Accede a tu cuenta para ver pedidos, direcciones guardadas y seguir comprando mas rapido.{" "}
+          {reason === "bag-auth" ? "Inicia sesion para agregar productos a tu bolsa." : null}
+          {reason === "checkout-auth" ? "Inicia sesion para continuar al checkout de forma segura." : null}
           {reason === "password-reset" ? "Tu password fue actualizado correctamente. Ya puedes entrar." : null}
         </CardDescription>
       </CardHeader>
@@ -105,7 +109,10 @@ export function CustomerLoginForm({ tenantSlug, reason }: CustomerLoginFormProps
 
           <p className="text-center text-sm text-stone-600">
             Aun no tienes cuenta?{" "}
-            <Link className="font-semibold text-stone-950" href={`/app/${tenantSlug}/account/register`}>
+            <Link
+              className="font-semibold text-stone-950"
+              href={nextPath ? `/app/${tenantSlug}/account/register?next=${encodeURIComponent(nextPath)}` : `/app/${tenantSlug}/account/register`}
+            >
               Registrate aqui
             </Link>
           </p>

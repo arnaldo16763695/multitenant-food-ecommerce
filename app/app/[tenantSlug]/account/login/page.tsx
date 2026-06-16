@@ -4,12 +4,14 @@ import { redirect } from "next/navigation"
 import { CustomerLoginForm } from "@/components/auth/customer-login-form"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
+import { resolveCustomerNextPath } from "@/lib/auth/customer-navigation"
 
 type StorefrontLoginPageProps = {
   readonly params: Promise<{
     tenantSlug: string
   }>
   readonly searchParams: Promise<{
+    next?: string
     reason?: string
   }>
 }
@@ -20,7 +22,7 @@ export default async function StorefrontLoginPage({ params, searchParams }: Stor
   const customerContext = await getCustomerAccountContext()
 
   if (customerContext) {
-    redirect(`/app/${tenantSlug}/account`)
+    redirect(resolveCustomerNextPath(tenantSlug, resolvedSearchParams.next))
   }
 
   return (
@@ -46,7 +48,7 @@ export default async function StorefrontLoginPage({ params, searchParams }: Stor
             </p>
           </div>
 
-          <CustomerLoginForm tenantSlug={tenantSlug} reason={resolvedSearchParams.reason} />
+          <CustomerLoginForm tenantSlug={tenantSlug} nextPath={resolvedSearchParams.next} reason={resolvedSearchParams.reason} />
         </section>
       </div>
     </main>

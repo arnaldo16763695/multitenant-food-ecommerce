@@ -2,10 +2,13 @@
 
 import * as React from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { ShoppingBag } from "lucide-react"
 
+import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
+import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
-import { parseMoneyLabel, useShoppingBagStore } from "@/lib/storefront/bag-store"
+import { useHydrateShoppingBagBranch, useShoppingBagStore } from "@/lib/storefront/bag-store"
 
 type StorefrontMenuItem = {
   readonly id: string
@@ -20,10 +23,19 @@ type StorefrontMenuGridProps = {
   readonly tenantSlug: string
   readonly branchId: string
   readonly menu: readonly StorefrontMenuItem[]
+  readonly customerSession?: boolean
+  readonly initialBagItems?: readonly ShoppingBagItem[]
 }
 
-export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMenuGridProps) {
-  const addItem = useShoppingBagStore((state) => state.addItem)
+export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [] }: StorefrontMenuGridProps) {
+  const upsertItem = useShoppingBagStore((state) => state.upsertItem)
+  const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
+  useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
+  const storefrontHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
+  const loginHref = React.useMemo(
+    () => `/app/${tenantSlug}/account/login?reason=bag-auth&next=${encodeURIComponent(storefrontHref)}`,
+    [storefrontHref, tenantSlug]
+  )
   const categories = React.useMemo(() => ["Todas", ...new Set(menu.map((item) => item.category))], [menu])
   const [activeCategory, setActiveCategory] = React.useState("Todas")
   const categoryCountMap = React.useMemo(() => {
@@ -39,6 +51,22 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMen
 
     return menu.filter((item) => item.category === activeCategory)
   }, [activeCategory, menu])
+
+  async function handleAddItem(productId: string) {
+    setPendingItemId(productId)
+
+    const result = await addCustomerBagItemAction({
+      tenantSlug,
+      branchId,
+      productId,
+    })
+
+    if (result.ok && result.item) {
+      upsertItem(result.item)
+    }
+
+    setPendingItemId(null)
+  }
 
   return (
     <div className="space-y-6">
@@ -115,25 +143,24 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu }: StorefrontMen
             </div>
             <div className="mt-6 flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
-              <Button
-                size="lg"
-                className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
-                onClick={() =>
-                  addItem({
-                    id: item.id,
-                    tenantSlug,
-                    branchId,
-                    name: item.name,
-                    description: item.description,
-                    category: item.category,
-                    unitPrice: parseMoneyLabel(item.basePrice),
-                    unitPriceLabel: item.basePrice,
-                  })
-                }
-              >
-                <ShoppingBag />
-                Agregar
-              </Button>
+              {customerSession ? (
+                <Button
+                  size="lg"
+                  className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
+                  disabled={pendingItemId === item.id}
+                  onClick={() => void handleAddItem(item.id)}
+                >
+                  <ShoppingBag />
+                  {pendingItemId === item.id ? "Agregando..." : "Agregar"}
+                </Button>
+              ) : (
+                <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
+                  <Link href={loginHref}>
+                    <ShoppingBag />
+                    Inicia sesion
+                  </Link>
+                </Button>
+              )}
             </div>
           </article>
         ))}

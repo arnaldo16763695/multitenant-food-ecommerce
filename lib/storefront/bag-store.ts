@@ -2,126 +2,110 @@
 
 import * as React from "react"
 import { create } from "zustand"
-import { createJSONStorage, persist } from "zustand/middleware"
 
-export type ShoppingBagItem = {
-  readonly id: string
-  readonly tenantSlug: string
-  readonly branchId: string
-  readonly name: string
-  readonly description: string
-  readonly category: string
-  readonly unitPrice: number
-  readonly unitPriceLabel: string
-  readonly quantity: number
-}
+import type { ShoppingBagItem } from "@/lib/domain/bag"
 
 type ShoppingBagState = {
   readonly items: readonly ShoppingBagItem[]
-  addItem: (item: Omit<ShoppingBagItem, "quantity">) => void
-  incrementItem: (itemId: string, tenantSlug: string, branchId: string) => void
-  decrementItem: (itemId: string, tenantSlug: string, branchId: string) => void
+  readonly initializedBranches: readonly string[]
+  setBranchItems: (tenantSlug: string, branchId: string, items: readonly ShoppingBagItem[]) => void
+  upsertItem: (item: ShoppingBagItem) => void
   removeItem: (itemId: string, tenantSlug: string, branchId: string) => void
   clearBranchBag: (tenantSlug: string, branchId: string) => void
-}
-
-const SHOPPING_BAG_STORAGE_KEY = "vz-food-shopping-bag-v2"
-
-function isBrowser() {
-  return typeof window !== "undefined"
 }
 
 function formatMoney(value: number) {
   return `$ ${value.toFixed(2)}`
 }
 
-export function parseMoneyLabel(value: string) {
-  const numericValue = Number(value.replace(/[^0-9.-]+/g, ""))
-
-  return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
+function buildBranchKey(tenantSlug: string, branchId: string) {
+  return `${tenantSlug}:${branchId}`
 }
 
-export const useShoppingBagStore = create<ShoppingBagState>()(
-  persist(
-    (set) => ({
-      items: [],
-      addItem: (item) => {
-        set((state) => {
-          const existingItem = state.items.find(
-            (currentItem) =>
-              currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId
-          )
+export const useShoppingBagStore = create<ShoppingBagState>()((set) => ({
+  items: [],
+  initializedBranches: [],
+  setBranchItems: (tenantSlug, branchId, items) => {
+    const branchKey = buildBranchKey(tenantSlug, branchId)
 
-          if (!existingItem) {
-            return {
-              items: [...state.items, { ...item, quantity: 1 }],
-            }
-          }
+    set((state) => ({
+      items: [...state.items.filter((item) => !(item.tenantSlug === tenantSlug && item.branchId === branchId)), ...items],
+      initializedBranches: state.initializedBranches.includes(branchKey) ? state.initializedBranches : [...state.initializedBranches, branchKey],
+    }))
+  },
+  upsertItem: (item) => {
+    set((state) => {
+      const existingItem = state.items.find(
+        (currentItem) =>
+          currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId
+      )
 
-          return {
-            items: state.items.map((currentItem) =>
-              currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId
-                ? { ...currentItem, quantity: currentItem.quantity + 1 }
-                : currentItem
-            ),
-          }
-        })
-      },
-      incrementItem: (itemId, tenantSlug, branchId) => {
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId
-              ? { ...item, quantity: item.quantity + 1 }
-              : item
-          ),
-        }))
-      },
-      decrementItem: (itemId, tenantSlug, branchId) => {
-        set((state) => ({
-          items: state.items
-            .map((item) =>
-              item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId
-                ? { ...item, quantity: item.quantity - 1 }
-                : item
-            )
-            .filter((item) => item.quantity > 0),
-        }))
-      },
-      removeItem: (itemId, tenantSlug, branchId) => {
-        set((state) => ({
-          items: state.items.filter((item) => !(item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId)),
-        }))
-      },
-      clearBranchBag: (tenantSlug, branchId) => {
-        set((state) => ({
-          items: state.items.filter((item) => !(item.tenantSlug === tenantSlug && item.branchId === branchId)),
-        }))
-      },
-    }),
-    {
-      name: SHOPPING_BAG_STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items }),
-      skipHydration: !isBrowser(),
-      version: 2,
-    }
-  )
-)
+      if (!existingItem) {
+        return {
+          items: [...state.items, item],
+        }
+      }
 
-export function useShoppingBagItems(tenantSlug: string, branchId: string) {
+      return {
+        items: state.items.map((currentItem) =>
+          currentItem.id === item.id && currentItem.tenantSlug === item.tenantSlug && currentItem.branchId === item.branchId ? item : currentItem
+        ),
+      }
+    })
+  },
+  removeItem: (itemId, tenantSlug, branchId) => {
+    set((state) => ({
+      items: state.items.filter((item) => !(item.id === itemId && item.tenantSlug === tenantSlug && item.branchId === branchId)),
+    }))
+  },
+  clearBranchBag: (tenantSlug, branchId) => {
+    set((state) => ({
+      items: state.items.filter((item) => !(item.tenantSlug === tenantSlug && item.branchId === branchId)),
+    }))
+  },
+}))
+
+export function useHydrateShoppingBagBranch(tenantSlug: string, branchId: string, items: readonly ShoppingBagItem[]) {
+  const setBranchItems = useShoppingBagStore((state) => state.setBranchItems)
+
+  React.useEffect(() => {
+    setBranchItems(tenantSlug, branchId, items)
+  }, [branchId, items, setBranchItems, tenantSlug])
+}
+
+export function useShoppingBagBranchInitialized(tenantSlug: string, branchId: string) {
+  const branchKey = buildBranchKey(tenantSlug, branchId)
+  return useShoppingBagStore((state) => state.initializedBranches.includes(branchKey))
+}
+
+export function useShoppingBagItems(tenantSlug: string, branchId: string, fallbackItems: readonly ShoppingBagItem[] = []) {
   const items = useShoppingBagStore((state) => state.items)
+  const branchInitialized = useShoppingBagBranchInitialized(tenantSlug, branchId)
 
-  return React.useMemo(() => items.filter((item) => item.tenantSlug === tenantSlug && item.branchId === branchId), [branchId, items, tenantSlug])
+  return React.useMemo(() => {
+    if (!branchInitialized) {
+      return fallbackItems
+    }
+
+    return items.filter((item) => item.tenantSlug === tenantSlug && item.branchId === branchId)
+  }, [branchId, branchInitialized, fallbackItems, items, tenantSlug])
 }
 
-export function useShoppingBagCount(tenantSlug: string, branchId: string) {
+export function useShoppingBagCount(tenantSlug: string, branchId: string, fallbackCount = 0) {
   const items = useShoppingBagItems(tenantSlug, branchId)
+  const branchInitialized = useShoppingBagBranchInitialized(tenantSlug, branchId)
 
-  return React.useMemo(() => items.reduce((count, item) => count + item.quantity, 0), [items])
+  return React.useMemo(() => {
+    if (!branchInitialized) {
+      return fallbackCount
+    }
+
+    return items.reduce((count, item) => count + item.quantity, 0)
+  }, [branchInitialized, fallbackCount, items])
 }
 
-export function useShoppingBagSubtotal(tenantSlug: string, branchId: string) {
-  const items = useShoppingBagItems(tenantSlug, branchId)
+export function useShoppingBagSubtotal(tenantSlug: string, branchId: string, fallbackItems: readonly ShoppingBagItem[] = []) {
+  const items = useShoppingBagItems(tenantSlug, branchId, fallbackItems)
   const subtotal = React.useMemo(() => items.reduce((total, item) => total + item.quantity * item.unitPrice, 0), [items])
 
   return React.useMemo(

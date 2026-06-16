@@ -6,8 +6,9 @@ import { LoaderCircle, ShoppingBag } from "lucide-react"
 
 import { createStorefrontOrderAction } from "@/app/app/[tenantSlug]/checkout/actions"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import type { ShoppingBagItem } from "@/lib/domain/bag"
 import type { CheckoutBagItemInput } from "@/lib/domain/order"
-import { useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
+import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
 
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
@@ -24,13 +25,15 @@ type StorefrontCheckoutViewProps = {
     phone?: string | null
   }
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
+  readonly initialBagItems?: readonly ShoppingBagItem[]
 }
 
-export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, customerDefaults, customerSession }: StorefrontCheckoutViewProps) {
+export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, customerDefaults, customerSession, initialBagItems = [] }: StorefrontCheckoutViewProps) {
   const activeBranchId = branchId ?? ""
-  const items = useShoppingBagItems(tenantSlug, activeBranchId)
-  const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId)
+  const items = useShoppingBagItems(tenantSlug, activeBranchId, initialBagItems)
+  const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId, initialBagItems)
   const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
+  useHydrateShoppingBagBranch(tenantSlug, activeBranchId, initialBagItems)
   const [fullName, setFullName] = React.useState(customerDefaults?.fullName ?? "")
   const [email, setEmail] = React.useState(customerDefaults?.email ?? "")
   const [phone, setPhone] = React.useState(customerDefaults?.phone ?? "")
@@ -89,7 +92,14 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
-        <StorefrontHeader tenantSlug={tenantSlug} brandName="Checkout" branchId={branchId} branchLabel={branchLabel} customerSession={customerSession} />
+        <StorefrontHeader
+          tenantSlug={tenantSlug}
+          brandName="Checkout"
+          branchId={branchId}
+          branchLabel={branchLabel}
+          customerSession={customerSession}
+          initialBagCount={initialBagItems.reduce((count, item) => count + item.quantity, 0)}
+        />
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
