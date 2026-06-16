@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { ShoppingBagItem, ShoppingBagMutationResult } from "@/lib/domain/bag"
+import type { ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult } from "@/lib/domain/bag"
 
 type TenantRow = {
   id: string
@@ -11,9 +11,24 @@ type BranchRow = {
 }
 
 type CustomerBagItemRow = {
+  id: string
   product_id: string
   product_variant_id: string | null
+  configuration_hash: string
   quantity: number
+}
+
+type CustomerBagItemModifierRow = {
+  customer_bag_item_id: string
+  price_delta_snapshot: number
+  modifier_groups: {
+    id: string
+    name: string
+  } | null
+  modifier_group_options: {
+    id: string
+    name: string
+  } | null
 }
 
 type ProductRow = {
@@ -36,6 +51,27 @@ type ProductVariantRow = {
 type CategoryRow = {
   id: string
   name: string
+}
+
+type ModifierGroupRow = {
+  id: string
+  name: string
+  selection_type: "single" | "multiple"
+  min_select: number
+  max_select: number
+}
+
+type ProductModifierGroupRow = {
+  product_id: string
+  modifier_group_id: string
+}
+
+type ModifierGroupOptionRow = {
+  id: string
+  modifier_group_id: string
+  name: string
+  price_delta: number | string
+  is_active: boolean
 }
 
 type BranchProductOverrideRow = {
@@ -62,6 +98,13 @@ type ResolvedBranchContext =
 
 function formatMoney(value: number | string) {
   return `$ ${Number(value).toFixed(2)}`
+}
+
+function buildConfigurationHash(modifierSelections: readonly ShoppingBagModifierSelection[]) {
+  return modifierSelections
+    .map((selection) => `${selection.modifierGroupId}:${selection.modifierOptionId}`)
+    .sort()
+    .join("|")
 }
 
 async function resolveBranchContext(supabase: SupabaseClient, tenantSlug: string, branchId: string): Promise<ResolvedBranchContext> {
@@ -157,7 +200,82 @@ async function loadBranchProductMaps(
   }
 }
 
+async function loadProductModifierConfiguration(supabase: SupabaseClient, tenantId: string, productId: string) {
+  const [modifierGroupsResult, productModifierGroupsResult, modifierGroupOptionsResult] = await Promise.all([
+    supabase.from("modifier_groups").select("id, name, selection_type, min_select, max_select").eq("tenant_id", tenantId).eq("is_active", true).returns<ModifierGroupRow[]>(),
+    supabase.from("product_modifier_groups").select("product_id, modifier_group_id").eq("product_id", productId).returns<ProductModifierGroupRow[]>(),
+    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, is_active").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
+  ])
+
+  if (modifierGroupsResult.error || productModifierGroupsResult.error || modifierGroupOptionsResult.error) {
+    throw new Error(modifierGroupsResult.error?.message ?? productModifierGroupsResult.error?.message ?? modifierGroupOptionsResult.error?.message ?? "No pudimos cargar los modificadores del producto.")
+  }
+
+  const allowedGroupIds = new Set((productModifierGroupsResult.data ?? []).map((relation) => relation.modifier_group_id))
+  const modifierGroupMap = new Map((modifierGroupsResult.data ?? []).filter((group) => allowedGroupIds.has(group.id)).map((group) => [group.id, group]))
+  const modifierGroupOptionsMap = (modifierGroupOptionsResult.data ?? []).reduce<Map<string, ModifierGroupOptionRow[]>>((map, option) => {
+    if (!modifierGroupMap.has(option.modifier_group_id)) {
+      return map
+    }
+
+    const currentOptions = map.get(option.modifier_group_id) ?? []
+    map.set(option.modifier_group_id, [...currentOptions, option])
+    return map
+  }, new Map())
+
+  return { modifierGroupMap, modifierGroupOptionsMap }
+}
+
+function validateModifierSelections(
+  modifierSelections: readonly ShoppingBagModifierSelection[],
+  modifierGroupMap: ReadonlyMap<string, ModifierGroupRow>,
+  modifierGroupOptionsMap: ReadonlyMap<string, readonly ModifierGroupOptionRow[]>
+) {
+  const selectionsByGroup = modifierSelections.reduce<Map<string, ShoppingBagModifierSelection[]>>((map, selection) => {
+    const currentSelections = map.get(selection.modifierGroupId) ?? []
+    map.set(selection.modifierGroupId, [...currentSelections, selection])
+    return map
+  }, new Map())
+
+  for (const [groupId, selections] of selectionsByGroup) {
+    const group = modifierGroupMap.get(groupId)
+
+    if (!group) {
+      return { ok: false as const, error: "Uno de los grupos seleccionados ya no existe para este producto." }
+    }
+
+    const allowedOptions = new Map((modifierGroupOptionsMap.get(groupId) ?? []).map((option) => [option.id, option]))
+
+    if (group.selection_type === "single" && selections.length > 1) {
+      return { ok: false as const, error: `Solo puedes elegir una opcion en ${group.name}.` }
+    }
+
+    if (selections.length < group.min_select || selections.length > group.max_select) {
+      return { ok: false as const, error: `La seleccion en ${group.name} no cumple las reglas configuradas.` }
+    }
+
+    for (const selection of selections) {
+      const option = allowedOptions.get(selection.modifierOptionId)
+
+      if (!option) {
+        return { ok: false as const, error: `La opcion ${selection.modifierOptionName} ya no esta disponible.` }
+      }
+    }
+  }
+
+  for (const group of modifierGroupMap.values()) {
+    const selections = selectionsByGroup.get(group.id) ?? []
+
+    if (selections.length < group.min_select) {
+      return { ok: false as const, error: `Debes completar la seleccion requerida en ${group.name}.` }
+    }
+  }
+
+  return { ok: true as const }
+}
+
 function buildBagItem(
+  bagItemId: string,
   tenantSlug: string,
   branchId: string,
   quantity: number,
@@ -165,7 +283,8 @@ function buildBagItem(
   productVariant: ProductVariantRow | null,
   categoryMap: ReadonlyMap<string, string>,
   branchOverrideMap: ReadonlyMap<string, BranchProductOverrideRow>,
-  branchVariantOverrideMap: ReadonlyMap<string, BranchProductVariantOverrideRow>
+  branchVariantOverrideMap: ReadonlyMap<string, BranchProductVariantOverrideRow>,
+  modifierSelections: readonly ShoppingBagModifierSelection[] = []
 ): ShoppingBagItem | null {
   if (product.status !== "active") {
     return null
@@ -186,10 +305,12 @@ function buildBagItem(
     return null
   }
 
-  const unitPrice = Number(productVariant ? branchVariantOverride?.price_override ?? productVariant.base_price : branchOverride?.price_override ?? product.base_price)
+  const baseUnitPrice = Number(productVariant ? branchVariantOverride?.price_override ?? productVariant.base_price : branchOverride?.price_override ?? product.base_price)
+  const modifierDelta = modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)
+  const unitPrice = Number((baseUnitPrice + modifierDelta).toFixed(2))
 
   return {
-    id: productVariant?.id ?? product.id,
+    id: bagItemId,
     productId: product.id,
     productVariantId: productVariant?.id ?? null,
     variantName: productVariant?.name ?? null,
@@ -201,6 +322,7 @@ function buildBagItem(
     unitPrice,
     unitPriceLabel: formatMoney(unitPrice),
     quantity,
+    modifierSelections,
   }
 }
 
@@ -218,7 +340,7 @@ export async function getCustomerBagItems(
 
   const bagItemsResult = await supabase
     .from("customer_bag_items")
-    .select("product_id, product_variant_id, quantity")
+    .select("id, product_id, product_variant_id, configuration_hash, quantity")
     .eq("customer_id", customerId)
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", branchId)
@@ -231,6 +353,34 @@ export async function getCustomerBagItems(
   const productIds = [...new Set(bagItemsResult.data.map((item) => item.product_id))]
   const variantIds = [...new Set(bagItemsResult.data.map((item) => item.product_variant_id).filter((value): value is string => Boolean(value)))]
   const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(supabase, context.tenantId, branchId, productIds, variantIds)
+  const bagItemIds = bagItemsResult.data.map((item) => item.id)
+  const bagItemModifiersResult = bagItemIds.length
+    ? await supabase
+        .from("customer_bag_item_modifiers")
+        .select("customer_bag_item_id, price_delta_snapshot, modifier_groups(id, name), modifier_group_options(id, name)")
+        .in("customer_bag_item_id", bagItemIds)
+        .returns<CustomerBagItemModifierRow[]>()
+    : { data: [], error: null }
+
+  if (bagItemModifiersResult.error) {
+    return []
+  }
+
+  const bagItemModifiersMap = (bagItemModifiersResult.data ?? []).reduce<Map<string, ShoppingBagModifierSelection[]>>((map, modifier) => {
+    const currentModifiers = map.get(modifier.customer_bag_item_id) ?? []
+    map.set(modifier.customer_bag_item_id, [
+      ...currentModifiers,
+      {
+        modifierGroupId: modifier.modifier_groups?.id ?? "",
+        modifierGroupName: modifier.modifier_groups?.name ?? "Grupo",
+        modifierOptionId: modifier.modifier_group_options?.id ?? "",
+        modifierOptionName: modifier.modifier_group_options?.name ?? "Opcion",
+        priceDelta: Number(modifier.price_delta_snapshot),
+        priceDeltaLabel: formatMoney(modifier.price_delta_snapshot),
+      },
+    ])
+    return map
+  }, new Map())
 
   return bagItemsResult.data.flatMap((item) => {
     const product = productMap.get(item.product_id)
@@ -239,7 +389,7 @@ export async function getCustomerBagItems(
       return []
     }
 
-    const bagItem = buildBagItem(tenantSlug, branchId, item.quantity, product, item.product_variant_id ? productVariantMap.get(item.product_variant_id) ?? null : null, categoryMap, branchOverrideMap, branchVariantOverrideMap)
+    const bagItem = buildBagItem(item.id, tenantSlug, branchId, item.quantity, product, item.product_variant_id ? productVariantMap.get(item.product_variant_id) ?? null : null, categoryMap, branchOverrideMap, branchVariantOverrideMap, bagItemModifiersMap.get(item.id) ?? [])
 
     return bagItem ? [bagItem] : []
   })
@@ -248,12 +398,14 @@ export async function getCustomerBagItems(
 export async function addCustomerBagItem(
   supabase: SupabaseClient,
   input: {
+    readonly bagItemId?: string
     readonly tenantSlug: string
     readonly branchId: string
     readonly customerId: string
     readonly productId: string
     readonly productVariantId?: string | null
     readonly quantity?: number
+    readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
   }
 ): Promise<ShoppingBagMutationResult> {
   const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
@@ -280,6 +432,14 @@ export async function addCustomerBagItem(
     return { ok: false, error: "No encontramos la variante seleccionada." }
   }
 
+  const modifierSelections = input.modifierSelections ?? []
+  const { modifierGroupMap, modifierGroupOptionsMap } = await loadProductModifierConfiguration(supabase, context.tenantId, input.productId)
+  const modifierValidationResult = validateModifierSelections(modifierSelections, modifierGroupMap, modifierGroupOptionsMap)
+
+  if (!modifierValidationResult.ok) {
+    return modifierValidationResult
+  }
+
   if (!input.productVariantId) {
     const activeVariantsResult = await supabase
       .from("product_variants")
@@ -299,14 +459,16 @@ export async function addCustomerBagItem(
     }
   }
 
+  const configurationHash = buildConfigurationHash(modifierSelections)
   const existingItemResult = await supabase
     .from("customer_bag_items")
-    .select("product_id, product_variant_id, quantity")
+    .select("id, product_id, product_variant_id, configuration_hash, quantity")
     .eq("customer_id", input.customerId)
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", input.branchId)
     .eq("product_id", input.productId)
     .is("product_variant_id", input.productVariantId ?? null)
+    .eq("configuration_hash", configurationHash)
     .limit(1)
     .maybeSingle<CustomerBagItemRow>()
 
@@ -316,7 +478,8 @@ export async function addCustomerBagItem(
 
   const quantityToAdd = Math.max(input.quantity ?? 1, 1)
   const nextQuantity = (existingItemResult.data?.quantity ?? 0) + quantityToAdd
-  const bagItem = buildBagItem(input.tenantSlug, input.branchId, nextQuantity, product, productVariant, categoryMap, branchOverrideMap, branchVariantOverrideMap)
+  const bagItemId = existingItemResult.data?.id ?? crypto.randomUUID()
+  const bagItem = buildBagItem(bagItemId, input.tenantSlug, input.branchId, nextQuantity, product, productVariant, categoryMap, branchOverrideMap, branchVariantOverrideMap, modifierSelections)
 
   if (!bagItem) {
     return { ok: false, error: "Este producto ya no esta disponible en esta sucursal." }
@@ -331,17 +494,37 @@ export async function addCustomerBagItem(
         .eq("branch_id", input.branchId)
         .eq("product_id", input.productId)
         .is("product_variant_id", input.productVariantId ?? null)
+        .eq("configuration_hash", configurationHash)
     : await supabase.from("customer_bag_items").insert({
+        id: bagItemId,
         customer_id: input.customerId,
         tenant_id: context.tenantId,
         branch_id: input.branchId,
         product_id: input.productId,
         product_variant_id: input.productVariantId ?? null,
+        configuration_hash: configurationHash,
         quantity: nextQuantity,
       })
 
   if (mutationResult.error) {
     return { ok: false, error: mutationResult.error.message }
+  }
+
+  if (!existingItemResult.data) {
+    const modifierInsertResult = modifierSelections.length
+      ? await supabase.from("customer_bag_item_modifiers").insert(
+          modifierSelections.map((selection) => ({
+            customer_bag_item_id: bagItemId,
+            modifier_group_id: selection.modifierGroupId,
+            modifier_option_id: selection.modifierOptionId,
+            price_delta_snapshot: selection.priceDelta,
+          }))
+        )
+      : { error: null }
+
+    if (modifierInsertResult.error) {
+      return { ok: false, error: modifierInsertResult.error.message }
+    }
   }
 
   return {
@@ -354,6 +537,7 @@ export async function addCustomerBagItem(
 export async function decrementCustomerBagItem(
   supabase: SupabaseClient,
   input: {
+    readonly bagItemId?: string
     readonly tenantSlug: string
     readonly branchId: string
     readonly customerId: string
@@ -370,11 +554,8 @@ export async function decrementCustomerBagItem(
   const existingItemResult = await supabase
     .from("customer_bag_items")
     .select("quantity")
+    .eq("id", input.bagItemId ?? "")
     .eq("customer_id", input.customerId)
-    .eq("tenant_id", context.tenantId)
-    .eq("branch_id", input.branchId)
-    .eq("product_id", input.productId)
-    .is("product_variant_id", input.productVariantId ?? null)
     .limit(1)
     .maybeSingle<{ quantity: number }>()
 
@@ -393,19 +574,13 @@ export async function decrementCustomerBagItem(
       ? await supabase
           .from("customer_bag_items")
           .update({ quantity: nextQuantity })
+          .eq("id", input.bagItemId ?? "")
           .eq("customer_id", input.customerId)
-          .eq("tenant_id", context.tenantId)
-          .eq("branch_id", input.branchId)
-          .eq("product_id", input.productId)
-          .is("product_variant_id", input.productVariantId ?? null)
       : await supabase
           .from("customer_bag_items")
           .delete()
+          .eq("id", input.bagItemId ?? "")
           .eq("customer_id", input.customerId)
-          .eq("tenant_id", context.tenantId)
-          .eq("branch_id", input.branchId)
-          .eq("product_id", input.productId)
-          .is("product_variant_id", input.productVariantId ?? null)
 
   if (mutationResult.error) {
     return { ok: false, error: mutationResult.error.message }
@@ -420,6 +595,7 @@ export async function decrementCustomerBagItem(
 export async function removeCustomerBagItem(
   supabase: SupabaseClient,
   input: {
+    readonly bagItemId?: string
     readonly tenantSlug: string
     readonly branchId: string
     readonly customerId: string
@@ -436,11 +612,8 @@ export async function removeCustomerBagItem(
   const mutationResult = await supabase
     .from("customer_bag_items")
     .delete()
+    .eq("id", input.bagItemId ?? "")
     .eq("customer_id", input.customerId)
-    .eq("tenant_id", context.tenantId)
-    .eq("branch_id", input.branchId)
-    .eq("product_id", input.productId)
-    .is("product_variant_id", input.productVariantId ?? null)
 
   if (mutationResult.error) {
     return { ok: false, error: mutationResult.error.message }

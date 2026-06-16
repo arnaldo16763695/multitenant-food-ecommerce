@@ -1,6 +1,7 @@
 "use server"
 
 import { getCustomerAccountContext } from "@/lib/auth/customer"
+import type { ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
   addCustomerBagItem,
@@ -10,11 +11,13 @@ import {
 } from "@/lib/services/customer-bag"
 
 type CustomerBagMutationPayload = {
+  readonly bagItemId?: string
   readonly tenantSlug: string
   readonly branchId: string
   readonly productId: string
   readonly productVariantId?: string | null
   readonly quantity?: number
+  readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
 }
 
 type ClearCustomerBagPayload = {
@@ -40,6 +43,7 @@ export async function addCustomerBagItemAction(payload: CustomerBagMutationPaylo
     productId: payload.productId,
     productVariantId: payload.productVariantId,
     quantity: payload.quantity,
+    modifierSelections: payload.modifierSelections,
     customerId: customerContext.customer.id,
   })
 }
@@ -57,6 +61,7 @@ export async function decrementCustomerBagItemAction(payload: CustomerBagMutatio
   }
 
   return decrementCustomerBagItem(supabase, {
+    bagItemId: payload.bagItemId,
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
     productId: payload.productId,
@@ -78,6 +83,7 @@ export async function removeCustomerBagItemAction(payload: CustomerBagMutationPa
   }
 
   return removeCustomerBagItem(supabase, {
+    bagItemId: payload.bagItemId,
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
     productId: payload.productId,

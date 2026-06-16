@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Minus, Plus, ShoppingBag } from "lucide-react"
 
 import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
-import type { ShoppingBagItem } from "@/lib/domain/bag"
+import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
@@ -27,6 +27,19 @@ type StorefrontProductSheetProps = {
     readonly imageUrl?: string | null
     readonly basePrice: string
     readonly variants: readonly ProductVariantOption[]
+    readonly modifierGroups: readonly {
+      id: string
+      name: string
+      selectionType: "single" | "multiple"
+      minSelect: number
+      maxSelect: number
+      options: readonly {
+        id: string
+        name: string
+        priceDelta: number
+        priceDeltaLabel: string
+      }[]
+    }[]
   }
   readonly open: boolean
   readonly onOpenChange: (nextOpen: boolean) => void
@@ -42,6 +55,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
   const defaultVariant = React.useMemo(() => product.variants.find((variant) => variant.isDefault) ?? product.variants[0] ?? null, [product.variants])
   const [selectedVariantId, setSelectedVariantId] = React.useState(defaultVariant?.id ?? "")
   const [quantity, setQuantity] = React.useState(1)
+  const [selectedOptionsByGroup, setSelectedOptionsByGroup] = React.useState<Record<string, string[]>>({})
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
@@ -49,17 +63,66 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     if (open) {
       setSelectedVariantId(defaultVariant?.id ?? "")
       setQuantity(1)
+      setSelectedOptionsByGroup({})
       setErrorMessage("")
     }
   }, [defaultVariant?.id, open])
 
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId) ?? defaultVariant
-  const totalLabel = React.useMemo(() => `$ ${(parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) * quantity).toFixed(2)}`, [product.basePrice, quantity, selectedVariant?.basePrice])
+  const modifierSelections = React.useMemo<readonly ShoppingBagModifierSelection[]>(() => {
+    return product.modifierGroups.flatMap((group) => {
+      const selectedOptionIds = selectedOptionsByGroup[group.id] ?? []
+
+      return group.options
+        .filter((option) => selectedOptionIds.includes(option.id))
+        .map((option) => ({
+          modifierGroupId: group.id,
+          modifierGroupName: group.name,
+          modifierOptionId: option.id,
+          modifierOptionName: option.name,
+          priceDelta: option.priceDelta,
+          priceDeltaLabel: option.priceDeltaLabel,
+        }))
+    })
+  }, [product.modifierGroups, selectedOptionsByGroup])
+  const totalLabel = React.useMemo(
+    () => `$ ${((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)) * quantity).toFixed(2)}`,
+    [modifierSelections, product.basePrice, quantity, selectedVariant?.basePrice]
+  )
+
+  function handleOptionToggle(groupId: string, optionId: string, selectionType: "single" | "multiple") {
+    setSelectedOptionsByGroup((currentValue) => {
+      const currentSelections = currentValue[groupId] ?? []
+
+      if (selectionType === "single") {
+        return {
+          ...currentValue,
+          [groupId]: currentSelections.includes(optionId) ? [] : [optionId],
+        }
+      }
+
+      return {
+        ...currentValue,
+        [groupId]: currentSelections.includes(optionId)
+          ? currentSelections.filter((currentOptionId) => currentOptionId !== optionId)
+          : [...currentSelections, optionId],
+      }
+    })
+  }
 
   async function handleConfirm() {
-    if (!selectedVariant) {
+    if (product.variants.length > 0 && !selectedVariant) {
       setErrorMessage("Selecciona un tamano para continuar.")
       return
+    }
+
+    for (const group of product.modifierGroups) {
+      const selectedCount = (selectedOptionsByGroup[group.id] ?? []).length
+
+      if (selectedCount < group.minSelect || selectedCount > group.maxSelect) {
+        setErrorMessage(`Revisa la seleccion de ${group.name}.`)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -69,8 +132,9 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       tenantSlug,
       branchId,
       productId: product.id,
-      productVariantId: selectedVariant.id,
+      productVariantId: selectedVariant?.id ?? null,
       quantity,
+      modifierSelections,
     })
 
     if (!result.ok || !result.item) {
@@ -89,7 +153,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       <SheetContent side="right" className="w-full overflow-y-auto border-l border-stone-200 bg-white sm:max-w-xl">
         <SheetHeader className="border-b border-stone-100 px-6 py-5">
           <SheetTitle>{product.name}</SheetTitle>
-          <SheetDescription>Elige el tamano antes de confirmar tu bolsa. Luego ampliaremos este flujo para extras, exclusiones y notas.</SheetDescription>
+          <SheetDescription>Configura tamano, cantidad y opciones disponibles antes de confirmar la bolsa.</SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-1 flex-col gap-6 px-6 py-6">
@@ -103,31 +167,33 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
             </div>
           </div>
 
-          <section className="space-y-3 rounded-[1.4rem] border border-stone-200 bg-stone-50/80 p-4">
-            <div>
-              <p className="text-sm font-semibold text-stone-950">Tamano</p>
-              <p className="mt-1 text-xs text-stone-500">Seleccion obligatoria para calcular el precio final.</p>
-            </div>
-            <div className="grid gap-2">
-              {product.variants.map((variant) => {
-                const isSelected = variant.id === selectedVariantId
+          {product.variants.length > 0 ? (
+            <section className="space-y-3 rounded-[1.4rem] border border-stone-200 bg-stone-50/80 p-4">
+              <div>
+                <p className="text-sm font-semibold text-stone-950">Tamano</p>
+                <p className="mt-1 text-xs text-stone-500">Seleccion obligatoria para calcular el precio final.</p>
+              </div>
+              <div className="grid gap-2">
+                {product.variants.map((variant) => {
+                  const isSelected = variant.id === selectedVariantId
 
-                return (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    onClick={() => setSelectedVariantId(variant.id)}
-                    className={`flex items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition ${
-                      isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
-                    }`}
-                  >
-                    <span className="font-medium">{variant.name}</span>
-                    <span className="text-sm font-semibold">{variant.basePrice}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+                  return (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      onClick={() => setSelectedVariantId(variant.id)}
+                      className={`flex items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition ${
+                        isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
+                      }`}
+                    >
+                      <span className="font-medium">{variant.name}</span>
+                      <span className="text-sm font-semibold">{variant.basePrice}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <section className="space-y-3 rounded-[1.4rem] border border-stone-200 bg-stone-50/80 p-4">
             <div>
@@ -144,6 +210,46 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               </Button>
             </div>
           </section>
+
+          {product.modifierGroups.length > 0 ? (
+            <section className="space-y-4 rounded-[1.4rem] border border-stone-200 bg-stone-50/80 p-4">
+              <div>
+                <p className="text-sm font-semibold text-stone-950">Personaliza tu producto</p>
+                <p className="mt-1 text-xs text-stone-500">Selecciona extras, exclusiones o complementos antes de confirmar.</p>
+              </div>
+
+              {product.modifierGroups.map((group) => (
+                <div key={group.id} className="space-y-2 rounded-[1rem] border border-stone-200 bg-white p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-stone-950">{group.name}</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      {group.selectionType === "single" ? "Elige una opcion" : `Elige entre ${group.minSelect} y ${group.maxSelect} opciones`}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {group.options.map((option) => {
+                      const isSelected = (selectedOptionsByGroup[group.id] ?? []).includes(option.id)
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => handleOptionToggle(group.id, option.id, group.selectionType)}
+                          className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
+                            isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
+                          }`}
+                        >
+                          <span>{option.name}</span>
+                          <span className="font-semibold">{option.priceDelta > 0 ? `+ ${option.priceDeltaLabel}` : "Incluido"}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ) : null}
 
           {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
         </div>

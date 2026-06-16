@@ -176,6 +176,15 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold text-stone-950">{item.name}</p>
+                        {item.modifierSelections.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-stone-500">
+                            {item.modifierSelections.map((selection) => (
+                              <span key={`${selection.modifierGroupId}-${selection.modifierOptionId}`}>
+                                {selection.modifierGroupName}: {selection.modifierOptionName}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         <p className="mt-1 text-xs text-stone-500">
                           {item.quantity} x {item.unitPriceLabel}
                         </p>

@@ -165,6 +165,30 @@ join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = r
 on conflict (product_id, modifier_group_id) do update set
   sort_order = excluded.sort_order;
 
+insert into public.modifier_group_options (modifier_group_id, name, price_delta, is_active, sort_order)
+select modifier_group_ref.id, option_seed.name, option_seed.price_delta, true, option_seed.sort_order
+from (
+  values
+    ('Extras', 'Extra queso', 1.20, 1),
+    ('Extras', 'Bacon crispy', 1.80, 2),
+    ('Extras', 'Aguacate', 1.60, 3),
+    ('Salsas', 'BBQ', 0.00, 1),
+    ('Salsas', 'Mayo chipotle', 0.00, 2),
+    ('Salsas', 'Ranch', 0.00, 3),
+    ('Bebidas', 'Cola 1L', 0.00, 1),
+    ('Bebidas', 'Limonada 1L', 0.50, 2),
+    ('Bebidas', 'Te frio 1L', 0.80, 3),
+    ('Tamano', 'Individual', 0.00, 1),
+    ('Tamano', 'Mediana', 1.40, 2),
+    ('Tamano', 'Familiar', 3.20, 3)
+) as option_seed(group_name, name, price_delta, sort_order)
+join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = option_seed.group_name
+on conflict (modifier_group_id, name) do update set
+  price_delta = excluded.price_delta,
+  is_active = excluded.is_active,
+  sort_order = excluded.sort_order,
+  updated_at = now();
+
 insert into public.branch_product_overrides (branch_id, product_id, availability_status, price_override, prep_time_minutes)
 select branch_ref.id, product_ref.id, seed.availability_status, seed.price_override, seed.prep_time_minutes
 from (

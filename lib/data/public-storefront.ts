@@ -28,6 +28,19 @@ type TenantProduct = {
     basePrice: string
     isDefault: boolean
   }[]
+  readonly modifierGroups: readonly {
+    id: string
+    name: string
+    selectionType: "single" | "multiple"
+    minSelect: number
+    maxSelect: number
+    options: readonly {
+      id: string
+      name: string
+      priceDelta: number
+      priceDeltaLabel: string
+    }[]
+  }[]
   readonly category: string
   readonly imageUrl: string | null
 }
@@ -80,6 +93,27 @@ type ProductVariantRow = {
 type CategoryRow = {
   id: string
   name: string
+}
+
+type ModifierGroupRow = {
+  id: string
+  name: string
+  selection_type: "single" | "multiple"
+  min_select: number
+  max_select: number
+}
+
+type ProductModifierGroupRow = {
+  product_id: string
+  modifier_group_id: string
+}
+
+type ModifierGroupOptionRow = {
+  id: string
+  modifier_group_id: string
+  name: string
+  price_delta: number | string
+  sort_order: number
 }
 
 type BranchProductOverrideRow = {
@@ -156,7 +190,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     logoImageUrl: tenantResult.data.logo_image_url,
   }
 
-  const [branchesResult, categoriesResult, productsResult, productVariantsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, productVariantsResult, modifierGroupsResult, productModifierGroupsResult, modifierGroupOptionsResult] = await Promise.all([
     supabase.from("branches").select("id, name, hero_image_url").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
     supabase
@@ -167,6 +201,9 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
       .order("name", { ascending: true })
       .returns<ProductRow[]>(),
     supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenant.id).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
+    supabase.from("modifier_groups").select("id, name, selection_type, min_select, max_select").eq("tenant_id", tenant.id).eq("is_active", true).returns<ModifierGroupRow[]>(),
+    supabase.from("product_modifier_groups").select("product_id, modifier_group_id").returns<ProductModifierGroupRow[]>(),
+    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
   ])
 
   const branches = (branchesResult.data ?? []).map((branch) => ({
@@ -179,6 +216,9 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const products = productsResult.data ?? []
   const productVariants = productVariantsResult.data ?? []
+  const modifierGroups = modifierGroupsResult.data ?? []
+  const productModifierGroups = productModifierGroupsResult.data ?? []
+  const modifierGroupOptions = modifierGroupOptionsResult.data ?? []
   const productIds = products.map((product) => product.id)
   const variantIds = productVariants.map((variant) => variant.id)
 
@@ -201,12 +241,23 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
       : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
   ])
 
-  if (branchesResult.error || categoriesResult.error || productsResult.error || productVariantsResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
+  if (branchesResult.error || categoriesResult.error || productsResult.error || productVariantsResult.error || modifierGroupsResult.error || productModifierGroupsResult.error || modifierGroupOptionsResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
     return null
   }
 
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
   const branchVariantOverrideMap = new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override]))
+  const modifierGroupMap = new Map(modifierGroups.map((group) => [group.id, group]))
+  const productModifierGroupsMap = productModifierGroups.reduce<Map<string, string[]>>((map, relation) => {
+    const currentGroups = map.get(relation.product_id) ?? []
+    map.set(relation.product_id, [...currentGroups, relation.modifier_group_id])
+    return map
+  }, new Map())
+  const modifierGroupOptionsMap = modifierGroupOptions.reduce<Map<string, ModifierGroupOptionRow[]>>((map, option) => {
+    const currentOptions = map.get(option.modifier_group_id) ?? []
+    map.set(option.modifier_group_id, [...currentOptions, option])
+    return map
+  }, new Map())
   const productVariantsMap = productVariants.reduce<Map<string, ProductVariantRow[]>>((map, variant) => {
     const currentVariants = map.get(variant.product_id) ?? []
     map.set(variant.product_id, [...currentVariants, variant])
@@ -257,6 +308,24 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
         basePrice: formatCurrency(effectiveBasePrice),
         hasVariants: visibleVariants.length > 0,
         variants: visibleVariants,
+        modifierGroups: (productModifierGroupsMap.get(product.id) ?? [])
+          .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId))
+          .filter((value): value is ModifierGroupRow => Boolean(value))
+          .map((group) => ({
+            id: group.id,
+            name: group.name,
+            selectionType: group.selection_type,
+            minSelect: group.min_select,
+            maxSelect: group.max_select,
+            options: (modifierGroupOptionsMap.get(group.id) ?? [])
+              .sort((left, right) => left.sort_order - right.sort_order)
+              .map((option) => ({
+                id: option.id,
+                name: option.name,
+                priceDelta: Number(option.price_delta),
+                priceDeltaLabel: formatCurrency(option.price_delta),
+              })),
+          })),
         category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
         imageUrl: getStoragePublicUrl(product.primary_image_path),
       }

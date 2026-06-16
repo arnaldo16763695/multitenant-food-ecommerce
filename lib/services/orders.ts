@@ -278,6 +278,11 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
       unit_price_snapshot: unitPrice,
       quantity: item.quantity,
       line_total: Number((unitPrice * item.quantity).toFixed(2)),
+      modifiers: item.modifierSelections.map((selection) => ({
+        modifier_group_name_snapshot: selection.modifierGroupName,
+        modifier_option_name_snapshot: selection.modifierOptionName,
+        price_snapshot: selection.priceDelta,
+      })),
       notes: null,
     }
   })

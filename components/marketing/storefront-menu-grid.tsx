@@ -23,6 +23,19 @@ type StorefrontMenuItem = {
     basePrice: string
     isDefault: boolean
   }[]
+  readonly modifierGroups: readonly {
+    id: string
+    name: string
+    selectionType: "single" | "multiple"
+    minSelect: number
+    maxSelect: number
+    options: readonly {
+      id: string
+      name: string
+      priceDelta: number
+      priceDeltaLabel: string
+    }[]
+  }[]
   readonly category: string
   readonly imageUrl?: string | null
 }
@@ -61,6 +74,10 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
     return menu.filter((item) => item.category === activeCategory)
   }, [activeCategory, menu])
   const sheetProduct = React.useMemo(() => visibleItems.find((item) => item.id === sheetProductId) ?? menu.find((item) => item.id === sheetProductId) ?? null, [menu, sheetProductId, visibleItems])
+
+  function requiresConfiguration(item: StorefrontMenuItem) {
+    return item.hasVariants || item.modifierGroups.length > 0
+  }
 
   async function handleAddItem(productId: string) {
     setPendingItemId(productId)
@@ -158,10 +175,10 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                   size="lg"
                   className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
                   disabled={pendingItemId === item.id}
-                  onClick={() => (item.hasVariants ? setSheetProductId(item.id) : void handleAddItem(item.id))}
+                  onClick={() => (requiresConfiguration(item) ? setSheetProductId(item.id) : void handleAddItem(item.id))}
                 >
                   <ShoppingBag />
-                  {item.hasVariants ? "Elegir" : pendingItemId === item.id ? "Agregando..." : "Agregar"}
+                  {requiresConfiguration(item) ? "Agregar" : pendingItemId === item.id ? "Agregando..." : "Agregar"}
                 </Button>
               ) : (
                 <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">

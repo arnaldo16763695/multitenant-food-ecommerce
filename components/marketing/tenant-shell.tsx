@@ -45,6 +45,19 @@ type TenantShellProps = {
       basePrice: string
       isDefault: boolean
     }[]
+    modifierGroups: readonly {
+      id: string
+      name: string
+      selectionType: "single" | "multiple"
+      minSelect: number
+      maxSelect: number
+      options: readonly {
+        id: string
+        name: string
+        priceDelta: number
+        priceDeltaLabel: string
+      }[]
+    }[]
     category: string
     imageUrl?: string | null
   }[]

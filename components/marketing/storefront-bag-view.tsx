@@ -44,7 +44,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   async function handleIncrementItem(productId: string) {
     setPendingItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
-    const result = await addCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
+    const result = await addCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null, modifierSelections: currentItem?.modifierSelections ?? [] })
 
     if (result.ok && result.item) {
       upsertItem(result.item)
@@ -56,7 +56,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   async function handleDecrementItem(productId: string) {
     setPendingItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
-    const result = await decrementCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
+    const result = await decrementCustomerBagItemAction({ bagItemId: currentItem?.id, tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
     if (result.ok) {
       if (result.quantity && result.quantity > 0) {
@@ -76,7 +76,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   async function handleRemoveItem(productId: string) {
     setPendingItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
-    const result = await removeCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
+    const result = await removeCustomerBagItemAction({ bagItemId: currentItem?.id, tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
     if (result.ok) {
       removeItem(productId, tenantSlug, activeBranchId)
@@ -138,6 +138,15 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                           </span>
                         </div>
                         <p className="max-w-xl text-sm leading-6 text-stone-600">{item.description}</p>
+                        {item.modifierSelections.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 text-xs text-stone-500">
+                            {item.modifierSelections.map((selection) => (
+                              <span key={`${selection.modifierGroupId}-${selection.modifierOptionId}`} className="rounded-full bg-white px-2.5 py-1">
+                                {selection.modifierGroupName}: {selection.modifierOptionName}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         <p className="text-sm font-semibold text-stone-950">{item.unitPriceLabel} c/u</p>
                       </div>
 

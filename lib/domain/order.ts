@@ -1,3 +1,11 @@
+export type CheckoutBagItemModifierInput = {
+  readonly modifierGroupId: string
+  readonly modifierGroupName: string
+  readonly modifierOptionId: string
+  readonly modifierOptionName: string
+  readonly priceDelta: number
+}
+
 export type CheckoutBagItemInput = {
   readonly id: string
   readonly productId: string
@@ -11,6 +19,7 @@ export type CheckoutBagItemInput = {
   readonly unitPrice: number
   readonly unitPriceLabel: string
   readonly quantity: number
+  readonly modifierSelections: readonly CheckoutBagItemModifierInput[]
 }
 
 export type CheckoutCustomerInput = {
