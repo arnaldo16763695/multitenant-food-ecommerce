@@ -106,8 +106,8 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
                     key={filter}
                     className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                       isActive
-                        ? "bg-stone-950 text-white"
-                        : "border border-stone-300 bg-white/80 text-stone-700 hover:border-stone-950"
+                        ? "bg-orange-600 text-white"
+                        : "border border-stone-950 bg-stone-950 text-white hover:bg-orange-600 hover:border-orange-600"
                     }`}
                     href={href}
                   >
