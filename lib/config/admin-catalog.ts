@@ -20,6 +20,13 @@ export type CatalogProduct = {
   readonly category: string
   readonly description: string
   readonly basePrice: string
+  readonly hasVariants: boolean
+  readonly variants: readonly {
+    id: string
+    name: string
+    basePrice: string
+    isDefault: boolean
+  }[]
   readonly status: "Activo" | "Draft"
   readonly primaryImagePath?: string | null
   readonly primaryImageUrl?: string | null
@@ -51,6 +58,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     category: "Burgers",
     description: "Doble carne, queso americano, salsa signature y pickles.",
     basePrice: "$ 11.90",
+    hasVariants: false,
+    variants: [],
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/fire-smash-burger/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80",
@@ -68,6 +77,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     category: "Combos",
     description: "Pollo crispy, papas medianas, bebida y dip incluido.",
     basePrice: "$ 14.50",
+    hasVariants: false,
+    variants: [],
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/crispy-box/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=900&q=80",
@@ -85,6 +96,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     category: "Wraps",
     description: "Wrap de pollo grillado con aderezo citrico y mix de hojas.",
     basePrice: "$ 9.80",
+    hasVariants: false,
+    variants: [],
     status: "Draft",
     primaryImagePath: "tenants/demo-brand/products/lime-chicken-wrap/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=900&q=80",
@@ -102,6 +115,8 @@ export const catalogProducts: readonly CatalogProduct[] = [
     category: "Bebidas",
     description: "Refresco individual disponible para combos y venta directa.",
     basePrice: "$ 2.90",
+    hasVariants: false,
+    variants: [],
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/spark-cola/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=900&q=80",

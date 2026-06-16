@@ -1,5 +1,8 @@
 export type ShoppingBagItem = {
   readonly id: string
+  readonly productId: string
+  readonly productVariantId?: string | null
+  readonly variantName?: string | null
   readonly tenantSlug: string
   readonly branchId: string
   readonly name: string

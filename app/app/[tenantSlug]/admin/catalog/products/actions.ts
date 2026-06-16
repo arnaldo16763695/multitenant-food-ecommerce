@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
-import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput } from "@/lib/domain/catalog"
+import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput } from "@/lib/domain/catalog"
 import {
   createCatalogProduct,
   createCatalogProductWithOptions,
@@ -57,6 +57,36 @@ function parseBranchOverrides(formData: FormData): readonly CatalogBranchOverrid
   }
 }
 
+function parseVariants(formData: FormData): readonly CatalogProductVariantInput[] {
+  const rawValue = formData.get("variants")
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue
+      .filter((value): value is CatalogProductVariantInput => {
+        return Boolean(value) && typeof value === "object" && typeof value.name === "string" && typeof value.basePrice === "string" && typeof value.isDefault === "boolean" && typeof value.sortOrder === "number"
+      })
+      .map((value) => ({
+        id: typeof value.id === "string" ? value.id : undefined,
+        name: value.name,
+        basePrice: value.basePrice,
+        isDefault: value.isDefault,
+        sortOrder: value.sortOrder,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export async function createProductAction(tenantSlug: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
 
@@ -99,6 +129,7 @@ export async function createProductWithImageAction(tenantSlug: string, formData:
     category: String(formData.get("category") ?? ""),
     description: String(formData.get("description") ?? ""),
     basePrice: String(formData.get("basePrice") ?? ""),
+    variants: parseVariants(formData),
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
@@ -161,6 +192,7 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     category: String(formData.get("category") ?? ""),
     description: String(formData.get("description") ?? ""),
     basePrice: String(formData.get("basePrice") ?? ""),
+    variants: parseVariants(formData),
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),

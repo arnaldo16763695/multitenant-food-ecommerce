@@ -43,7 +43,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
 
   async function handleIncrementItem(productId: string) {
     setPendingItemId(productId)
-    const result = await addCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId })
+    const currentItem = items.find((item) => item.id === productId)
+    const result = await addCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
     if (result.ok && result.item) {
       upsertItem(result.item)
@@ -54,7 +55,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
 
   async function handleDecrementItem(productId: string) {
     setPendingItemId(productId)
-    const result = await decrementCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId })
+    const currentItem = items.find((item) => item.id === productId)
+    const result = await decrementCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
     if (result.ok) {
       if (result.quantity && result.quantity > 0) {
@@ -73,7 +75,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
 
   async function handleRemoveItem(productId: string) {
     setPendingItemId(productId)
-    const result = await removeCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId })
+    const currentItem = items.find((item) => item.id === productId)
+    const result = await removeCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
     if (result.ok) {
       removeItem(productId, tenantSlug, activeBranchId)

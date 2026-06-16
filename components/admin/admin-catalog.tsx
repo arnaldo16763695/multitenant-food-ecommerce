@@ -3,7 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { MoreHorizontal, Plus, Search, SlidersHorizontal } from "lucide-react"
+import { MoreHorizontal, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { type CatalogBranchOption, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
@@ -50,6 +50,13 @@ type ProductFormValues = {
   readonly status: ProductStatus
   readonly primaryImagePath: string
   readonly primaryImageAlt: string
+  readonly variants: readonly {
+    id: string
+    name: string
+    basePrice: string
+    isDefault: boolean
+    sortOrder: number
+  }[]
   readonly branchOverrides: readonly {
     branchId: string
     branchName: string
@@ -75,6 +82,13 @@ function buildFormValues(product: CatalogProduct, branches: readonly CatalogBran
     status: product.status,
     primaryImagePath: product.primaryImagePath ?? "",
     primaryImageAlt: product.name,
+    variants: product.variants.map((variant, index) => ({
+      id: variant.id,
+      name: variant.name,
+      basePrice: variant.basePrice,
+      isDefault: variant.isDefault,
+      sortOrder: index,
+    })),
     branchOverrides: branches.map((branch) => {
       const branchOverride = branchOverridesMap.get(branch.id)
 
@@ -99,6 +113,7 @@ function buildEmptyProduct(index: number, branches: readonly CatalogBranchOption
     status: DEFAULT_PRODUCT_STATUS,
     primaryImagePath: "",
     primaryImageAlt: "",
+    variants: [],
     branchOverrides: branches.map((branch) => ({
       branchId: branch.id,
       branchName: branch.name,
@@ -257,6 +272,63 @@ export function AdminCatalogProducts({
     }))
   }
 
+  function addVariantRow() {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      variants: [
+        ...currentValues.variants,
+        {
+          id: `draft-variant-${currentValues.variants.length + 1}`,
+          name: "",
+          basePrice: currentValues.basePrice,
+          isDefault: currentValues.variants.length === 0,
+          sortOrder: currentValues.variants.length,
+        },
+      ],
+    }))
+  }
+
+  function handleVariantChange(index: number, field: "name" | "basePrice", value: string) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      variants: currentValues.variants.map((variant, currentIndex) => (currentIndex === index ? { ...variant, [field]: value } : variant)),
+    }))
+  }
+
+  function handleDefaultVariantChange(index: number) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      variants: currentValues.variants.map((variant, currentIndex) => ({
+        ...variant,
+        isDefault: currentIndex === index,
+      })),
+    }))
+  }
+
+  function removeVariantRow(index: number) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => {
+      const nextVariants = currentValues.variants.filter((_, currentIndex) => currentIndex !== index).map((variant, currentIndex) => ({
+        ...variant,
+        isDefault: variant.isDefault,
+        sortOrder: currentIndex,
+      }))
+
+      const hasDefaultVariant = nextVariants.some((variant) => variant.isDefault)
+
+      return {
+        ...currentValues,
+        variants: nextVariants.map((variant, currentIndex) => ({
+          ...variant,
+          isDefault: hasDefaultVariant ? variant.isDefault : currentIndex === 0,
+        })),
+      }
+    })
+  }
+
   function saveProduct() {
     if (!productFormValues.name.trim() || !productFormValues.category.trim() || !productFormValues.basePrice.trim()) {
       setFormErrorMessage("Completa nombre, categoria y precio base valido.")
@@ -272,6 +344,18 @@ export function AdminCatalogProducts({
       formData.set("status", productFormValues.status)
       formData.set("primaryImagePath", productFormValues.primaryImagePath)
       formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
+      formData.set(
+        "variants",
+        JSON.stringify(
+          productFormValues.variants.map((variant) => ({
+            id: variant.id.startsWith("draft-") ? undefined : variant.id,
+            name: variant.name,
+            basePrice: variant.basePrice,
+            isDefault: variant.isDefault,
+            sortOrder: variant.sortOrder,
+          }))
+        )
+      )
       formData.set(
         "branchOverrides",
         JSON.stringify(
@@ -427,6 +511,7 @@ export function AdminCatalogProducts({
                     <TableHead>Categoria</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Precio</TableHead>
+                    <TableHead>Tamanos</TableHead>
                     <TableHead>Modificadores</TableHead>
                     <TableHead>Branches</TableHead>
                     <TableHead className="w-[80px] text-right">Acciones</TableHead>
@@ -453,6 +538,7 @@ export function AdminCatalogProducts({
                         <Badge variant={getProductStatusVariant(product.status)}>{product.status}</Badge>
                       </TableCell>
                       <TableCell className="font-medium text-card-foreground">{product.basePrice}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.hasVariants ? `${product.variants.length} tamanos` : "Base unica"}</TableCell>
                       <TableCell className="text-muted-foreground">{product.modifierGroups.length} grupos</TableCell>
                       <TableCell className="text-muted-foreground">{formatBranchSummary(product)}</TableCell>
                       <TableCell>
@@ -566,6 +652,51 @@ export function AdminCatalogProducts({
                   <option value="Draft">Draft</option>
                 </select>
               </label>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-card-foreground">Tamanos y presentaciones</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Define variantes vendibles cuando este producto cambie por tamano, porcion o presentacion.</p>
+                </div>
+                {canEditGlobalCatalog ? (
+                  <Button type="button" variant="outline" className="rounded-xl" onClick={addVariantRow}>
+                    <Plus />
+                    Agregar tamano
+                  </Button>
+                ) : null}
+              </div>
+
+              {productFormValues.variants.length > 0 ? (
+                <div className="mt-4 grid gap-3">
+                  {productFormValues.variants.map((variant, index) => (
+                    <div key={variant.id} className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto_auto] md:items-end">
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-card-foreground">Nombre</span>
+                        <Input value={variant.name} onChange={(event) => handleVariantChange(index, "name", event.target.value)} placeholder="Ej. Grande" disabled={!canEditGlobalCatalog} />
+                      </label>
+                      <label className="grid gap-2 text-sm">
+                        <span className="font-medium text-card-foreground">Precio</span>
+                        <Input value={variant.basePrice} onChange={(event) => handleVariantChange(index, "basePrice", event.target.value)} placeholder="Ej. $ 14.90" disabled={!canEditGlobalCatalog} />
+                      </label>
+                      <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-card-foreground">
+                        <input checked={variant.isDefault} onChange={() => handleDefaultVariantChange(index)} type="radio" name="defaultVariant" disabled={!canEditGlobalCatalog} />
+                        Predeterminada
+                      </label>
+                      {canEditGlobalCatalog ? (
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeVariantRow(index)}>
+                          <Trash2 />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-[1rem] border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                  Este producto usa un precio base unico hasta que agregues variantes.
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-[0.9fr_1.1fr]">

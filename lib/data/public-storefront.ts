@@ -21,6 +21,13 @@ type TenantProduct = {
   readonly name: string
   readonly description: string
   readonly basePrice: string
+  readonly hasVariants: boolean
+  readonly variants: readonly {
+    id: string
+    name: string
+    basePrice: string
+    isDefault: boolean
+  }[]
   readonly category: string
   readonly imageUrl: string | null
 }
@@ -60,6 +67,16 @@ type ProductRow = {
   status: "active" | "draft"
 }
 
+type ProductVariantRow = {
+  id: string
+  product_id: string
+  name: string
+  base_price: number | string
+  is_default: boolean
+  is_active: boolean
+  sort_order: number
+}
+
 type CategoryRow = {
   id: string
   name: string
@@ -67,6 +84,12 @@ type CategoryRow = {
 
 type BranchProductOverrideRow = {
   product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | string | null
+}
+
+type BranchProductVariantOverrideRow = {
+  product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
 }
@@ -133,7 +156,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     logoImageUrl: tenantResult.data.logo_image_url,
   }
 
-  const [branchesResult, categoriesResult, productsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, productVariantsResult] = await Promise.all([
     supabase.from("branches").select("id, name, hero_image_url").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
     supabase
@@ -143,6 +166,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
       .eq("status", "active")
       .order("name", { ascending: true })
       .returns<ProductRow[]>(),
+    supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenant.id).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
   ])
 
   const branches = (branchesResult.data ?? []).map((branch) => ({
@@ -154,39 +178,85 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
   const activeBranch = resolveActiveBranch(branches, preferredBranchId)
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const products = productsResult.data ?? []
+  const productVariants = productVariantsResult.data ?? []
+  const productIds = products.map((product) => product.id)
+  const variantIds = productVariants.map((variant) => variant.id)
 
-  const branchOverridesResult =
-    activeBranch && products.length
-      ? await supabase
+  const [branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+    activeBranch && productIds.length
+      ? supabase
           .from("branch_product_overrides")
           .select("product_id, availability_status, price_override")
           .eq("branch_id", activeBranch.id)
-          .in(
-            "product_id",
-            products.map((product) => product.id)
-          )
+          .in("product_id", productIds)
           .returns<BranchProductOverrideRow[]>()
-      : { data: [], error: null }
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductOverrideRow[]; error: null }),
+    activeBranch && variantIds.length
+      ? supabase
+          .from("branch_product_variant_overrides")
+          .select("product_variant_id, availability_status, price_override")
+          .eq("branch_id", activeBranch.id)
+          .in("product_variant_id", variantIds)
+          .returns<BranchProductVariantOverrideRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
+  ])
 
-  if (branchesResult.error || categoriesResult.error || productsResult.error || branchOverridesResult.error) {
+  if (branchesResult.error || categoriesResult.error || productsResult.error || productVariantsResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
     return null
   }
 
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
+  const branchVariantOverrideMap = new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override]))
+  const productVariantsMap = productVariants.reduce<Map<string, ProductVariantRow[]>>((map, variant) => {
+    const currentVariants = map.get(variant.product_id) ?? []
+    map.set(variant.product_id, [...currentVariants, variant])
+    return map
+  }, new Map())
 
   const menu: TenantProduct[] = products
     .filter((product) => {
+      const variantsForProduct = productVariantsMap.get(product.id) ?? []
+
+      if (variantsForProduct.length > 0) {
+        return variantsForProduct.some((variant) => {
+          const variantOverride = branchVariantOverrideMap.get(variant.id)
+          return variantOverride ? variantOverride.availability_status === "available" : true
+        })
+      }
+
       const branchOverride = branchOverrideMap.get(product.id)
       return branchOverride ? branchOverride.availability_status === "available" : true
     })
     .map((product) => {
+      const variantsForProduct = productVariantsMap.get(product.id) ?? []
       const branchOverride = branchOverrideMap.get(product.id)
+      const visibleVariants = variantsForProduct
+        .filter((variant) => {
+          const variantOverride = branchVariantOverrideMap.get(variant.id)
+          return variantOverride ? variantOverride.availability_status === "available" : true
+        })
+        .map((variant) => ({
+          id: variant.id,
+          name: variant.name,
+          basePrice: formatCurrency(branchVariantOverrideMap.get(variant.id)?.price_override ?? variant.base_price),
+          isDefault: variant.is_default,
+        }))
+      const effectiveBasePrice =
+        visibleVariants.length > 0
+          ? Number(
+              [...visibleVariants]
+                .map((variant) => Number(variant.basePrice.replace(/[^0-9.-]+/g, "")))
+                .sort((left, right) => left - right)[0]
+            )
+          : Number(branchOverride?.price_override ?? product.base_price)
 
       return {
         id: product.id,
         name: product.name,
         description: product.description,
-        basePrice: formatCurrency(branchOverride?.price_override ?? product.base_price),
+        basePrice: formatCurrency(effectiveBasePrice),
+        hasVariants: visibleVariants.length > 0,
+        variants: visibleVariants,
         category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
         imageUrl: getStoragePublicUrl(product.primary_image_path),
       }

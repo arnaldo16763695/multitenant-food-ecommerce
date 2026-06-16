@@ -13,6 +13,8 @@ type CustomerBagMutationPayload = {
   readonly tenantSlug: string
   readonly branchId: string
   readonly productId: string
+  readonly productVariantId?: string | null
+  readonly quantity?: number
 }
 
 type ClearCustomerBagPayload = {
@@ -36,6 +38,8 @@ export async function addCustomerBagItemAction(payload: CustomerBagMutationPaylo
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
     productId: payload.productId,
+    productVariantId: payload.productVariantId,
+    quantity: payload.quantity,
     customerId: customerContext.customer.id,
   })
 }
@@ -56,6 +60,7 @@ export async function decrementCustomerBagItemAction(payload: CustomerBagMutatio
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
     productId: payload.productId,
+    productVariantId: payload.productVariantId,
     customerId: customerContext.customer.id,
   })
 }
@@ -76,6 +81,7 @@ export async function removeCustomerBagItemAction(payload: CustomerBagMutationPa
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
     productId: payload.productId,
+    productVariantId: payload.productVariantId,
     customerId: customerContext.customer.id,
   })
 }

@@ -38,6 +38,13 @@ type TenantShellProps = {
     name: string
     description: string
     basePrice: string
+    hasVariants: boolean
+    variants: readonly {
+      id: string
+      name: string
+      basePrice: string
+      isDefault: boolean
+    }[]
     category: string
     imageUrl?: string | null
   }[]

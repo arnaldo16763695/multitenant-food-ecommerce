@@ -11,8 +11,22 @@ type ProductRow = {
   category_id: string | null
   status: "active" | "draft"
 }
+
+type ProductVariantRow = {
+  id: string
+  product_id: string
+  name: string
+  base_price: number
+  is_active: boolean
+}
 type BranchProductOverrideRow = {
   product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | null
+}
+
+type BranchProductVariantOverrideRow = {
+  product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | null
 }
@@ -92,6 +106,7 @@ type KitchenOrderItemRow = {
   id: string
   order_id: string
   product_name_snapshot: string
+  variant_name_snapshot: string | null
   quantity: number
   prep_status: "pending" | "ready"
 }
@@ -119,10 +134,15 @@ type CustomerOrderDetailItemRow = {
   id: string
   order_id: string
   product_name_snapshot: string
+  variant_name_snapshot: string | null
   category_name_snapshot: string | null
   quantity: number
   unit_price_snapshot: number
   line_total: number
+}
+
+function formatOrderItemProductName(productName: string, variantName?: string | null) {
+  return variantName ? `${productName} · ${variantName}` : productName
 }
 
 export async function createStorefrontOrder(supabase: SupabaseClient, input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -156,7 +176,8 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
     return { ok: false, error: "La bolsa no coincide con la sucursal activa del checkout." }
   }
 
-  const productIds = [...new Set(input.items.map((item) => item.id))]
+  const productIds = [...new Set(input.items.map((item) => item.productId))]
+  const variantIds = [...new Set(input.items.map((item) => item.productVariantId).filter((value): value is string => Boolean(value)))]
   const productsResult = await supabase
     .from("products")
     .select("id, name, base_price, category_id, status")
@@ -179,7 +200,10 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   }
 
   const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
-  const [categoriesResult, branchOverridesResult] = await Promise.all([
+  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+    variantIds.length
+      ? supabase.from("product_variants").select("id, product_id, name, base_price, is_active").in("id", variantIds).returns<ProductVariantRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ProductVariantRow[]; error: null }),
     categoryIds.length
       ? supabase.from("categories").select("id, name").in("id", categoryIds).returns<CategoryRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: CategoryRow[]; error: null }),
@@ -191,19 +215,40 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
           .in("product_id", productIds)
           .returns<BranchProductOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductOverrideRow[]; error: null }),
+    variantIds.length
+      ? supabase
+          .from("branch_product_variant_overrides")
+          .select("product_variant_id, availability_status, price_override")
+          .eq("branch_id", input.branchId)
+          .in("product_variant_id", variantIds)
+          .returns<BranchProductVariantOverrideRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
   ])
 
-  if (categoriesResult.error || branchOverridesResult.error) {
-    return { ok: false, error: categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? "No pudimos validar la sucursal activa." }
+  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
+    return { ok: false, error: productVariantsResult.error?.message ?? categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? branchVariantOverridesResult.error?.message ?? "No pudimos validar la sucursal activa." }
   }
 
   const productMap = new Map(products.map((product) => [product.id, product]))
+  const productVariantMap = new Map((productVariantsResult.data ?? []).map((variant) => [variant.id, variant]))
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
+  const branchVariantOverrideMap = new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override]))
+
+  if (variantIds.length !== productVariantMap.size) {
+    return { ok: false, error: "Una o más variantes ya no están disponibles." }
+  }
 
   if (
     input.items.some((item) => {
-      const branchOverride = branchOverrideMap.get(item.id)
+      if (item.productVariantId) {
+        const variant = productVariantMap.get(item.productVariantId)
+        const branchVariantOverride = branchVariantOverrideMap.get(item.productVariantId)
+
+        return !variant || variant.product_id !== item.productId || !variant.is_active || (branchVariantOverride ? branchVariantOverride.availability_status !== "available" : false)
+      }
+
+      const branchOverride = branchOverrideMap.get(item.productId)
       return branchOverride ? branchOverride.availability_status !== "available" : false
     })
   ) {
@@ -211,17 +256,24 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   }
 
   const orderItemsPayload = input.items.map((item) => {
-    const product = productMap.get(item.id)
+    const product = productMap.get(item.productId)
+    const productVariant = item.productVariantId ? productVariantMap.get(item.productVariantId) : null
 
     if (!product) {
-      throw new Error(`Product ${item.id} not found during checkout.`)
+      throw new Error(`Product ${item.productId} not found during checkout.`)
     }
 
-    const unitPrice = Number(branchOverrideMap.get(product.id)?.price_override ?? product.base_price)
+    const unitPrice = Number(
+      productVariant
+        ? branchVariantOverrideMap.get(productVariant.id)?.price_override ?? productVariant.base_price
+        : branchOverrideMap.get(product.id)?.price_override ?? product.base_price
+    )
 
     return {
       product_id: product.id,
+      product_variant_id: productVariant?.id ?? null,
       product_name_snapshot: product.name,
+      variant_name_snapshot: productVariant?.name ?? null,
       category_name_snapshot: product.category_id ? categoryMap.get(product.category_id) ?? item.category : item.category,
       unit_price_snapshot: unitPrice,
       quantity: item.quantity,
@@ -344,6 +396,7 @@ type AdminOrderDetailItemRow = {
   id: string
   order_id: string
   product_name_snapshot: string
+  variant_name_snapshot: string | null
   category_name_snapshot: string | null
   quantity: number
   unit_price_snapshot: number
@@ -437,11 +490,11 @@ export async function getKitchenOrders(
   )
 
   const orderItemsResult = orderIds.length
-    ? await supabase
-        .from("order_items")
-        .select("id, order_id, quantity, product_name_snapshot, prep_status")
-        .in("order_id", orderIds)
-        .returns<KitchenOrderItemRow[]>()
+      ? await supabase
+          .from("order_items")
+          .select("id, order_id, quantity, product_name_snapshot, variant_name_snapshot, prep_status")
+          .in("order_id", orderIds)
+          .returns<KitchenOrderItemRow[]>()
     : { data: [], error: null }
 
   const orderItems = orderItemsResult.data ?? []
@@ -453,7 +506,7 @@ export async function getKitchenOrders(
 
   const itemPreviewMap = orderItems.reduce<Map<string, { id: string; productName: string; quantity: number; prepStatus: "pending" | "ready" }[]>>((map, item) => {
     const currentItems = map.get(item.order_id) ?? []
-    map.set(item.order_id, [...currentItems, { id: item.id, productName: item.product_name_snapshot, quantity: item.quantity, prepStatus: item.prep_status }])
+    map.set(item.order_id, [...currentItems, { id: item.id, productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot), quantity: item.quantity, prepStatus: item.prep_status }])
     return map
   }, new Map())
 
@@ -810,7 +863,7 @@ export async function getAdminOrderDetail(
 
   const itemsResult = await supabase
     .from("order_items")
-    .select("id, order_id, product_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total, notes")
+    .select("id, order_id, product_name_snapshot, variant_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total, notes")
     .eq("order_id", orderId)
     .returns<AdminOrderDetailItemRow[]>()
 
@@ -835,7 +888,7 @@ export async function getAdminOrderDetail(
     notes: orderResult.data.notes,
     items: (itemsResult.data ?? []).map((item) => ({
       id: item.id,
-      productName: item.product_name_snapshot,
+      productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot),
       categoryName: item.category_name_snapshot,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price_snapshot),
@@ -872,7 +925,7 @@ export async function getCustomerOrderDetail(
 
   const orderItemsResult = await supabase
     .from("order_items")
-    .select("id, order_id, product_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total")
+    .select("id, order_id, product_name_snapshot, variant_name_snapshot, category_name_snapshot, quantity, unit_price_snapshot, line_total")
     .eq("order_id", orderResult.data.id)
     .returns<CustomerOrderDetailItemRow[]>()
 
@@ -894,7 +947,7 @@ export async function getCustomerOrderDetail(
     notes: orderResult.data.notes,
     items: (orderItemsResult.data ?? []).map((item) => ({
       id: item.id,
-      productName: item.product_name_snapshot,
+      productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot),
       categoryName: item.category_name_snapshot,
       quantity: item.quantity,
       unitPrice: Number(item.unit_price_snapshot),

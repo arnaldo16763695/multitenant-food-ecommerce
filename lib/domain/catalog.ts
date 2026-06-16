@@ -15,10 +15,19 @@ export type CatalogProductMutationInput = {
   readonly category: string
   readonly description: string
   readonly basePrice: string
+  readonly variants?: readonly CatalogProductVariantInput[]
   readonly status: CatalogProductStatus
   readonly primaryImagePath?: string
   readonly primaryImageAlt?: string
   readonly branchOverrides?: readonly CatalogBranchOverrideInput[]
+}
+
+export type CatalogProductVariantInput = {
+  readonly id?: string
+  readonly name: string
+  readonly basePrice: string
+  readonly isDefault: boolean
+  readonly sortOrder: number
 }
 
 export type CatalogCategoryVisibility = "Publica" | "Oculta"

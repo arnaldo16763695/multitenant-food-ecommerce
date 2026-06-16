@@ -18,6 +18,7 @@ import {
   type CatalogCategoryMutationInput,
   type CatalogMutationResult,
   type CatalogProductMutationInput,
+  type CatalogProductVariantInput,
   type CatalogProductStatus,
 } from "@/lib/domain/catalog"
 
@@ -43,6 +44,7 @@ type ProductRow = {
 }
 type BranchRow = { id: string; name: string }
 type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple" }
+type ProductVariantRow = { id: string; product_id: string; name: string; base_price: number | string; is_default: boolean; is_active: boolean; sort_order: number }
 type ProductModifierGroupRow = { product_id: string; modifier_group_id: string }
 type BranchProductOverrideRow = {
   branch_id: string
@@ -58,6 +60,32 @@ export const EMPTY_CATALOG_MODULE: CatalogModuleData = {
   categories: [],
   modifierGroups: [],
   source: "supabase",
+}
+
+function normalizeVariantInputs(variants?: readonly CatalogProductVariantInput[]) {
+  const normalizedVariants = (variants ?? [])
+    .map((variant, index) => ({
+      id: variant.id,
+      name: variant.name.trim(),
+      basePrice: normalizeCatalogPrice(variant.basePrice),
+      isDefault: variant.isDefault,
+      sortOrder: variant.sortOrder ?? index,
+    }))
+    .filter((variant) => variant.name && variant.basePrice)
+
+  if (normalizedVariants.length === 0) {
+    return { ok: true as const, variants: [] as const }
+  }
+
+  if (normalizedVariants.filter((variant) => variant.isDefault).length !== 1) {
+    return { ok: false as const, error: "Define exactamente una variante predeterminada." }
+  }
+
+  if (new Set(normalizedVariants.map((variant) => variant.name.toLowerCase())).size !== normalizedVariants.length) {
+    return { ok: false as const, error: "Las variantes no pueden repetir nombre." }
+  }
+
+  return { ok: true as const, variants: normalizedVariants }
 }
 
 function formatCurrency(value: number | string | null) {
@@ -288,15 +316,85 @@ async function resolveUniqueSlug(supabase: SupabaseClient, tenantId: string, bas
   }
 }
 
+async function syncProductVariants(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  variants?: readonly CatalogProductVariantInput[]
+): Promise<CatalogMutationResult> {
+  const normalizedVariantsResult = normalizeVariantInputs(variants)
+
+  if (!normalizedVariantsResult.ok) {
+    return { ok: false, error: normalizedVariantsResult.error }
+  }
+
+  const normalizedVariants = normalizedVariantsResult.variants
+  const existingVariantsResult = await supabase
+    .from("product_variants")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("product_id", productId)
+    .returns<{ id: string }[]>()
+
+  if (existingVariantsResult.error) {
+    return { ok: false, error: existingVariantsResult.error.message }
+  }
+
+  const existingVariantIds = new Set((existingVariantsResult.data ?? []).map((variant) => variant.id))
+  const nextVariantIds = new Set(normalizedVariants.map((variant) => variant.id).filter((value): value is string => Boolean(value)))
+  const variantIdsToDelete = [...existingVariantIds].filter((variantId) => !nextVariantIds.has(variantId))
+
+  if (variantIdsToDelete.length > 0) {
+    const deleteResult = await supabase.from("product_variants").delete().eq("tenant_id", tenantId).eq("product_id", productId).in("id", variantIdsToDelete)
+
+    if (deleteResult.error) {
+      return { ok: false, error: deleteResult.error.message }
+    }
+  }
+
+  if (normalizedVariants.length === 0) {
+    return { ok: true }
+  }
+
+  const resetDefaultsResult = await supabase.from("product_variants").update({ is_default: false }).eq("tenant_id", tenantId).eq("product_id", productId)
+
+  if (resetDefaultsResult.error) {
+    return { ok: false, error: resetDefaultsResult.error.message }
+  }
+
+  const upsertResult = await supabase.from("product_variants").upsert(
+    normalizedVariants.map((variant) => ({
+      id: variant.id,
+      tenant_id: tenantId,
+      product_id: productId,
+      name: variant.name,
+      base_price: variant.basePrice,
+      is_default: variant.isDefault,
+      is_active: true,
+      sort_order: variant.sortOrder,
+    })),
+    {
+      onConflict: "id",
+    }
+  )
+
+  if (upsertResult.error) {
+    return { ok: false, error: upsertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
 export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, tenantId: string): Promise<CatalogModuleData> {
-  const [branchesResult, categoriesResult, productsResult, modifierGroupsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, modifierGroupsResult, productVariantsResult] = await Promise.all([
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name, is_visible, image_path, sort_order").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
     supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
     supabase.from("modifier_groups").select("id, name, selection_type").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
+    supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
   ])
 
-  if (branchesResult.error || categoriesResult.error || productsResult.error || modifierGroupsResult.error) {
+  if (branchesResult.error || categoriesResult.error || productsResult.error || modifierGroupsResult.error || productVariantsResult.error) {
     return EMPTY_CATALOG_MODULE
   }
 
@@ -304,6 +402,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const categories = categoriesResult.data ?? []
   const products = productsResult.data ?? []
   const modifierGroups = modifierGroupsResult.data ?? []
+  const productVariants = productVariantsResult.data ?? []
 
   const productIds = products.map((product) => product.id)
 
@@ -330,6 +429,11 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const categoryMap = new Map(categories.map((category) => [category.id, category]))
   const branchMap = new Map(branches.map((branch) => [branch.id, branch]))
   const modifierGroupMap = new Map(modifierGroups.map((group) => [group.id, group]))
+  const productVariantsMap = productVariants.reduce<Map<string, ProductVariantRow[]>>((map, variant) => {
+    const currentValue = map.get(variant.product_id) ?? []
+    map.set(variant.product_id, [...currentValue, variant])
+    return map
+  }, new Map())
 
   const productModifierGroupsMap = productModifierGroups.reduce<Map<string, string[]>>((map, relation) => {
     const currentValue = map.get(relation.product_id) ?? []
@@ -349,6 +453,13 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     category: product.category_id ? (categoryMap.get(product.category_id)?.name ?? "Sin categoria") : "Sin categoria",
     description: product.description,
     basePrice: formatCurrency(product.base_price),
+    hasVariants: (productVariantsMap.get(product.id) ?? []).length > 0,
+    variants: (productVariantsMap.get(product.id) ?? []).map((variant) => ({
+      id: variant.id,
+      name: variant.name,
+      basePrice: formatCurrency(variant.base_price),
+      isDefault: variant.is_default,
+    })),
     status: fromCatalogDbStatus(product.status),
     primaryImagePath: product.primary_image_path,
     primaryImageUrl: getCatalogMediaPublicUrl(product.primary_image_path),
@@ -453,6 +564,12 @@ export async function createCatalogProductWithOptions(
     return branchOverridesResult
   }
 
+  const variantsResult = await syncProductVariants(supabase, tenantId, insertResult.data.id, payload.variants)
+
+  if (!variantsResult.ok) {
+    return variantsResult
+  }
+
   return { ok: true, entityId: insertResult.data.id }
 }
 
@@ -500,6 +617,12 @@ export async function updateCatalogProduct(
 
   if (!branchOverridesResult.ok) {
     return branchOverridesResult
+  }
+
+  const variantsResult = await syncProductVariants(supabase, tenantId, productId, payload.variants)
+
+  if (!variantsResult.ok) {
+    return variantsResult
   }
 
   return { ok: true }
@@ -581,6 +704,34 @@ export async function duplicateCatalogProduct(supabase: SupabaseClient, tenantId
 
   if (!branchOverridesResult.ok) {
     return branchOverridesResult
+  }
+
+  const sourceVariantsResult = await supabase
+    .from("product_variants")
+    .select("name, base_price, is_default, sort_order")
+    .eq("tenant_id", tenantId)
+    .eq("product_id", productId)
+    .eq("is_active", true)
+    .returns<Pick<ProductVariantRow, "name" | "base_price" | "is_default" | "sort_order">[]>()
+
+  if (sourceVariantsResult.error) {
+    return { ok: false, error: sourceVariantsResult.error.message }
+  }
+
+  const variantsResult = await syncProductVariants(
+    supabase,
+    tenantId,
+    insertResult.data.id,
+    (sourceVariantsResult.data ?? []).map((variant) => ({
+      name: variant.name,
+      basePrice: String(variant.base_price),
+      isDefault: variant.is_default,
+      sortOrder: variant.sort_order,
+    }))
+  )
+
+  if (!variantsResult.ok) {
+    return variantsResult
   }
 
   return { ok: true }

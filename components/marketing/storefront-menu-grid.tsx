@@ -8,6 +8,7 @@ import { ShoppingBag } from "lucide-react"
 import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
+import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
 import { useHydrateShoppingBagBranch, useShoppingBagStore } from "@/lib/storefront/bag-store"
 
 type StorefrontMenuItem = {
@@ -15,6 +16,13 @@ type StorefrontMenuItem = {
   readonly name: string
   readonly description: string
   readonly basePrice: string
+  readonly hasVariants: boolean
+  readonly variants: readonly {
+    id: string
+    name: string
+    basePrice: string
+    isDefault: boolean
+  }[]
   readonly category: string
   readonly imageUrl?: string | null
 }
@@ -30,6 +38,7 @@ type StorefrontMenuGridProps = {
 export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [] }: StorefrontMenuGridProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
+  const [sheetProductId, setSheetProductId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
   const storefrontHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const loginHref = React.useMemo(
@@ -51,6 +60,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
 
     return menu.filter((item) => item.category === activeCategory)
   }, [activeCategory, menu])
+  const sheetProduct = React.useMemo(() => visibleItems.find((item) => item.id === sheetProductId) ?? menu.find((item) => item.id === sheetProductId) ?? null, [menu, sheetProductId, visibleItems])
 
   async function handleAddItem(productId: string) {
     setPendingItemId(productId)
@@ -139,7 +149,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                 <p className="text-xl font-semibold tracking-tight text-stone-950">{item.name}</p>
                 <p className="mt-2 line-clamp-3 text-sm leading-7 text-stone-600">{item.description}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-orange-100 px-3.5 py-1.5 text-sm font-semibold text-orange-700">{item.basePrice}</span>
+              <span className="shrink-0 rounded-full bg-orange-100 px-3.5 py-1.5 text-sm font-semibold text-orange-700">{item.hasVariants ? `Desde ${item.basePrice}` : item.basePrice}</span>
             </div>
             <div className="mt-6 flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
@@ -148,10 +158,10 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                   size="lg"
                   className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
                   disabled={pendingItemId === item.id}
-                  onClick={() => void handleAddItem(item.id)}
+                  onClick={() => (item.hasVariants ? setSheetProductId(item.id) : void handleAddItem(item.id))}
                 >
                   <ShoppingBag />
-                  {pendingItemId === item.id ? "Agregando..." : "Agregar"}
+                  {item.hasVariants ? "Elegir" : pendingItemId === item.id ? "Agregando..." : "Agregar"}
                 </Button>
               ) : (
                 <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
@@ -172,6 +182,17 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
           <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">No hay productos en esta categoria ahora mismo.</h3>
           <p className="mt-3 text-sm leading-7 text-stone-600">Prueba otra categoria para seguir explorando el menu.</p>
         </div>
+      ) : null}
+
+      {sheetProduct ? (
+        <StorefrontProductSheet
+          tenantSlug={tenantSlug}
+          branchId={branchId}
+          product={sheetProduct}
+          open={Boolean(sheetProductId)}
+          onOpenChange={(nextOpen) => setSheetProductId(nextOpen ? sheetProduct.id : null)}
+          onItemAdded={upsertItem}
+        />
       ) : null}
     </div>
   )

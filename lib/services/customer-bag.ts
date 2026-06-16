@@ -12,6 +12,7 @@ type BranchRow = {
 
 type CustomerBagItemRow = {
   product_id: string
+  product_variant_id: string | null
   quantity: number
 }
 
@@ -24,6 +25,14 @@ type ProductRow = {
   status: "active" | "draft"
 }
 
+type ProductVariantRow = {
+  id: string
+  product_id: string
+  name: string
+  base_price: number | string
+  is_active: boolean
+}
+
 type CategoryRow = {
   id: string
   name: string
@@ -31,6 +40,12 @@ type CategoryRow = {
 
 type BranchProductOverrideRow = {
   product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | string | null
+}
+
+type BranchProductVariantOverrideRow = {
+  product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
 }
@@ -75,12 +90,20 @@ async function resolveBranchContext(supabase: SupabaseClient, tenantSlug: string
   }
 }
 
-async function loadBranchProductMaps(supabase: SupabaseClient, tenantId: string, branchId: string, productIds: readonly string[]) {
-  if (!productIds.length) {
+async function loadBranchProductMaps(
+  supabase: SupabaseClient,
+  tenantId: string,
+  branchId: string,
+  productIds: readonly string[],
+  variantIds: readonly string[] = []
+) {
+  if (!productIds.length && !variantIds.length) {
     return {
       productMap: new Map<string, ProductRow>(),
+      productVariantMap: new Map<string, ProductVariantRow>(),
       categoryMap: new Map<string, string>(),
       branchOverrideMap: new Map<string, BranchProductOverrideRow>(),
+      branchVariantOverrideMap: new Map<string, BranchProductVariantOverrideRow>(),
     }
   }
 
@@ -98,26 +121,39 @@ async function loadBranchProductMaps(supabase: SupabaseClient, tenantId: string,
   const products = productsResult.data ?? []
   const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
 
-  const [categoriesResult, branchOverridesResult] = await Promise.all([
+  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+    variantIds.length
+      ? supabase.from("product_variants").select("id, product_id, name, base_price, is_active").eq("tenant_id", tenantId).in("id", [...variantIds]).returns<ProductVariantRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ProductVariantRow[]; error: null }),
     categoryIds.length
       ? supabase.from("categories").select("id, name").in("id", categoryIds).returns<CategoryRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: CategoryRow[]; error: null }),
     supabase
       .from("branch_product_overrides")
       .select("product_id, availability_status, price_override")
-      .eq("branch_id", branchId)
-      .in("product_id", [...productIds])
-      .returns<BranchProductOverrideRow[]>(),
+          .eq("branch_id", branchId)
+          .in("product_id", [...productIds])
+          .returns<BranchProductOverrideRow[]>(),
+    variantIds.length
+      ? supabase
+          .from("branch_product_variant_overrides")
+          .select("product_variant_id, availability_status, price_override")
+          .eq("branch_id", branchId)
+          .in("product_variant_id", [...variantIds])
+          .returns<BranchProductVariantOverrideRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
   ])
 
-  if (categoriesResult.error || branchOverridesResult.error) {
-    throw new Error(categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? "No pudimos validar la bolsa.")
+  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
+    throw new Error(productVariantsResult.error?.message ?? categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? branchVariantOverridesResult.error?.message ?? "No pudimos validar la bolsa.")
   }
 
   return {
     productMap: new Map(products.map((product) => [product.id, product])),
+    productVariantMap: new Map((productVariantsResult.data ?? []).map((variant) => [variant.id, variant])),
     categoryMap: new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name])),
     branchOverrideMap: new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override])),
+    branchVariantOverrideMap: new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override])),
   }
 }
 
@@ -126,26 +162,40 @@ function buildBagItem(
   branchId: string,
   quantity: number,
   product: ProductRow,
+  productVariant: ProductVariantRow | null,
   categoryMap: ReadonlyMap<string, string>,
-  branchOverrideMap: ReadonlyMap<string, BranchProductOverrideRow>
+  branchOverrideMap: ReadonlyMap<string, BranchProductOverrideRow>,
+  branchVariantOverrideMap: ReadonlyMap<string, BranchProductVariantOverrideRow>
 ): ShoppingBagItem | null {
   if (product.status !== "active") {
     return null
   }
 
-  const branchOverride = branchOverrideMap.get(product.id)
-
-  if (branchOverride && branchOverride.availability_status !== "available") {
+  if (productVariant && (!productVariant.is_active || productVariant.product_id !== product.id)) {
     return null
   }
 
-  const unitPrice = Number(branchOverride?.price_override ?? product.base_price)
+  const branchOverride = branchOverrideMap.get(product.id)
+  const branchVariantOverride = productVariant ? branchVariantOverrideMap.get(productVariant.id) : null
+
+  if (productVariant) {
+    if (branchVariantOverride && branchVariantOverride.availability_status !== "available") {
+      return null
+    }
+  } else if (branchOverride && branchOverride.availability_status !== "available") {
+    return null
+  }
+
+  const unitPrice = Number(productVariant ? branchVariantOverride?.price_override ?? productVariant.base_price : branchOverride?.price_override ?? product.base_price)
 
   return {
-    id: product.id,
+    id: productVariant?.id ?? product.id,
+    productId: product.id,
+    productVariantId: productVariant?.id ?? null,
+    variantName: productVariant?.name ?? null,
     tenantSlug,
     branchId,
-    name: product.name,
+    name: productVariant ? `${product.name} · ${productVariant.name}` : product.name,
     description: product.description,
     category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
     unitPrice,
@@ -168,7 +218,7 @@ export async function getCustomerBagItems(
 
   const bagItemsResult = await supabase
     .from("customer_bag_items")
-    .select("product_id, quantity")
+    .select("product_id, product_variant_id, quantity")
     .eq("customer_id", customerId)
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", branchId)
@@ -179,7 +229,8 @@ export async function getCustomerBagItems(
   }
 
   const productIds = [...new Set(bagItemsResult.data.map((item) => item.product_id))]
-  const { productMap, categoryMap, branchOverrideMap } = await loadBranchProductMaps(supabase, context.tenantId, branchId, productIds)
+  const variantIds = [...new Set(bagItemsResult.data.map((item) => item.product_variant_id).filter((value): value is string => Boolean(value)))]
+  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(supabase, context.tenantId, branchId, productIds, variantIds)
 
   return bagItemsResult.data.flatMap((item) => {
     const product = productMap.get(item.product_id)
@@ -188,7 +239,7 @@ export async function getCustomerBagItems(
       return []
     }
 
-    const bagItem = buildBagItem(tenantSlug, branchId, item.quantity, product, categoryMap, branchOverrideMap)
+    const bagItem = buildBagItem(tenantSlug, branchId, item.quantity, product, item.product_variant_id ? productVariantMap.get(item.product_variant_id) ?? null : null, categoryMap, branchOverrideMap, branchVariantOverrideMap)
 
     return bagItem ? [bagItem] : []
   })
@@ -201,6 +252,8 @@ export async function addCustomerBagItem(
     readonly branchId: string
     readonly customerId: string
     readonly productId: string
+    readonly productVariantId?: string | null
+    readonly quantity?: number
   }
 ): Promise<ShoppingBagMutationResult> {
   const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
@@ -209,20 +262,51 @@ export async function addCustomerBagItem(
     return context
   }
 
-  const { productMap, categoryMap, branchOverrideMap } = await loadBranchProductMaps(supabase, context.tenantId, input.branchId, [input.productId])
+  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(
+    supabase,
+    context.tenantId,
+    input.branchId,
+    [input.productId],
+    input.productVariantId ? [input.productVariantId] : []
+  )
   const product = productMap.get(input.productId)
+  const productVariant = input.productVariantId ? productVariantMap.get(input.productVariantId) ?? null : null
 
   if (!product) {
     return { ok: false, error: "No encontramos el producto seleccionado." }
   }
 
+  if (input.productVariantId && !productVariant) {
+    return { ok: false, error: "No encontramos la variante seleccionada." }
+  }
+
+  if (!input.productVariantId) {
+    const activeVariantsResult = await supabase
+      .from("product_variants")
+      .select("id")
+      .eq("tenant_id", context.tenantId)
+      .eq("product_id", input.productId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<{ id: string }>()
+
+    if (activeVariantsResult.error) {
+      return { ok: false, error: activeVariantsResult.error.message }
+    }
+
+    if (activeVariantsResult.data) {
+      return { ok: false, error: "Selecciona primero un tamano para continuar." }
+    }
+  }
+
   const existingItemResult = await supabase
     .from("customer_bag_items")
-    .select("product_id, quantity")
+    .select("product_id, product_variant_id, quantity")
     .eq("customer_id", input.customerId)
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", input.branchId)
     .eq("product_id", input.productId)
+    .is("product_variant_id", input.productVariantId ?? null)
     .limit(1)
     .maybeSingle<CustomerBagItemRow>()
 
@@ -230,8 +314,9 @@ export async function addCustomerBagItem(
     return { ok: false, error: existingItemResult.error.message }
   }
 
-  const nextQuantity = (existingItemResult.data?.quantity ?? 0) + 1
-  const bagItem = buildBagItem(input.tenantSlug, input.branchId, nextQuantity, product, categoryMap, branchOverrideMap)
+  const quantityToAdd = Math.max(input.quantity ?? 1, 1)
+  const nextQuantity = (existingItemResult.data?.quantity ?? 0) + quantityToAdd
+  const bagItem = buildBagItem(input.tenantSlug, input.branchId, nextQuantity, product, productVariant, categoryMap, branchOverrideMap, branchVariantOverrideMap)
 
   if (!bagItem) {
     return { ok: false, error: "Este producto ya no esta disponible en esta sucursal." }
@@ -245,11 +330,13 @@ export async function addCustomerBagItem(
         .eq("tenant_id", context.tenantId)
         .eq("branch_id", input.branchId)
         .eq("product_id", input.productId)
+        .is("product_variant_id", input.productVariantId ?? null)
     : await supabase.from("customer_bag_items").insert({
         customer_id: input.customerId,
         tenant_id: context.tenantId,
         branch_id: input.branchId,
         product_id: input.productId,
+        product_variant_id: input.productVariantId ?? null,
         quantity: nextQuantity,
       })
 
@@ -271,6 +358,7 @@ export async function decrementCustomerBagItem(
     readonly branchId: string
     readonly customerId: string
     readonly productId: string
+    readonly productVariantId?: string | null
   }
 ): Promise<ShoppingBagMutationResult> {
   const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
@@ -286,6 +374,7 @@ export async function decrementCustomerBagItem(
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", input.branchId)
     .eq("product_id", input.productId)
+    .is("product_variant_id", input.productVariantId ?? null)
     .limit(1)
     .maybeSingle<{ quantity: number }>()
 
@@ -308,6 +397,7 @@ export async function decrementCustomerBagItem(
           .eq("tenant_id", context.tenantId)
           .eq("branch_id", input.branchId)
           .eq("product_id", input.productId)
+          .is("product_variant_id", input.productVariantId ?? null)
       : await supabase
           .from("customer_bag_items")
           .delete()
@@ -315,6 +405,7 @@ export async function decrementCustomerBagItem(
           .eq("tenant_id", context.tenantId)
           .eq("branch_id", input.branchId)
           .eq("product_id", input.productId)
+          .is("product_variant_id", input.productVariantId ?? null)
 
   if (mutationResult.error) {
     return { ok: false, error: mutationResult.error.message }
@@ -333,6 +424,7 @@ export async function removeCustomerBagItem(
     readonly branchId: string
     readonly customerId: string
     readonly productId: string
+    readonly productVariantId?: string | null
   }
 ): Promise<ShoppingBagMutationResult> {
   const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
@@ -348,6 +440,7 @@ export async function removeCustomerBagItem(
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", input.branchId)
     .eq("product_id", input.productId)
+    .is("product_variant_id", input.productVariantId ?? null)
 
   if (mutationResult.error) {
     return { ok: false, error: mutationResult.error.message }
