@@ -261,6 +261,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               <p className="mt-1 text-2xl font-semibold text-stone-950">{totalLabel}</p>
             </div>
             <Button className="rounded-full border-orange-600 bg-orange-600 px-6 text-white hover:bg-orange-500 hover:text-white" disabled={isSubmitting || !selectedVariant} onClick={() => void handleConfirm()}>
+            <Button
+              className="rounded-full border-orange-600 bg-orange-600 px-6 text-white hover:bg-orange-500 hover:text-white"
+              disabled={isSubmitting || (product.variants.length > 0 && !selectedVariant)}
+              onClick={() => void handleConfirm()}
+            >
               <ShoppingBag />
               {isSubmitting ? "Agregando..." : "Confirmar y agregar"}
             </Button>
