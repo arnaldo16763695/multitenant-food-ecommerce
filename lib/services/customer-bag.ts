@@ -553,6 +553,117 @@ export async function replaceCustomerBagItem(
     readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
   }
 ): Promise<ShoppingBagMutationResult> {
+  const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
+
+  if (!context.ok) {
+    return context
+  }
+
+  const currentBagItemResult = await supabase
+    .from("customer_bag_items")
+    .select("id, product_id, product_variant_id, configuration_hash, quantity")
+    .eq("id", input.bagItemId)
+    .eq("customer_id", input.customerId)
+    .eq("tenant_id", context.tenantId)
+    .eq("branch_id", input.branchId)
+    .limit(1)
+    .maybeSingle<CustomerBagItemRow>()
+
+  if (currentBagItemResult.error || !currentBagItemResult.data) {
+    return { ok: false, error: "No encontramos el item original de la bolsa." }
+  }
+
+  const nextModifierSelections = input.modifierSelections ?? []
+  const nextConfigurationHash = buildConfigurationHash(nextModifierSelections)
+  const isSameBagLine =
+    currentBagItemResult.data.product_id === input.productId &&
+    (currentBagItemResult.data.product_variant_id ?? null) === (input.productVariantId ?? null) &&
+    currentBagItemResult.data.configuration_hash === nextConfigurationHash
+
+  if (isSameBagLine) {
+    const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(
+      supabase,
+      context.tenantId,
+      input.branchId,
+      [input.productId],
+      input.productVariantId ? [input.productVariantId] : []
+    )
+    const product = productMap.get(input.productId)
+    const productVariant = input.productVariantId ? productVariantMap.get(input.productVariantId) ?? null : null
+
+    if (!product) {
+      return { ok: false, error: "No encontramos el producto seleccionado." }
+    }
+
+    if (input.productVariantId && !productVariant) {
+      return { ok: false, error: "No encontramos la variante seleccionada." }
+    }
+
+    const { modifierGroupMap, modifierGroupOptionsMap } = await loadProductModifierConfiguration(supabase, context.tenantId, input.productId)
+    const modifierValidationResult = validateModifierSelections(nextModifierSelections, modifierGroupMap, modifierGroupOptionsMap)
+
+    if (!modifierValidationResult.ok) {
+      return modifierValidationResult
+    }
+
+    const updateResult = await supabase
+      .from("customer_bag_items")
+      .update({ quantity: Math.max(input.quantity, 1) })
+      .eq("id", input.bagItemId)
+      .eq("customer_id", input.customerId)
+
+    if (updateResult.error) {
+      return { ok: false, error: updateResult.error.message }
+    }
+
+    const deleteModifiersResult = await supabase
+      .from("customer_bag_item_modifiers")
+      .delete()
+      .eq("customer_bag_item_id", input.bagItemId)
+
+    if (deleteModifiersResult.error) {
+      return { ok: false, error: deleteModifiersResult.error.message }
+    }
+
+    if (nextModifierSelections.length > 0) {
+      const insertModifiersResult = await supabase.from("customer_bag_item_modifiers").insert(
+        nextModifierSelections.map((selection) => ({
+          customer_bag_item_id: input.bagItemId,
+          modifier_group_id: selection.modifierGroupId,
+          modifier_option_id: selection.modifierOptionId,
+          price_delta_snapshot: selection.priceDelta,
+        }))
+      )
+
+      if (insertModifiersResult.error) {
+        return { ok: false, error: insertModifiersResult.error.message }
+      }
+    }
+
+    const bagItem = buildBagItem(
+      input.bagItemId,
+      input.tenantSlug,
+      input.branchId,
+      Math.max(input.quantity, 1),
+      product,
+      productVariant,
+      categoryMap,
+      branchOverrideMap,
+      branchVariantOverrideMap,
+      nextModifierSelections
+    )
+
+    if (!bagItem) {
+      return { ok: false, error: "Este producto ya no esta disponible en esta sucursal." }
+    }
+
+    return {
+      ok: true,
+      item: bagItem,
+      quantity: bagItem.quantity,
+    }
+  }
+
   const addResult = await addCustomerBagItem(supabase, {
     tenantSlug: input.tenantSlug,
     branchId: input.branchId,

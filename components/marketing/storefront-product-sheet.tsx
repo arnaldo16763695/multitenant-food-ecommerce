@@ -45,7 +45,7 @@ type StorefrontProductSheetProps = {
   }
   readonly open: boolean
   readonly onOpenChange: (nextOpen: boolean) => void
-  readonly onItemAdded: (item: ShoppingBagItem) => void
+  readonly onItemAdded: (item: ShoppingBagItem) => void | Promise<void>
   readonly initialItem?: ShoppingBagItem | null
   readonly submitLabel?: string
 }
@@ -163,6 +163,15 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     }
 
     const optimisticItem = buildOptimisticItem()
+
+    if (initialItem) {
+      setIsSubmitting(true)
+      setErrorMessage("")
+      await onItemAdded(optimisticItem)
+      setIsSubmitting(false)
+      return
+    }
+
     upsertItem(optimisticItem)
     onItemAdded(optimisticItem)
     onOpenChange(false)
