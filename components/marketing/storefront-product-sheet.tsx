@@ -8,6 +8,7 @@ import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { useShoppingBagStore } from "@/lib/storefront/bag-store"
 
 type ProductVariantOption = {
   readonly id: string
@@ -52,6 +53,8 @@ function parsePriceLabel(value: string) {
 }
 
 export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded }: StorefrontProductSheetProps) {
+  const upsertItem = useShoppingBagStore((state) => state.upsertItem)
+  const removeItem = useShoppingBagStore((state) => state.removeItem)
   const defaultVariant = React.useMemo(() => product.variants.find((variant) => variant.isDefault) ?? product.variants[0] ?? null, [product.variants])
   const [selectedVariantId, setSelectedVariantId] = React.useState(defaultVariant?.id ?? "")
   const [quantity, setQuantity] = React.useState(1)
@@ -90,6 +93,26 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     [modifierSelections, product.basePrice, quantity, selectedVariant?.basePrice]
   )
 
+  function buildOptimisticItem() {
+    const unitPrice = Number((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
+
+    return {
+      id: `optimistic-${crypto.randomUUID()}`,
+      productId: product.id,
+      productVariantId: selectedVariant?.id ?? null,
+      variantName: selectedVariant?.name ?? null,
+      tenantSlug,
+      branchId,
+      name: selectedVariant ? `${product.name} · ${selectedVariant.name}` : product.name,
+      description: product.description,
+      category: product.category,
+      unitPrice,
+      unitPriceLabel: `$ ${unitPrice.toFixed(2)}`,
+      quantity,
+      modifierSelections,
+    } satisfies ShoppingBagItem
+  }
+
   function handleOptionToggle(groupId: string, optionId: string, selectionType: "single" | "multiple") {
     setSelectedOptionsByGroup((currentValue) => {
       const currentSelections = currentValue[groupId] ?? []
@@ -125,6 +148,10 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       }
     }
 
+    const optimisticItem = buildOptimisticItem()
+    upsertItem(optimisticItem)
+    onItemAdded(optimisticItem)
+    onOpenChange(false)
     setIsSubmitting(true)
     setErrorMessage("")
 
@@ -138,14 +165,17 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     })
 
     if (!result.ok || !result.item) {
+      removeItem(optimisticItem.id, tenantSlug, branchId)
+      onOpenChange(true)
       setErrorMessage(result.error ?? "No pudimos agregar este producto a la bolsa.")
       setIsSubmitting(false)
       return
     }
 
+    removeItem(optimisticItem.id, tenantSlug, branchId)
+    upsertItem(result.item)
     onItemAdded(result.item)
     setIsSubmitting(false)
-    onOpenChange(false)
   }
 
   return (
