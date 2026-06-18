@@ -16,6 +16,7 @@ import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
+import { useToastStore } from "@/lib/ui/toast-store"
 
 type StorefrontBagViewProps = {
   readonly tenantSlug: string
@@ -33,6 +34,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
+  const pushToast = useToastStore((state) => state.pushToast)
   const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
   useHydrateShoppingBagBranch(tenantSlug, activeBranchId, initialBagItems)
@@ -58,6 +60,11 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       upsertItem(result.item)
     } else {
       upsertItem(currentItem)
+      pushToast({
+        title: "No pudimos actualizar la bolsa",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
     }
 
     setPendingItemId(null)
@@ -88,6 +95,11 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       }
     } else {
       upsertItem(currentItem)
+      pushToast({
+        title: "No pudimos actualizar la bolsa",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
     }
 
     setPendingItemId(null)
@@ -109,6 +121,11 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       removeItem(productId, tenantSlug, activeBranchId)
     } else {
       upsertItem(currentItem)
+      pushToast({
+        title: "No pudimos quitar el producto",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
     }
 
     setPendingItemId(null)
@@ -124,6 +141,11 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       clearBranchBag(tenantSlug, activeBranchId)
     } else {
       setBranchItems(tenantSlug, activeBranchId, previousItems)
+      pushToast({
+        title: "No pudimos vaciar la bolsa",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
     }
 
     setIsClearing(false)

@@ -9,6 +9,7 @@ import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useShoppingBagStore } from "@/lib/storefront/bag-store"
+import { useToastStore } from "@/lib/ui/toast-store"
 
 type ProductVariantOption = {
   readonly id: string
@@ -55,6 +56,7 @@ function parsePriceLabel(value: string) {
 export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
+  const pushToast = useToastStore((state) => state.pushToast)
   const defaultVariant = React.useMemo(() => product.variants.find((variant) => variant.isDefault) ?? product.variants[0] ?? null, [product.variants])
   const [selectedVariantId, setSelectedVariantId] = React.useState(defaultVariant?.id ?? "")
   const [quantity, setQuantity] = React.useState(1)
@@ -152,6 +154,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     upsertItem(optimisticItem)
     onItemAdded(optimisticItem)
     onOpenChange(false)
+    pushToast({
+      title: "Agregado a la bolsa",
+      description: `${optimisticItem.quantity} x ${optimisticItem.name}`,
+      variant: "success",
+    })
     setIsSubmitting(true)
     setErrorMessage("")
 
@@ -167,6 +174,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     if (!result.ok || !result.item) {
       removeItem(optimisticItem.id, tenantSlug, branchId)
       onOpenChange(true)
+      pushToast({
+        title: "No pudimos agregar el producto",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
       setErrorMessage(result.error ?? "No pudimos agregar este producto a la bolsa.")
       setIsSubmitting(false)
       return
