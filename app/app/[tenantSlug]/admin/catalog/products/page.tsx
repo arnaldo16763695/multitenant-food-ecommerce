@@ -28,7 +28,7 @@ export default async function AdminCatalogProductsPage({ params }: AdminCatalogP
     throw new Error("Supabase client is not configured.")
   }
 
-  const { products, categories, branches } = await getAdminCatalogModule(tenantSlug)
+  const { products, categories, branches, modifierGroups } = await getAdminCatalogModule(tenantSlug)
   const allowedBranches =
     access.membership.role === "branch_manager"
       ? await getActiveBranchesForMembership(supabase, access.membership.id)
@@ -40,6 +40,7 @@ export default async function AdminCatalogProductsPage({ params }: AdminCatalogP
       initialProducts={products}
       initialCategories={categories}
       initialBranches={allowedBranches}
+      initialModifierGroups={modifierGroups}
       role={access.membership.role}
     />
   )

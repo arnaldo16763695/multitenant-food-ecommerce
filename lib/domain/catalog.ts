@@ -16,6 +16,7 @@ export type CatalogProductMutationInput = {
   readonly description: string
   readonly basePrice: string
   readonly variants?: readonly CatalogProductVariantInput[]
+  readonly modifierGroupIds?: readonly string[]
   readonly status: CatalogProductStatus
   readonly primaryImagePath?: string
   readonly primaryImageAlt?: string
@@ -28,6 +29,21 @@ export type CatalogProductVariantInput = {
   readonly basePrice: string
   readonly isDefault: boolean
   readonly sortOrder: number
+}
+
+export type CatalogModifierOptionMutationInput = {
+  readonly id?: string
+  readonly name: string
+  readonly priceDelta: string
+  readonly sortOrder: number
+}
+
+export type CatalogModifierGroupMutationInput = {
+  readonly name: string
+  readonly type: "Single" | "Multiple"
+  readonly minSelect: number
+  readonly maxSelect: number
+  readonly options: readonly CatalogModifierOptionMutationInput[]
 }
 
 export type CatalogCategoryVisibility = "Publica" | "Oculta"

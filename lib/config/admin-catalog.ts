@@ -30,6 +30,7 @@ export type CatalogProduct = {
   readonly status: "Activo" | "Draft"
   readonly primaryImagePath?: string | null
   readonly primaryImageUrl?: string | null
+  readonly modifierGroupIds: readonly string[]
   readonly modifierGroups: readonly string[]
   readonly tags: readonly string[]
   readonly branchStatuses: readonly CatalogBranchStatus[]
@@ -46,9 +47,18 @@ export type CatalogCategory = {
 }
 
 export type CatalogModifierGroup = {
+  readonly id: string
   readonly name: string
   readonly type: "Single" | "Multiple"
   readonly appliedTo: string
+  readonly minSelect: number
+  readonly maxSelect: number
+  readonly optionCount: number
+  readonly options: readonly {
+    id: string
+    name: string
+    priceDelta: string
+  }[]
 }
 
 export const catalogProducts: readonly CatalogProduct[] = [
@@ -63,6 +73,7 @@ export const catalogProducts: readonly CatalogProduct[] = [
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/fire-smash-burger/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80",
+    modifierGroupIds: ["mod-extras", "mod-salsas"],
     modifierGroups: ["Punto de carne", "Extras", "Salsas"],
     tags: ["Best seller", "Combo ready"],
     branchStatuses: [
@@ -82,6 +93,7 @@ export const catalogProducts: readonly CatalogProduct[] = [
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/crispy-box/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?auto=format&fit=crop&w=900&q=80",
+    modifierGroupIds: ["mod-bebidas", "mod-salsas"],
     modifierGroups: ["Bebidas", "Salsas"],
     tags: ["Lunch", "High rotation"],
     branchStatuses: [
@@ -101,6 +113,7 @@ export const catalogProducts: readonly CatalogProduct[] = [
     status: "Draft",
     primaryImagePath: "tenants/demo-brand/products/lime-chicken-wrap/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=900&q=80",
+    modifierGroupIds: ["mod-extras"],
     modifierGroups: ["Extras", "Aderezos"],
     tags: ["Healthy", "Seasonal"],
     branchStatuses: [
@@ -120,6 +133,7 @@ export const catalogProducts: readonly CatalogProduct[] = [
     status: "Activo",
     primaryImagePath: "tenants/demo-brand/products/spark-cola/primary/cover.jpg",
     primaryImageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=900&q=80",
+    modifierGroupIds: ["mod-tamano"],
     modifierGroups: ["Tamano"],
     tags: ["Upsell"],
     branchStatuses: [
@@ -176,8 +190,8 @@ export const catalogCategories: readonly CatalogCategory[] = [
 ] as const
 
 export const catalogModifierGroups: readonly CatalogModifierGroup[] = [
-  { name: "Extras", type: "Multiple", appliedTo: "6 productos" },
-  { name: "Salsas", type: "Multiple", appliedTo: "12 productos" },
-  { name: "Bebidas", type: "Single", appliedTo: "5 combos" },
-  { name: "Tamano", type: "Single", appliedTo: "9 bebidas" },
+  { id: "mod-extras", name: "Extras", type: "Multiple", appliedTo: "6 productos", minSelect: 0, maxSelect: 3, optionCount: 3, options: [{ id: "opt-extra-queso", name: "Extra queso", priceDelta: "$ 1.20" }] },
+  { id: "mod-salsas", name: "Salsas", type: "Multiple", appliedTo: "12 productos", minSelect: 0, maxSelect: 2, optionCount: 3, options: [{ id: "opt-bbq", name: "BBQ", priceDelta: "$ 0.00" }] },
+  { id: "mod-bebidas", name: "Bebidas", type: "Single", appliedTo: "5 combos", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-cola-1l", name: "Cola 1L", priceDelta: "$ 0.00" }] },
+  { id: "mod-tamano", name: "Tamano", type: "Single", appliedTo: "9 bebidas", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-individual", name: "Individual", priceDelta: "$ 0.00" }] },
 ] as const

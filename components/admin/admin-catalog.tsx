@@ -6,7 +6,7 @@ import Link from "next/link"
 import { MoreHorizontal, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-import { type CatalogBranchOption, type CatalogCategory, type CatalogProduct } from "@/lib/config/admin-catalog"
+import { type CatalogBranchOption, type CatalogCategory, type CatalogModifierGroup, type CatalogProduct } from "@/lib/config/admin-catalog"
 import {
   createProductWithImageAction,
   duplicateProductAction,
@@ -50,6 +50,7 @@ type ProductFormValues = {
   readonly status: ProductStatus
   readonly primaryImagePath: string
   readonly primaryImageAlt: string
+  readonly modifierGroupIds: readonly string[]
   readonly variants: readonly {
     id: string
     name: string
@@ -82,6 +83,7 @@ function buildFormValues(product: CatalogProduct, branches: readonly CatalogBran
     status: product.status,
     primaryImagePath: product.primaryImagePath ?? "",
     primaryImageAlt: product.name,
+    modifierGroupIds: product.modifierGroupIds,
     variants: product.variants.map((variant, index) => ({
       id: variant.id,
       name: variant.name,
@@ -113,6 +115,7 @@ function buildEmptyProduct(index: number, branches: readonly CatalogBranchOption
     status: DEFAULT_PRODUCT_STATUS,
     primaryImagePath: "",
     primaryImageAlt: "",
+    modifierGroupIds: [],
     variants: [],
     branchOverrides: branches.map((branch) => ({
       branchId: branch.id,
@@ -139,6 +142,7 @@ type AdminCatalogProductsProps = {
   readonly initialProducts?: readonly CatalogProduct[]
   readonly initialCategories?: readonly CatalogCategory[]
   readonly initialBranches?: readonly CatalogBranchOption[]
+  readonly initialModifierGroups?: readonly CatalogModifierGroup[]
   readonly role: string
 }
 
@@ -147,6 +151,7 @@ export function AdminCatalogProducts({
   initialProducts = [],
   initialCategories = [],
   initialBranches = [],
+  initialModifierGroups = [],
   role,
 }: AdminCatalogProductsProps) {
   const router = useRouter()
@@ -172,6 +177,7 @@ export function AdminCatalogProducts({
   }, [initialCategories])
 
   const categoryOptions = React.useMemo(() => initialCategories.map((category) => category.name), [initialCategories])
+  const modifierGroupOptions = initialModifierGroups
 
   const filteredProducts = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -255,6 +261,16 @@ export function AdminCatalogProducts({
     setProductFormValues((currentValues) => ({
       ...currentValues,
       [field]: value,
+    }))
+  }
+
+  function handleModifierGroupToggle(modifierGroupId: string, checked: boolean) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      modifierGroupIds: checked
+        ? [...currentValues.modifierGroupIds, modifierGroupId]
+        : currentValues.modifierGroupIds.filter((currentModifierGroupId) => currentModifierGroupId !== modifierGroupId),
     }))
   }
 
@@ -344,6 +360,7 @@ export function AdminCatalogProducts({
       formData.set("status", productFormValues.status)
       formData.set("primaryImagePath", productFormValues.primaryImagePath)
       formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
+      formData.set("modifierGroupIds", JSON.stringify(productFormValues.modifierGroupIds))
       formData.set(
         "variants",
         JSON.stringify(
@@ -652,6 +669,40 @@ export function AdminCatalogProducts({
                   <option value="Draft">Draft</option>
                 </select>
               </label>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-card-foreground">Grupos de modificadores</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Asigna extras, salsas o bebidas que luego aparecen en el product sheet del storefront.</p>
+                </div>
+              </div>
+
+              {modifierGroupOptions.length > 0 ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {modifierGroupOptions.map((modifierGroup) => (
+                    <label key={modifierGroup.id} className="flex items-start gap-3 rounded-[1rem] border border-border bg-secondary/20 px-4 py-3 text-sm text-card-foreground">
+                      <input
+                        type="checkbox"
+                        checked={productFormValues.modifierGroupIds.includes(modifierGroup.id)}
+                        onChange={(event) => handleModifierGroupToggle(modifierGroup.id, event.target.checked)}
+                        disabled={!canEditGlobalCatalog}
+                      />
+                      <span>
+                        <span className="block font-medium">{modifierGroup.name}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {modifierGroup.type} · {modifierGroup.optionCount} opciones
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-[1rem] border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                  Primero crea grupos de modificadores en la seccion de modificadores para poder asignarlos a este producto.
+                </div>
+              )}
             </div>
 
             <div className="rounded-[1.25rem] border border-border p-4">

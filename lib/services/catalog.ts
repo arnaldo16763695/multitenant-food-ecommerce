@@ -18,6 +18,8 @@ import {
   type CatalogCategoryMutationInput,
   type CatalogMutationResult,
   type CatalogProductMutationInput,
+  type CatalogModifierGroupMutationInput,
+  type CatalogModifierOptionMutationInput,
   type CatalogProductVariantInput,
   type CatalogProductStatus,
 } from "@/lib/domain/catalog"
@@ -43,7 +45,8 @@ type ProductRow = {
   primary_image_alt: string | null
 }
 type BranchRow = { id: string; name: string }
-type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple" }
+type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple"; min_select: number; max_select: number }
+type ModifierGroupOptionRow = { id: string; modifier_group_id: string; name: string; price_delta: number | string; sort_order: number }
 type ProductVariantRow = { id: string; product_id: string; name: string; base_price: number | string; is_default: boolean; is_active: boolean; sort_order: number }
 type ProductModifierGroupRow = { product_id: string; modifier_group_id: string }
 type BranchProductOverrideRow = {
@@ -385,16 +388,78 @@ async function syncProductVariants(
   return { ok: true }
 }
 
+async function syncProductModifierGroups(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  modifierGroupIds?: readonly string[]
+): Promise<CatalogMutationResult> {
+  const nextModifierGroupIds = [...new Set((modifierGroupIds ?? []).filter(Boolean))]
+
+  const validModifierGroupsResult = nextModifierGroupIds.length
+    ? await supabase.from("modifier_groups").select("id").eq("tenant_id", tenantId).in("id", nextModifierGroupIds).returns<{ id: string }[]>()
+    : { data: [], error: null as null }
+
+  if (validModifierGroupsResult.error) {
+    return { ok: false, error: validModifierGroupsResult.error.message }
+  }
+
+  if ((validModifierGroupsResult.data ?? []).length !== nextModifierGroupIds.length) {
+    return { ok: false, error: "Uno o más grupos de modificadores ya no están disponibles." }
+  }
+
+  const existingRelationsResult = await supabase
+    .from("product_modifier_groups")
+    .select("modifier_group_id")
+    .eq("product_id", productId)
+    .returns<{ modifier_group_id: string }[]>()
+
+  if (existingRelationsResult.error) {
+    return { ok: false, error: existingRelationsResult.error.message }
+  }
+
+  const existingModifierGroupIds = new Set((existingRelationsResult.data ?? []).map((relation) => relation.modifier_group_id))
+  const modifierGroupIdsToDelete = [...existingModifierGroupIds].filter((modifierGroupId) => !nextModifierGroupIds.includes(modifierGroupId))
+
+  if (modifierGroupIdsToDelete.length > 0) {
+    const deleteResult = await supabase.from("product_modifier_groups").delete().eq("product_id", productId).in("modifier_group_id", modifierGroupIdsToDelete)
+
+    if (deleteResult.error) {
+      return { ok: false, error: deleteResult.error.message }
+    }
+  }
+
+  if (nextModifierGroupIds.length > 0) {
+    const upsertResult = await supabase.from("product_modifier_groups").upsert(
+      nextModifierGroupIds.map((modifierGroupId, index) => ({
+        product_id: productId,
+        modifier_group_id: modifierGroupId,
+        sort_order: index,
+      })),
+      {
+        onConflict: "product_id,modifier_group_id",
+      }
+    )
+
+    if (upsertResult.error) {
+      return { ok: false, error: upsertResult.error.message }
+    }
+  }
+
+  return { ok: true }
+}
+
 export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, tenantId: string): Promise<CatalogModuleData> {
-  const [branchesResult, categoriesResult, productsResult, modifierGroupsResult, productVariantsResult] = await Promise.all([
+  const [branchesResult, categoriesResult, productsResult, modifierGroupsResult, modifierGroupOptionsResult, productVariantsResult] = await Promise.all([
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name, is_visible, image_path, sort_order").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
     supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
-    supabase.from("modifier_groups").select("id, name, selection_type").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
+    supabase.from("modifier_groups").select("id, name, selection_type, min_select, max_select").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
+    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
     supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
   ])
 
-  if (branchesResult.error || categoriesResult.error || productsResult.error || modifierGroupsResult.error || productVariantsResult.error) {
+  if (branchesResult.error || categoriesResult.error || productsResult.error || modifierGroupsResult.error || modifierGroupOptionsResult.error || productVariantsResult.error) {
     return EMPTY_CATALOG_MODULE
   }
 
@@ -402,6 +467,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const categories = categoriesResult.data ?? []
   const products = productsResult.data ?? []
   const modifierGroups = modifierGroupsResult.data ?? []
+  const modifierGroupOptions = modifierGroupOptionsResult.data ?? []
   const productVariants = productVariantsResult.data ?? []
 
   const productIds = products.map((product) => product.id)
@@ -429,6 +495,11 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const categoryMap = new Map(categories.map((category) => [category.id, category]))
   const branchMap = new Map(branches.map((branch) => [branch.id, branch]))
   const modifierGroupMap = new Map(modifierGroups.map((group) => [group.id, group]))
+  const modifierGroupOptionsMap = modifierGroupOptions.reduce<Map<string, ModifierGroupOptionRow[]>>((map, option) => {
+    const currentOptions = map.get(option.modifier_group_id) ?? []
+    map.set(option.modifier_group_id, [...currentOptions, option])
+    return map
+  }, new Map())
   const productVariantsMap = productVariants.reduce<Map<string, ProductVariantRow[]>>((map, variant) => {
     const currentValue = map.get(variant.product_id) ?? []
     map.set(variant.product_id, [...currentValue, variant])
@@ -464,6 +535,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     primaryImagePath: product.primary_image_path,
     primaryImageUrl: getCatalogMediaPublicUrl(product.primary_image_path),
     tags: product.tags ?? [],
+    modifierGroupIds: productModifierGroupsMap.get(product.id) ?? [],
     modifierGroups: (productModifierGroupsMap.get(product.id) ?? [])
       .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId)?.name)
       .filter((value): value is string => Boolean(value)),
@@ -495,9 +567,20 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   }, new Map())
 
   const mappedModifierGroups: CatalogModifierGroup[] = modifierGroups.map((group) => ({
+    id: group.id,
     name: group.name,
     type: group.selection_type === "single" ? "Single" : "Multiple",
     appliedTo: `${modifierUsageCount.get(group.id) ?? 0} productos`,
+    minSelect: group.min_select,
+    maxSelect: group.max_select,
+    optionCount: (modifierGroupOptionsMap.get(group.id) ?? []).length,
+    options: (modifierGroupOptionsMap.get(group.id) ?? [])
+      .sort((left, right) => left.sort_order - right.sort_order)
+      .map((option) => ({
+        id: option.id,
+        name: option.name,
+        priceDelta: formatCurrency(option.price_delta),
+      })),
   }))
 
   return {
@@ -570,6 +653,12 @@ export async function createCatalogProductWithOptions(
     return variantsResult
   }
 
+  const modifierGroupsResult = await syncProductModifierGroups(supabase, tenantId, insertResult.data.id, payload.modifierGroupIds)
+
+  if (!modifierGroupsResult.ok) {
+    return modifierGroupsResult
+  }
+
   return { ok: true, entityId: insertResult.data.id }
 }
 
@@ -623,6 +712,12 @@ export async function updateCatalogProduct(
 
   if (!variantsResult.ok) {
     return variantsResult
+  }
+
+  const modifierGroupsResult = await syncProductModifierGroups(supabase, tenantId, productId, payload.modifierGroupIds)
+
+  if (!modifierGroupsResult.ok) {
+    return modifierGroupsResult
   }
 
   return { ok: true }
@@ -796,6 +891,159 @@ export async function updateCatalogCategory(
 
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+function normalizeModifierGroupOptions(options: readonly CatalogModifierOptionMutationInput[]) {
+  const normalizedOptions = options
+    .map((option, index) => ({
+      id: option.id,
+      name: option.name.trim(),
+      priceDelta: normalizeCatalogPrice(option.priceDelta) ?? 0,
+      sortOrder: option.sortOrder ?? index,
+    }))
+    .filter((option) => option.name)
+
+  if (new Set(normalizedOptions.map((option) => option.name.toLowerCase())).size !== normalizedOptions.length) {
+    return { ok: false as const, error: "Las opciones del modificador no pueden repetir nombre." }
+  }
+
+  return { ok: true as const, options: normalizedOptions }
+}
+
+export async function createCatalogModifierGroup(
+  supabase: SupabaseClient,
+  tenantId: string,
+  payload: CatalogModifierGroupMutationInput,
+  options?: {
+    readonly modifierGroupId?: string
+  }
+): Promise<CatalogMutationResult> {
+  const normalizedName = payload.name.trim()
+
+  if (!normalizedName) {
+    return { ok: false, error: "Completa el nombre del grupo de modificadores." }
+  }
+
+  const normalizedOptionsResult = normalizeModifierGroupOptions(payload.options)
+
+  if (!normalizedOptionsResult.ok) {
+    return { ok: false, error: normalizedOptionsResult.error }
+  }
+
+  const insertResult = await supabase
+    .from("modifier_groups")
+    .insert({
+      id: options?.modifierGroupId,
+      tenant_id: tenantId,
+      name: normalizedName,
+      selection_type: payload.type === "Single" ? "single" : "multiple",
+      min_select: payload.minSelect,
+      max_select: payload.maxSelect,
+      is_active: true,
+    })
+    .select("id")
+    .single<{ id: string }>()
+
+  if (insertResult.error) {
+    return { ok: false, error: insertResult.error.message }
+  }
+
+  if (normalizedOptionsResult.options.length > 0) {
+    const optionsInsertResult = await supabase.from("modifier_group_options").insert(
+      normalizedOptionsResult.options.map((option) => ({
+        id: option.id,
+        modifier_group_id: insertResult.data.id,
+        name: option.name,
+        price_delta: option.priceDelta,
+        sort_order: option.sortOrder,
+        is_active: true,
+      }))
+    )
+
+    if (optionsInsertResult.error) {
+      return { ok: false, error: optionsInsertResult.error.message }
+    }
+  }
+
+  return { ok: true, entityId: insertResult.data.id }
+}
+
+export async function updateCatalogModifierGroup(
+  supabase: SupabaseClient,
+  tenantId: string,
+  modifierGroupId: string,
+  payload: CatalogModifierGroupMutationInput
+): Promise<CatalogMutationResult> {
+  const normalizedName = payload.name.trim()
+
+  if (!normalizedName) {
+    return { ok: false, error: "Completa el nombre del grupo de modificadores." }
+  }
+
+  const normalizedOptionsResult = normalizeModifierGroupOptions(payload.options)
+
+  if (!normalizedOptionsResult.ok) {
+    return { ok: false, error: normalizedOptionsResult.error }
+  }
+
+  const updateResult = await supabase
+    .from("modifier_groups")
+    .update({
+      name: normalizedName,
+      selection_type: payload.type === "Single" ? "single" : "multiple",
+      min_select: payload.minSelect,
+      max_select: payload.maxSelect,
+    })
+    .eq("id", modifierGroupId)
+    .eq("tenant_id", tenantId)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  const existingOptionsResult = await supabase
+    .from("modifier_group_options")
+    .select("id")
+    .eq("modifier_group_id", modifierGroupId)
+    .returns<{ id: string }[]>()
+
+  if (existingOptionsResult.error) {
+    return { ok: false, error: existingOptionsResult.error.message }
+  }
+
+  const existingOptionIds = new Set((existingOptionsResult.data ?? []).map((option) => option.id))
+  const nextOptionIds = new Set(normalizedOptionsResult.options.map((option) => option.id).filter((value): value is string => Boolean(value)))
+  const optionIdsToDelete = [...existingOptionIds].filter((optionId) => !nextOptionIds.has(optionId))
+
+  if (optionIdsToDelete.length > 0) {
+    const deleteResult = await supabase.from("modifier_group_options").delete().eq("modifier_group_id", modifierGroupId).in("id", optionIdsToDelete)
+
+    if (deleteResult.error) {
+      return { ok: false, error: deleteResult.error.message }
+    }
+  }
+
+  if (normalizedOptionsResult.options.length > 0) {
+    const upsertResult = await supabase.from("modifier_group_options").upsert(
+      normalizedOptionsResult.options.map((option) => ({
+        id: option.id,
+        modifier_group_id: modifierGroupId,
+        name: option.name,
+        price_delta: option.priceDelta,
+        sort_order: option.sortOrder,
+        is_active: true,
+      })),
+      {
+        onConflict: "id",
+      }
+    )
+
+    if (upsertResult.error) {
+      return { ok: false, error: upsertResult.error.message }
+    }
   }
 
   return { ok: true }

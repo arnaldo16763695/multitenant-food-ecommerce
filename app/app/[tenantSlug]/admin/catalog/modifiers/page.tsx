@@ -21,5 +21,5 @@ export default async function AdminCatalogModifiersPage({ params }: AdminCatalog
 
   const { modifierGroups } = await getAdminCatalogModule(tenantSlug)
 
-  return <AdminCatalogModifiers initialModifierGroups={modifierGroups} />
+  return <AdminCatalogModifiers tenantSlug={tenantSlug} initialModifierGroups={modifierGroups} />
 }

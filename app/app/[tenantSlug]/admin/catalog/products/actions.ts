@@ -87,6 +87,26 @@ function parseVariants(formData: FormData): readonly CatalogProductVariantInput[
   }
 }
 
+function parseModifierGroupIds(formData: FormData): readonly string[] {
+  const rawValue = formData.get("modifierGroupIds")
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+  } catch {
+    return []
+  }
+}
+
 export async function createProductAction(tenantSlug: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
   const access = await requireAdminAccess(tenantSlug)
 
@@ -130,6 +150,7 @@ export async function createProductWithImageAction(tenantSlug: string, formData:
     description: String(formData.get("description") ?? ""),
     basePrice: String(formData.get("basePrice") ?? ""),
     variants: parseVariants(formData),
+    modifierGroupIds: parseModifierGroupIds(formData),
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
@@ -193,6 +214,7 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     description: String(formData.get("description") ?? ""),
     basePrice: String(formData.get("basePrice") ?? ""),
     variants: parseVariants(formData),
+    modifierGroupIds: parseModifierGroupIds(formData),
     status: String(formData.get("status") ?? "Draft") as CatalogProductMutationInput["status"],
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
