@@ -65,7 +65,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
   const pushToast = useToastStore((state) => state.pushToast)
-  const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
+  const [pendingRemoveItemId, setPendingRemoveItemId] = React.useState<string | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
   const [editingItemId, setEditingItemId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, activeBranchId, initialBagItems)
@@ -78,20 +78,16 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
     "border-orange-600 bg-orange-600 text-white hover:bg-orange-500 hover:text-white disabled:border-stone-300 disabled:bg-stone-300 disabled:text-stone-500"
 
   async function handleIncrementItem(productId: string) {
-    setPendingItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
 
     if (!currentItem) {
-      setPendingItemId(null)
       return
     }
 
     upsertItem({ ...currentItem, quantity: currentItem.quantity + 1 })
     const result = await addCustomerBagItemAction({ tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null, modifierSelections: currentItem?.modifierSelections ?? [] })
 
-    if (result.ok && result.item) {
-      upsertItem(result.item)
-    } else {
+    if (!result.ok) {
       upsertItem(currentItem)
       pushToast({
         title: "No pudimos actualizar la bolsa",
@@ -99,16 +95,12 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
         variant: "error",
       })
     }
-
-    setPendingItemId(null)
   }
 
   async function handleDecrementItem(productId: string) {
-    setPendingItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
 
     if (!currentItem) {
-      setPendingItemId(null)
       return
     }
 
@@ -120,13 +112,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
 
     const result = await decrementCustomerBagItemAction({ bagItemId: currentItem?.id, tenantSlug, branchId: activeBranchId, productId: currentItem?.productId ?? productId, productVariantId: currentItem?.productVariantId ?? null })
 
-    if (result.ok) {
-      if (result.quantity && result.quantity > 0) {
-        upsertItem({ ...currentItem, quantity: result.quantity })
-      } else {
-        removeItem(productId, tenantSlug, activeBranchId)
-      }
-    } else {
+    if (!result.ok) {
       upsertItem(currentItem)
       pushToast({
         title: "No pudimos actualizar la bolsa",
@@ -134,16 +120,14 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
         variant: "error",
       })
     }
-
-    setPendingItemId(null)
   }
 
   async function handleRemoveItem(productId: string) {
-    setPendingItemId(productId)
+    setPendingRemoveItemId(productId)
     const currentItem = items.find((item) => item.id === productId)
 
     if (!currentItem) {
-      setPendingItemId(null)
+      setPendingRemoveItemId(null)
       return
     }
 
@@ -161,7 +145,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       })
     }
 
-    setPendingItemId(null)
+    setPendingRemoveItemId(null)
   }
 
   async function handleClearBranchBag() {
@@ -278,17 +262,17 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                       </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-start">
-                        <Button variant="outline" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => void handleDecrementItem(item.id)}>
+                        <Button variant="outline" size="icon-sm" onClick={() => void handleDecrementItem(item.id)}>
                           <Minus />
                         </Button>
                         <span className="min-w-8 text-center text-sm font-semibold text-stone-950">{item.quantity}</span>
-                        <Button variant="outline" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => void handleIncrementItem(item.id)}>
+                        <Button variant="outline" size="icon-sm" onClick={() => void handleIncrementItem(item.id)}>
                           <Plus />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => void handleRemoveItem(item.id)}>
+                        <Button variant="ghost" size="icon-sm" disabled={pendingRemoveItemId === item.id} onClick={() => void handleRemoveItem(item.id)}>
                           <Trash2 />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => setEditingItemId(item.id)}>
+                        <Button variant="ghost" size="icon-sm" disabled={pendingRemoveItemId === item.id} onClick={() => setEditingItemId(item.id)}>
                           <Pencil />
                         </Button>
                       </div>
