@@ -46,6 +46,8 @@ type StorefrontProductSheetProps = {
   readonly open: boolean
   readonly onOpenChange: (nextOpen: boolean) => void
   readonly onItemAdded: (item: ShoppingBagItem) => void
+  readonly initialItem?: ShoppingBagItem | null
+  readonly submitLabel?: string
 }
 
 function parsePriceLabel(value: string) {
@@ -53,7 +55,7 @@ function parsePriceLabel(value: string) {
   return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
 }
 
-export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded }: StorefrontProductSheetProps) {
+export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar" }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const pushToast = useToastStore((state) => state.pushToast)
@@ -66,12 +68,22 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
 
   React.useEffect(() => {
     if (open) {
-      setSelectedVariantId(defaultVariant?.id ?? "")
-      setQuantity(1)
-      setSelectedOptionsByGroup({})
+      setSelectedVariantId(initialItem?.productVariantId ?? defaultVariant?.id ?? "")
+      setQuantity(initialItem?.quantity ?? 1)
+      setSelectedOptionsByGroup(
+        initialItem
+          ? initialItem.modifierSelections.reduce<Record<string, string[]>>((map, selection) => {
+              const currentSelections = map[selection.modifierGroupId] ?? []
+              return {
+                ...map,
+                [selection.modifierGroupId]: [...currentSelections, selection.modifierOptionId],
+              }
+            }, {})
+          : {}
+      )
       setErrorMessage("")
     }
-  }, [defaultVariant?.id, open])
+  }, [defaultVariant?.id, initialItem, open])
 
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId) ?? defaultVariant
   const modifierSelections = React.useMemo<readonly ShoppingBagModifierSelection[]>(() => {
@@ -99,7 +111,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     const unitPrice = Number((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
 
     return {
-      id: `optimistic-${crypto.randomUUID()}`,
+      id: initialItem?.id ?? `optimistic-${crypto.randomUUID()}`,
       productId: product.id,
       productVariantId: selectedVariant?.id ?? null,
       variantName: selectedVariant?.name ?? null,
@@ -154,11 +166,13 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     upsertItem(optimisticItem)
     onItemAdded(optimisticItem)
     onOpenChange(false)
-    pushToast({
-      title: "Agregado a la bolsa",
-      description: `${optimisticItem.quantity} x ${optimisticItem.name}`,
-      variant: "success",
-    })
+    if (!initialItem) {
+      pushToast({
+        title: "Agregado a la bolsa",
+        description: `${optimisticItem.quantity} x ${optimisticItem.name}`,
+        variant: "success",
+      })
+    }
     setIsSubmitting(true)
     setErrorMessage("")
 
@@ -172,7 +186,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     })
 
     if (!result.ok || !result.item) {
-      removeItem(optimisticItem.id, tenantSlug, branchId)
+      if (initialItem) {
+        upsertItem(initialItem)
+      } else {
+        removeItem(optimisticItem.id, tenantSlug, branchId)
+      }
       onOpenChange(true)
       pushToast({
         title: "No pudimos agregar el producto",
@@ -308,7 +326,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               onClick={() => void handleConfirm()}
             >
               <ShoppingBag />
-              {isSubmitting ? "Agregando..." : "Confirmar y agregar"}
+              {isSubmitting ? "Guardando..." : submitLabel}
             </Button>
           </div>
         </SheetFooter>

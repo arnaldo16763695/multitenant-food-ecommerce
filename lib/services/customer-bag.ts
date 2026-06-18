@@ -406,6 +406,7 @@ export async function addCustomerBagItem(
     readonly productVariantId?: string | null
     readonly quantity?: number
     readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
+    readonly excludeBagItemId?: string
   }
 ): Promise<ShoppingBagMutationResult> {
   const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
@@ -469,6 +470,7 @@ export async function addCustomerBagItem(
     .eq("product_id", input.productId)
     .is("product_variant_id", input.productVariantId ?? null)
     .eq("configuration_hash", configurationHash)
+    .neq("id", input.excludeBagItemId ?? "")
     .limit(1)
     .maybeSingle<CustomerBagItemRow>()
 
@@ -532,6 +534,50 @@ export async function addCustomerBagItem(
     item: bagItem,
     quantity: nextQuantity,
   }
+}
+
+export async function replaceCustomerBagItem(
+  supabase: SupabaseClient,
+  input: {
+    readonly bagItemId: string
+    readonly tenantSlug: string
+    readonly branchId: string
+    readonly customerId: string
+    readonly productId: string
+    readonly productVariantId?: string | null
+    readonly quantity: number
+    readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
+  }
+): Promise<ShoppingBagMutationResult> {
+  const addResult = await addCustomerBagItem(supabase, {
+    tenantSlug: input.tenantSlug,
+    branchId: input.branchId,
+    customerId: input.customerId,
+    productId: input.productId,
+    productVariantId: input.productVariantId,
+    quantity: input.quantity,
+    modifierSelections: input.modifierSelections,
+    excludeBagItemId: input.bagItemId,
+  })
+
+  if (!addResult.ok) {
+    return addResult
+  }
+
+  const removeResult = await removeCustomerBagItem(supabase, {
+    bagItemId: input.bagItemId,
+    tenantSlug: input.tenantSlug,
+    branchId: input.branchId,
+    customerId: input.customerId,
+    productId: input.productId,
+    productVariantId: input.productVariantId,
+  })
+
+  if (!removeResult.ok) {
+    return { ok: false, error: removeResult.error ?? "No pudimos actualizar la configuración del producto." }
+  }
+
+  return addResult
 }
 
 export async function decrementCustomerBagItem(

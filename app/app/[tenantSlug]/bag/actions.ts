@@ -7,6 +7,7 @@ import {
   addCustomerBagItem,
   clearCustomerBranchBag,
   decrementCustomerBagItem,
+  replaceCustomerBagItem,
   removeCustomerBagItem,
 } from "@/lib/services/customer-bag"
 
@@ -107,6 +108,30 @@ export async function clearCustomerBranchBagAction(payload: ClearCustomerBagPayl
   return clearCustomerBranchBag(supabase, {
     tenantSlug: payload.tenantSlug,
     branchId: payload.branchId,
+    customerId: customerContext.customer.id,
+  })
+}
+
+export async function replaceCustomerBagItemAction(payload: Required<Pick<CustomerBagMutationPayload, "bagItemId" | "tenantSlug" | "branchId" | "productId" | "quantity">> & Pick<CustomerBagMutationPayload, "productVariantId" | "modifierSelections">) {
+  const customerContext = await getCustomerAccountContext()
+  const supabase = createSupabaseAdminClient()
+
+  if (!customerContext) {
+    return { ok: false, error: "Inicia sesión para editar tu bolsa." }
+  }
+
+  if (!supabase) {
+    return { ok: false, error: "Supabase no está configurado en este entorno." }
+  }
+
+  return replaceCustomerBagItem(supabase, {
+    bagItemId: payload.bagItemId,
+    tenantSlug: payload.tenantSlug,
+    branchId: payload.branchId,
+    productId: payload.productId,
+    productVariantId: payload.productVariantId,
+    quantity: payload.quantity,
+    modifierSelections: payload.modifierSelections,
     customerId: customerContext.customer.id,
   })
 }

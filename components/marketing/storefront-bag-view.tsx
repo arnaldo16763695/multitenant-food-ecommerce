@@ -2,17 +2,19 @@
 
 import Link from "next/link"
 import * as React from "react"
-import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react"
+import { Minus, Pencil, Plus, ShoppingBag, Trash2 } from "lucide-react"
 
 import {
   addCustomerBagItemAction,
   clearCustomerBranchBagAction,
   decrementCustomerBagItemAction,
   removeCustomerBagItemAction,
+  replaceCustomerBagItemAction,
 } from "@/app/app/[tenantSlug]/bag/actions"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
 import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
+import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
@@ -24,9 +26,37 @@ type StorefrontBagViewProps = {
   readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
   readonly initialBagItems?: readonly ShoppingBagItem[]
+  readonly menu?: readonly {
+    id: string
+    name: string
+    description: string
+    basePrice: string
+    hasVariants: boolean
+    variants: readonly {
+      id: string
+      name: string
+      basePrice: string
+      isDefault: boolean
+    }[]
+    modifierGroups: readonly {
+      id: string
+      name: string
+      selectionType: "single" | "multiple"
+      minSelect: number
+      maxSelect: number
+      options: readonly {
+        id: string
+        name: string
+        priceDelta: number
+        priceDeltaLabel: string
+      }[]
+    }[]
+    category: string
+    imageUrl?: string | null
+  }[]
 }
 
-export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerSession, initialBagItems = [] }: StorefrontBagViewProps) {
+export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerSession, initialBagItems = [], menu = [] }: StorefrontBagViewProps) {
   const activeBranchId = branchId ?? ""
   const items = useShoppingBagItems(tenantSlug, activeBranchId, initialBagItems)
   const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId, initialBagItems)
@@ -37,10 +67,13 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   const pushToast = useToastStore((state) => state.pushToast)
   const [pendingItemId, setPendingItemId] = React.useState<string | null>(null)
   const [isClearing, setIsClearing] = React.useState(false)
+  const [editingItemId, setEditingItemId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, activeBranchId, initialBagItems)
   const menuHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const checkoutHref = branchId ? `/app/${tenantSlug}/checkout?branch=${branchId}` : `/app/${tenantSlug}/checkout`
   const checkoutLoginHref = `/app/${tenantSlug}/account/login?reason=checkout-auth&next=${encodeURIComponent(checkoutHref)}`
+  const editingItem = React.useMemo(() => items.find((item) => item.id === editingItemId) ?? null, [editingItemId, items])
+  const editingProduct = React.useMemo(() => menu.find((product) => product.id === editingItem?.productId) ?? null, [editingItem?.productId, menu])
   const primaryStorefrontButtonClassName =
     "border-orange-600 bg-orange-600 text-white hover:bg-orange-500 hover:text-white disabled:border-stone-300 disabled:bg-stone-300 disabled:text-stone-500"
 
@@ -151,6 +184,45 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
     setIsClearing(false)
   }
 
+  async function handleReplaceItem(updatedItem: ShoppingBagItem) {
+    const currentItem = items.find((item) => item.id === editingItemId)
+
+    if (!currentItem) {
+      return
+    }
+
+    upsertItem({ ...updatedItem, id: currentItem.id })
+    setEditingItemId(null)
+
+    const result = await replaceCustomerBagItemAction({
+      bagItemId: currentItem.id,
+      tenantSlug,
+      branchId: activeBranchId,
+      productId: updatedItem.productId,
+      productVariantId: updatedItem.productVariantId,
+      quantity: updatedItem.quantity,
+      modifierSelections: updatedItem.modifierSelections,
+    })
+
+    if (!result.ok || !result.item) {
+      upsertItem(currentItem)
+      pushToast({
+        title: "No pudimos actualizar la configuración",
+        description: result.error ?? "Intenta nuevamente.",
+        variant: "error",
+      })
+      return
+    }
+
+    removeItem(currentItem.id, tenantSlug, activeBranchId)
+    upsertItem(result.item)
+    pushToast({
+      title: "Configuración actualizada",
+      description: result.item.name,
+      variant: "success",
+    })
+  }
+
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)]">
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
@@ -216,6 +288,9 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                         <Button variant="ghost" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => void handleRemoveItem(item.id)}>
                           <Trash2 />
                         </Button>
+                        <Button variant="ghost" size="icon-sm" disabled={pendingItemId === item.id} onClick={() => setEditingItemId(item.id)}>
+                          <Pencil />
+                        </Button>
                       </div>
                     </div>
                   </article>
@@ -250,6 +325,19 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
             </CardContent>
           </Card>
         </section>
+
+        {editingItem && editingProduct ? (
+          <StorefrontProductSheet
+            tenantSlug={tenantSlug}
+            branchId={activeBranchId}
+            product={editingProduct}
+            open={Boolean(editingItemId)}
+            onOpenChange={(nextOpen) => setEditingItemId(nextOpen ? editingItem.id : null)}
+            onItemAdded={handleReplaceItem}
+            initialItem={editingItem}
+            submitLabel="Guardar cambios"
+          />
+        ) : null}
       </div>
     </main>
   )
