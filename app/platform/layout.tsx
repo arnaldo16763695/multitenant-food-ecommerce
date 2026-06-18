@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 
+import { AdminWorkspacePreferenceSync } from "@/components/auth/admin-workspace-preference-sync"
 import { PlatformShell } from "@/components/platform/platform-shell"
 import { requirePlatformAccess } from "@/lib/auth/platform"
 
@@ -21,6 +22,7 @@ export default async function PlatformLayout({ children }: PlatformLayoutProps) 
         avatar: "/placeholder.svg",
       }}
     >
+      <AdminWorkspacePreferenceSync href="/platform" />
       {children}
     </PlatformShell>
   )

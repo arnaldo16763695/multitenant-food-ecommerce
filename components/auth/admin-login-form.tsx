@@ -5,10 +5,10 @@ import Link from "next/link"
 import { LoaderCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import { LAST_ADMIN_WORKSPACE_STORAGE_KEY, getAdminWorkspaceOptions, resolvePreferredAdminWorkspace } from "@/lib/auth/admin-workspaces"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { getDefaultRouteForRole } from "@/lib/auth/permissions"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 type AdminLoginFormProps = {
@@ -18,20 +18,6 @@ type AdminLoginFormProps = {
 
 type ProfileLookupRow = {
   id: string
-}
-
-type MembershipLookupRow = {
-  tenant_id: string
-  role: string
-}
-
-type TenantLookupRow = {
-  slug: string
-  onboarding_completed_at: string | null
-}
-
-type PlatformMembershipLookupRow = {
-  role: string
 }
 
 export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
@@ -67,46 +53,23 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
       return "/auth/admin/login"
     }
 
-    const platformMembershipResult = await supabase
-      .from("platform_memberships")
-      .select("role")
-      .eq("profile_id", profileResult.data.id)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle<PlatformMembershipLookupRow>()
+    const workspaceOptions = await getAdminWorkspaceOptions(supabase, user.id)
 
-    if (platformMembershipResult.data && !platformMembershipResult.error) {
-      return "/platform"
-    }
-
-    const membershipResult = await supabase
-      .from("tenant_memberships")
-      .select("tenant_id, role")
-      .eq("profile_id", profileResult.data.id)
-      .eq("is_active", true)
-      .limit(1)
-      .maybeSingle<MembershipLookupRow>()
-
-    if (membershipResult.error || !membershipResult.data) {
+    if (workspaceOptions.length === 0) {
       return "/auth/admin/login"
     }
 
-    const tenantResult = await supabase
-      .from("tenants")
-      .select("slug, onboarding_completed_at")
-      .eq("id", membershipResult.data.tenant_id)
-      .limit(1)
-      .maybeSingle<TenantLookupRow>()
+    const preferredWorkspaceHref = resolvePreferredAdminWorkspace(workspaceOptions, window.localStorage.getItem(LAST_ADMIN_WORKSPACE_STORAGE_KEY))
 
-    if (tenantResult.error || !tenantResult.data) {
-      return "/auth/admin/login"
+    if (preferredWorkspaceHref) {
+      return preferredWorkspaceHref
     }
 
-    if (membershipResult.data.role === "owner" && !tenantResult.data.onboarding_completed_at) {
-      return `/app/${tenantResult.data.slug}/admin/onboarding`
+    if (workspaceOptions.length > 1) {
+      return "/auth/admin/workspace"
     }
 
-    return getDefaultRouteForRole(tenantResult.data.slug, membershipResult.data.role)
+    return workspaceOptions[0].href
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -134,6 +97,10 @@ export function AdminLoginForm({ nextPath, reason }: AdminLoginFormProps) {
     }
 
     const destination = nextPath ?? (await resolveFallbackRoute())
+
+    if (destination !== "/auth/admin/workspace") {
+      window.localStorage.setItem(LAST_ADMIN_WORKSPACE_STORAGE_KEY, destination)
+    }
 
     router.replace(destination)
     router.refresh()

@@ -1,7 +1,9 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
+import { AdminWorkspacePreferenceSync } from "@/components/auth/admin-workspace-preference-sync"
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { getDefaultRouteForRole } from "@/lib/auth/permissions"
 import { AdminThemeProvider, type AdminTheme } from "@/components/admin/admin-theme-provider"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
@@ -35,6 +37,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
             avatar: "/placeholder.svg",
           }}
         />
+        <AdminWorkspacePreferenceSync href={getDefaultRouteForRole(tenantSlug, access.membership.role)} />
         <SidebarInset>
           <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur sm:px-6">
             <SidebarTrigger />
