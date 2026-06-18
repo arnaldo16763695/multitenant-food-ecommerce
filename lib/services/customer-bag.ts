@@ -461,7 +461,7 @@ export async function addCustomerBagItem(
   }
 
   const configurationHash = buildConfigurationHash(modifierSelections)
-  const existingItemResult = await supabase
+  let existingItemQuery = supabase
     .from("customer_bag_items")
     .select("id, product_id, product_variant_id, configuration_hash, quantity")
     .eq("customer_id", input.customerId)
@@ -470,9 +470,13 @@ export async function addCustomerBagItem(
     .eq("product_id", input.productId)
     .is("product_variant_id", input.productVariantId ?? null)
     .eq("configuration_hash", configurationHash)
-    .neq("id", input.excludeBagItemId ?? "")
     .limit(1)
-    .maybeSingle<CustomerBagItemRow>()
+
+  if (input.excludeBagItemId) {
+    existingItemQuery = existingItemQuery.neq("id", input.excludeBagItemId)
+  }
+
+  const existingItemResult = await existingItemQuery.maybeSingle<CustomerBagItemRow>()
 
   if (existingItemResult.error) {
     return { ok: false, error: existingItemResult.error.message }
