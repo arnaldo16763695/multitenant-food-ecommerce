@@ -468,9 +468,12 @@ export async function addCustomerBagItem(
     .eq("tenant_id", context.tenantId)
     .eq("branch_id", input.branchId)
     .eq("product_id", input.productId)
-    .is("product_variant_id", input.productVariantId ?? null)
     .eq("configuration_hash", configurationHash)
     .limit(1)
+
+  existingItemQuery = input.productVariantId
+    ? existingItemQuery.eq("product_variant_id", input.productVariantId)
+    : existingItemQuery.is("product_variant_id", null)
 
   if (input.excludeBagItemId) {
     existingItemQuery = existingItemQuery.neq("id", input.excludeBagItemId)
@@ -492,15 +495,25 @@ export async function addCustomerBagItem(
   }
 
   const mutationResult = existingItemResult.data
-    ? await supabase
+    ? await (input.productVariantId
+        ? supabase
         .from("customer_bag_items")
         .update({ quantity: nextQuantity })
         .eq("customer_id", input.customerId)
         .eq("tenant_id", context.tenantId)
         .eq("branch_id", input.branchId)
         .eq("product_id", input.productId)
-        .is("product_variant_id", input.productVariantId ?? null)
         .eq("configuration_hash", configurationHash)
+        .eq("product_variant_id", input.productVariantId)
+        : supabase
+            .from("customer_bag_items")
+            .update({ quantity: nextQuantity })
+            .eq("customer_id", input.customerId)
+            .eq("tenant_id", context.tenantId)
+            .eq("branch_id", input.branchId)
+            .eq("product_id", input.productId)
+            .eq("configuration_hash", configurationHash)
+            .is("product_variant_id", null))
     : await supabase.from("customer_bag_items").insert({
         id: bagItemId,
         customer_id: input.customerId,
