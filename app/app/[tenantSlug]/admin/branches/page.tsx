@@ -61,7 +61,7 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Sucursales activas</CardDescription>
-            <CardTitle className="text-3xl">{activeBranchCount}</CardTitle>
+            <CardTitle className="text-2xl">{activeBranchCount}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Son las que pueden recibir trafico publico en storefront.
@@ -70,7 +70,7 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Sucursales inactivas</CardDescription>
-            <CardTitle className="text-3xl">{inactiveBranchCount}</CardTitle>
+            <CardTitle className="text-2xl">{inactiveBranchCount}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Conservan su configuracion, pero no deberian usarse para campanas ni QR.

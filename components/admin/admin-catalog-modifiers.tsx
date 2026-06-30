@@ -218,47 +218,47 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
       density="compact"
     >
       <Card>
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex-1">
             <CardTitle>Listado de grupos</CardTitle>
             <CardDescription>Configura min/max y las opciones que luego se muestran en el product sheet del storefront.</CardDescription>
-            <div className="relative mt-4 max-w-md">
+            <div className="relative mt-3 max-w-md">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-9 pl-9" placeholder="Buscar grupo u opcion" />
+              <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-8 pl-9" placeholder="Buscar grupo u opcion" />
             </div>
           </div>
-          <Button className="rounded-xl" onClick={openCreateDialog}>
+          <Button className="h-8 rounded-lg px-3 text-sm" onClick={openCreateDialog}>
             <Plus />
             Nuevo modificador
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-[1.5rem] border border-border">
+          <div className="overflow-hidden rounded-[1rem] border border-border">
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead>Grupo</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Regla</TableHead>
-                  <TableHead>Opciones</TableHead>
-                  <TableHead>Aplicacion</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Grupo</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Tipo</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Regla</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Opciones</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Aplicacion</TableHead>
+                  <TableHead className="h-10 px-3 text-right text-xs">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredModifierGroups.map((group) => (
                   <TableRow key={group.id}>
-                    <TableCell className="font-semibold text-card-foreground">{group.name}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2 font-semibold text-card-foreground">{group.name}</TableCell>
+                    <TableCell className="px-3 py-2">
                       <Badge variant="outline">{group.type}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="px-3 py-2 text-muted-foreground">
                       {group.minSelect} / {group.maxSelect}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{group.optionCount} opciones</TableCell>
-                    <TableCell className="text-muted-foreground">{group.appliedTo}</TableCell>
-                    <TableCell className="text-right">
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => openEditDialog(group)}>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{group.optionCount} opciones</TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{group.appliedTo}</TableCell>
+                    <TableCell className="px-3 py-2 text-right">
+                      <Button type="button" variant="ghost" size="icon-sm" className="h-8 w-8" onClick={() => openEditDialog(group)}>
                         <Pencil />
                       </Button>
                     </TableCell>
@@ -268,7 +268,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
             </Table>
           </div>
           {filteredModifierGroups.length === 0 ? (
-            <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+            <div className="mt-4 rounded-[1rem] border border-dashed border-border px-5 py-8 text-center text-sm text-muted-foreground">
               {initialModifierGroups.length === 0 ? "Este tenant aun no tiene grupos de modificadores. Crea el primero cuando quieras configurar extras o variantes." : "No encontramos grupos de modificadores con ese filtro."}
             </div>
           ) : null}
@@ -282,22 +282,22 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
             <DialogDescription>Gestiona nombre, regla de seleccion y opciones disponibles para el storefront.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid max-h-[calc(88vh-11rem)] gap-4 overflow-y-auto px-6 pb-2">
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid max-h-[calc(88vh-11rem)] gap-3 overflow-y-auto px-6 pb-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
                 <Input value={groupFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Salsas" />
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Tipo</span>
-                <select value={groupFormValues.type} onChange={(event) => handleFieldChange("type", event.target.value as ModifierGroupFormValue["type"])} className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                <select value={groupFormValues.type} onChange={(event) => handleFieldChange("type", event.target.value as ModifierGroupFormValue["type"])} className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
                   <option value="Single">Single</option>
                   <option value="Multiple">Multiple</option>
                 </select>
               </label>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Minimo</span>
                 <Input type="number" value={String(groupFormValues.minSelect)} onChange={(event) => handleFieldChange("minSelect", Number(event.target.value) || 0)} />
@@ -308,21 +308,21 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
               </label>
             </div>
 
-            <div className="rounded-[1.25rem] border border-border p-4">
+            <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-card-foreground">Opciones</p>
                   <p className="mt-1 text-xs text-muted-foreground">Cada opcion puede tener un delta de precio propio.</p>
                 </div>
-                <Button type="button" variant="outline" className="rounded-xl" onClick={addOptionRow}>
+                <Button type="button" variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={addOptionRow}>
                   <Plus />
                   Agregar opcion
                 </Button>
               </div>
 
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2.5">
                 {groupFormValues.options.map((option, index) => (
-                  <div key={option.id} className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto] md:items-end">
+                  <div key={option.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto] md:items-end">
                     <label className="grid gap-2 text-sm">
                       <span className="font-medium text-card-foreground">Nombre</span>
                       <Input value={option.name} onChange={(event) => handleOptionChange(index, "name", event.target.value)} placeholder="Ej. BBQ" />
@@ -339,14 +339,14 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
               </div>
             </div>
 
-            {formErrorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
+            {formErrorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>
               Cerrar
             </Button>
-            <Button onClick={saveModifierGroup} disabled={isSaving}>
+            <Button className="h-8 rounded-lg px-3 text-sm" onClick={saveModifierGroup} disabled={isSaving}>
               {dialogMode === "create" ? "Crear modificador" : "Guardar cambios"}
             </Button>
           </DialogFooter>

@@ -233,45 +233,45 @@ export function AdminStaffManagement({
       density="compact"
     >
       <Card>
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex-1">
             <CardTitle>Miembros del staff</CardTitle>
             <CardDescription>Alta, activacion y asignacion operativa por sucursal para cocina y operacion diaria.</CardDescription>
-            <div className="relative mt-4 max-w-md">
+            <div className="relative mt-3 max-w-md">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="h-9 pl-9"
+                className="h-8 pl-9"
                 placeholder="Buscar por nombre, email o rol"
               />
             </div>
           </div>
-          <Button className="rounded-xl" onClick={openCreateDialog} disabled={!canManage}>
+          <Button className="h-8 rounded-lg px-3 text-sm" onClick={openCreateDialog} disabled={!canManage}>
             <UserPlus />
             Nuevo staff
           </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           {feedbackMessage ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{feedbackMessage}</div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{feedbackMessage}</div>
           ) : null}
 
           {!canManage ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
               Solo owner y manager pueden crear o modificar staff desde este modulo.
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-[1.5rem] border border-border">
+          <div className="overflow-hidden rounded-[1rem] border border-border">
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead>Persona</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Sucursales</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="w-[210px] text-right">Acciones</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Persona</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Rol</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Sucursales</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
+                  <TableHead className="h-10 w-[190px] px-3 text-right text-xs">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -280,35 +280,36 @@ export function AdminStaffManagement({
 
                   return (
                     <TableRow key={member.membershipId}>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="space-y-1">
                           <p className="font-semibold text-card-foreground">{member.fullName}</p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Mail className="size-4" />
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Mail className="size-3.5" />
                             <span>{member.email}</span>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant={member.role === "preparer" ? "warning" : member.role === "cashier" ? "secondary" : "outline"}>
                           {formatStaffRole(member.role)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatBranchSummary(member)}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2 text-sm text-muted-foreground">{formatBranchSummary(member)}</TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant={member.isActive ? "success" : "outline"}>{member.isActive ? "Activo" : "Inactivo"}</Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="flex justify-end gap-2">
                           {canEditMember ? (
                             <>
-                              <Button variant="outline" size="sm" onClick={() => openEditDialog(member)}>
+                              <Button variant="outline" size="sm" className="h-8 rounded-lg px-3 text-xs" onClick={() => openEditDialog(member)}>
                                 <PencilLine />
                                 Editar
                               </Button>
                               <Button
                                 variant={member.isActive ? "destructive" : "secondary"}
                                 size="sm"
+                                className="h-8 rounded-lg px-3 text-xs"
                                 onClick={() => toggleMemberState(member)}
                                 disabled={isUpdatingState}
                               >
@@ -316,7 +317,7 @@ export function AdminStaffManagement({
                               </Button>
                             </>
                           ) : (
-                            <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                               <Shield className="size-3.5" />
                               Protegido
                             </div>
@@ -328,7 +329,7 @@ export function AdminStaffManagement({
                 })}
                 {filteredStaff.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
                       No encontramos miembros de staff con ese filtro.
                     </TableCell>
                   </TableRow>
@@ -350,8 +351,8 @@ export function AdminStaffManagement({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-5 px-6 pb-6">
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 px-6 pb-6">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground" htmlFor="staff-full-name">
                   Nombre completo
@@ -379,14 +380,14 @@ export function AdminStaffManagement({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground" htmlFor="staff-role">
                   Rol operativo
                 </label>
                 <select
                   id="staff-role"
-                  className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   value={formValues.role}
                   onChange={(event) => updateField("role", event.target.value as ManageableStaffRole)}
                 >
@@ -400,7 +401,7 @@ export function AdminStaffManagement({
 
               <div className="space-y-3">
                 <p className="text-sm font-medium text-foreground">Estado del acceso</p>
-                <label className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm text-muted-foreground">
+                <label className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground">
                   <Checkbox checked={formValues.isActive} onCheckedChange={(checked) => updateField("isActive", checked === true)} />
                   Acceso activo para operar
                 </label>
@@ -413,14 +414,14 @@ export function AdminStaffManagement({
                 <p className="mt-1 text-sm text-muted-foreground">La cocina y los pedidos visibles dependeran de estas asignaciones de branch.</p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-2.5 md:grid-cols-2">
                 {branches.map((branch) => {
                   const checked = formValues.branchIds.includes(branch.id)
 
                   return (
                     <label
                       key={branch.id}
-                      className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${
+                      className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm ${
                         checked ? "border-orange-300 bg-orange-50/60" : "border-border bg-background"
                       } ${!branch.isActive ? "opacity-60" : ""}`}
                     >
@@ -435,11 +436,11 @@ export function AdminStaffManagement({
               </div>
             </div>
 
-            {errorMessage ? <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">{errorMessage}</div> : null}
+            {errorMessage ? <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{errorMessage}</div> : null}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
             <SaveStaffButton isSaving={isSaving} mode={dialogMode} onClick={saveStaffMember} />

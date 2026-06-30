@@ -221,48 +221,48 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
       density="compact"
     >
       <Card>
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 flex-1">
             <CardTitle>Listado de categorias</CardTitle>
             <CardDescription>Vista compacta para orden, conteo, estado y media principal.</CardDescription>
-            <div className="relative mt-4 max-w-md">
+            <div className="relative mt-3 max-w-md">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-9 pl-9" placeholder="Buscar categoria" />
+              <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-8 pl-9" placeholder="Buscar categoria" />
             </div>
           </div>
-          <Button className="rounded-xl" onClick={openCreateDialog}>
+          <Button className="h-8 rounded-lg px-3 text-sm" onClick={openCreateDialog}>
             <Plus />
             Nueva categoria
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-[1.5rem] border border-border">
+          <div className="overflow-hidden rounded-[1rem] border border-border">
             <Table>
               <TableHeader className="bg-secondary/50">
                 <TableRow>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Imagen</TableHead>
-                  <TableHead>Productos</TableHead>
-                  <TableHead>Visibilidad</TableHead>
-                  <TableHead>Orden</TableHead>
-                  <TableHead className="w-[80px] text-right">Acciones</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Categoria</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Imagen</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Productos</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Visibilidad</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Orden</TableHead>
+                  <TableHead className="h-10 w-[72px] px-3 text-right text-xs">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCategories.map((category, index) => (
                   <TableRow key={category.id}>
-                    <TableCell className="font-semibold text-card-foreground">{category.name}</TableCell>
-                    <TableCell>
-                      <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted p-1">
-                        {category.imageUrl ? <Image alt={category.name} className="h-full w-full object-contain" height={56} src={category.imageUrl} unoptimized width={56} /> : null}
+                    <TableCell className="px-3 py-2 font-semibold text-card-foreground">{category.name}</TableCell>
+                    <TableCell className="px-3 py-2">
+                      <div className="flex size-12 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-1">
+                        {category.imageUrl ? <Image alt={category.name} className="h-full w-full object-contain" height={48} src={category.imageUrl} unoptimized width={48} /> : null}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{category.itemCount}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">{category.itemCount}</TableCell>
+                    <TableCell className="px-3 py-2">
                       <Badge variant={category.visibility === "Publica" ? "success" : "outline"}>{category.visibility}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">#{category.sortOrder ?? index + 1}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2 text-muted-foreground">#{category.sortOrder ?? index + 1}</TableCell>
+                    <TableCell className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild onClick={(event) => event.stopPropagation()}>
@@ -271,7 +271,7 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
                               <span className="sr-only">Open category actions</span>
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44 rounded-xl">
+                          <DropdownMenuContent align="end" className="w-40 rounded-xl">
                             <DropdownMenuItem onSelect={() => openEditDialog(category, index)}>Editar categoría</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -283,7 +283,7 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
             </Table>
           </div>
           {filteredCategories.length === 0 ? (
-            <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+            <div className="mt-4 rounded-[1rem] border border-dashed border-border px-5 py-8 text-center text-sm text-muted-foreground">
               {initialCategories.length === 0
                 ? "Este tenant aun no tiene categorias cargadas. Crea la primera para empezar a organizar el menu."
                 : "No encontramos categorias con ese filtro."}
@@ -299,8 +299,8 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
             <DialogDescription>Configura nombre, visibilidad, orden e imagen principal de la categoria.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid max-h-[calc(88vh-11rem)] gap-4 overflow-y-auto px-6 pb-2">
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid max-h-[calc(88vh-11rem)] gap-3 overflow-y-auto px-6 pb-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
                 <Input value={categoryFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Burgers" />
@@ -310,7 +310,7 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
                 <select
                   value={categoryFormValues.visibility}
                   onChange={(event) => handleFieldChange("visibility", event.target.value as CategoryVisibility)}
-                  className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="Publica">Publica</option>
                   <option value="Oculta">Oculta</option>
@@ -318,7 +318,7 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
               </label>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
+            <div className="grid gap-3 md:grid-cols-[0.7fr_1.3fr]">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Orden</span>
                 <Input type="number" value={String(categoryFormValues.sortOrder)} onChange={(event) => handleFieldChange("sortOrder", Number(event.target.value) || 0)} />
@@ -339,9 +339,9 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
               <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageFileChange} />
             </label>
 
-            <div className="rounded-[1.25rem] border border-dashed border-border p-4">
+            <div className="rounded-[1rem] border border-dashed border-border p-3.5">
               <p className="text-sm font-medium text-card-foreground">Preview</p>
-              <div className="mt-3 flex aspect-[16/9] max-h-44 items-center justify-center overflow-hidden rounded-[1rem] border border-border bg-muted p-3">
+              <div className="mt-3 flex aspect-[16/9] max-h-40 items-center justify-center overflow-hidden rounded-[0.9rem] border border-border bg-muted p-3">
                 {imagePreviewUrl ? (
                   <Image
                     alt={categoryFormValues.imageAlt || categoryFormValues.name || "Category preview"}
@@ -355,14 +355,14 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
               </div>
             </div>
 
-            {formErrorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
+            {formErrorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => handleCategoryDialogOpenChange(false)} disabled={isSavingCategory}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => handleCategoryDialogOpenChange(false)} disabled={isSavingCategory}>
               Cerrar
             </Button>
-            <Button onClick={saveCategory} disabled={isSavingCategory}>
+            <Button className="h-8 rounded-lg px-3 text-sm" onClick={saveCategory} disabled={isSavingCategory}>
               {categoryDialogMode === "create" ? "Crear categoria" : "Guardar cambios"}
             </Button>
           </DialogFooter>
@@ -376,13 +376,13 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
             <DialogDescription>Detectamos cambios en la categoria. Si cierras ahora, puedes perderlos.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUnsavedDialogOpen(false)} disabled={isSavingCategory}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => setIsUnsavedDialogOpen(false)} disabled={isSavingCategory}>
               Seguir editando
             </Button>
-            <Button variant="destructive" onClick={discardChanges} disabled={isSavingCategory}>
+            <Button variant="destructive" className="h-8 rounded-lg px-3 text-sm" onClick={discardChanges} disabled={isSavingCategory}>
               Cerrar sin guardar
             </Button>
-            <Button onClick={saveAndCloseUnsavedDialog} disabled={isSavingCategory}>
+            <Button className="h-8 rounded-lg px-3 text-sm" onClick={saveAndCloseUnsavedDialog} disabled={isSavingCategory}>
               Guardar y cerrar
             </Button>
           </DialogFooter>

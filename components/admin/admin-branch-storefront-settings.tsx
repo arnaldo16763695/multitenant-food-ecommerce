@@ -134,19 +134,19 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>Links públicos por sucursal</CardTitle>
           <CardDescription>
             Comparte estos enlaces en QR, Google Maps, Instagram o WhatsApp para llevar al cliente directo al storefront correcto.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-3">
           {branches.map((branch) => {
             const storefrontUrl = `${publicAppUrl}/app/${tenantSlug}?branch=${branch.id}`
 
             return (
-              <div key={branch.id} className="grid gap-4 rounded-[1.75rem] border border-border bg-card p-5 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
-                <div className="space-y-3">
+              <div key={branch.id} className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
+                <div className="space-y-2.5">
                   <div className="flex items-center gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-foreground">{branch.name}</p>
@@ -155,7 +155,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                     <Badge variant={branch.isActive ? "success" : "warning"}>{branch.isActive ? "Activa" : "Inactiva"}</Badge>
                   </div>
                   <div
-                    className="relative min-h-[10rem] overflow-hidden rounded-[1.35rem] border border-stone-200 bg-stone-950 bg-cover bg-center"
+                    className="relative min-h-[8.5rem] overflow-hidden rounded-[1rem] border border-stone-200 bg-stone-950 bg-cover bg-center"
                     style={{
                       backgroundImage: branch.heroImageUrl
                         ? `linear-gradient(90deg, rgba(28,25,23,0.86) 0%, rgba(28,25,23,0.42) 100%), url(${branch.heroImageUrl})`
@@ -163,14 +163,14 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                     }}
                   >
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.18),_transparent_36%)]" />
-                    <div className="relative flex min-h-[10rem] flex-col justify-end p-4 text-white">
+                    <div className="relative flex min-h-[8.5rem] flex-col justify-end p-3.5 text-white">
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">Hero actual</p>
-                      <p className="mt-2 text-lg font-semibold">{branch.name}</p>
+                      <p className="mt-1.5 text-base font-semibold">{branch.name}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div>
                     <p className="text-sm font-semibold text-foreground">URL pública</p>
                     <p className="mt-1 break-all text-sm text-muted-foreground">{storefrontUrl}</p>
@@ -185,7 +185,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
 
                 <div className="flex flex-col justify-between gap-3">
                   <BranchStorefrontLinkActions url={storefrontUrl} />
-                  <Button className="rounded-full" onClick={() => openDialog(branch)} type="button" variant="outline">
+                  <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch)} type="button" variant="outline">
                     <ImagePlus />
                     Editar hero
                   </Button>
@@ -197,7 +197,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       </Card>
 
       <Dialog open={Boolean(selectedBranch)} onOpenChange={(nextOpen) => (!nextOpen ? closeDialog() : undefined)}>
-        <DialogContent className="max-w-3xl rounded-[1.75rem]">
+        <DialogContent className="max-w-3xl rounded-[1.25rem]">
           <DialogHeader>
             <DialogTitle>Hero por sucursal</DialogTitle>
             <DialogDescription>
@@ -207,8 +207,8 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="space-y-3">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">URL de imagen hero</span>
                 <Input
@@ -231,13 +231,13 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                 <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
               </label>
 
-              {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
-              {successMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+              {errorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+              {successMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div
-                className="relative min-h-[18rem] overflow-hidden rounded-[1.5rem] border border-stone-200 bg-stone-950 bg-cover bg-center"
+                className="relative min-h-[16rem] overflow-hidden rounded-[1rem] border border-stone-200 bg-stone-950 bg-cover bg-center"
                 style={{
                   backgroundImage: heroPreviewUrl
                     ? `linear-gradient(90deg, rgba(28,25,23,0.88) 0%, rgba(28,25,23,0.5) 100%), url(${heroPreviewUrl})`
@@ -245,19 +245,19 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                 }}
               >
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.2),_transparent_35%)]" />
-                <div className="relative flex min-h-[18rem] flex-col justify-between p-5 text-white">
+                <div className="relative flex min-h-[16rem] flex-col justify-between p-4 text-white">
                   <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">
                     <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5">Branch storefront</span>
                     <span className="rounded-full border border-white/15 bg-black/20 px-3 py-1.5">{selectedBranch?.name ?? "Sucursal"}</span>
                   </div>
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-200">Preview</p>
-                    <h3 className="mt-2 text-3xl font-semibold tracking-tight">{selectedBranch?.name ?? "Sucursal"}</h3>
+                    <h3 className="mt-2 text-2xl font-semibold tracking-tight">{selectedBranch?.name ?? "Sucursal"}</h3>
                   </div>
                 </div>
               </div>
               <Button
-                className="rounded-full"
+                className="h-8 rounded-lg px-3 text-sm"
                 disabled={isSaving || (!heroImageUrl && !selectedHeroFile)}
                 onClick={clearHeroImage}
                 type="button"
@@ -270,7 +270,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
           </div>
 
           <DialogFooter>
-            <Button className="rounded-full" disabled={isSaving} onClick={saveBranchHero} type="button">
+            <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving} onClick={saveBranchHero} type="button">
               {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
               Guardar hero de sucursal
             </Button>

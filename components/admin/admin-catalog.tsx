@@ -462,19 +462,19 @@ export function AdminCatalogProducts({
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  className="h-9 pl-9"
+                  className="h-8 pl-9"
                   placeholder="Buscar productos, categorias o tags"
                 />
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2 xl:justify-end">
-              <Button variant="outline" className="h-9 rounded-xl">
+              <Button variant="outline" className="h-8 rounded-lg px-3 text-sm">
                 <SlidersHorizontal />
                 Filtros
               </Button>
               {canEditGlobalCatalog ? (
-                <Button className="h-9 rounded-xl" onClick={openCreateDialog} disabled={!hasCategories}>
+                <Button className="h-8 rounded-lg px-3 text-sm" onClick={openCreateDialog} disabled={!hasCategories}>
                   <Plus />
                   Nuevo producto
                 </Button>
@@ -487,7 +487,7 @@ export function AdminCatalogProducts({
                   key={category}
                   type="button"
                   variant={selectedCategory === category ? "default" : "outline"}
-                  className="h-8 rounded-full"
+                  className="h-7 rounded-full px-3 text-xs"
                   onClick={() => setSelectedCategory(category)}
                 >
                   {category}
@@ -500,7 +500,7 @@ export function AdminCatalogProducts({
 
       <section>
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle>Productos</CardTitle>
             <CardDescription>
               {canEditGlobalCatalog
@@ -510,7 +510,7 @@ export function AdminCatalogProducts({
           </CardHeader>
           <CardContent>
             {canEditGlobalCatalog && !hasCategories ? (
-              <div className="mb-4 rounded-[1.5rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+              <div className="mb-4 rounded-[1rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 Aun no puedes crear productos en este tenant porque no existen categorias.{" "}
                 <Link className="font-semibold underline underline-offset-4" href={`/app/${tenantSlug}/admin/catalog/categories`}>
                   Crea la primera categoria aqui
@@ -519,46 +519,46 @@ export function AdminCatalogProducts({
               </div>
             ) : null}
 
-            <div className="overflow-hidden rounded-[1.5rem] border border-border">
+            <div className="overflow-hidden rounded-[1rem] border border-border">
               <Table>
                 <TableHeader className="bg-secondary/50">
                   <TableRow>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Imagen</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>Tamanos</TableHead>
-                    <TableHead>Modificadores</TableHead>
-                    <TableHead>Branches</TableHead>
-                    <TableHead className="w-[80px] text-right">Acciones</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Producto</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Imagen</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Categoria</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Precio</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Tamanos</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Mods</TableHead>
+                    <TableHead className="h-10 px-3 text-xs">Branches</TableHead>
+                    <TableHead className="h-10 w-[72px] px-3 text-right text-xs">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProducts.map((product) => (
                     <TableRow key={product.id}>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="space-y-1">
                           <p className="font-semibold text-card-foreground">{product.name}</p>
                           <p className="line-clamp-1 max-w-md text-xs text-muted-foreground">{product.description}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted p-1">
-                          {product.primaryImageUrl ? <Image alt={product.name} className="h-full w-full object-contain" height={56} src={product.primaryImageUrl} unoptimized width={56} /> : null}
+                      <TableCell className="px-3 py-2">
+                        <div className="flex size-12 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-1">
+                          {product.primaryImageUrl ? <Image alt={product.name} className="h-full w-full object-contain" height={48} src={product.primaryImageUrl} unoptimized width={48} /> : null}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant="outline">{product.category}</Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant={getProductStatusVariant(product.status)}>{product.status}</Badge>
                       </TableCell>
-                      <TableCell className="font-medium text-card-foreground">{product.basePrice}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.hasVariants ? `${product.variants.length} tamanos` : "Base unica"}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.modifierGroups.length} grupos</TableCell>
-                      <TableCell className="text-muted-foreground">{formatBranchSummary(product)}</TableCell>
-                      <TableCell>
+                      <TableCell className="px-3 py-2 font-medium text-card-foreground">{product.basePrice}</TableCell>
+                      <TableCell className="px-3 py-2 text-muted-foreground">{product.hasVariants ? `${product.variants.length} tamaños` : "Base única"}</TableCell>
+                      <TableCell className="px-3 py-2 text-muted-foreground">{product.modifierGroups.length} grupos</TableCell>
+                      <TableCell className="px-3 py-2 text-muted-foreground">{formatBranchSummary(product)}</TableCell>
+                      <TableCell className="px-3 py-2">
                         <div className="flex justify-end gap-2">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -567,7 +567,7 @@ export function AdminCatalogProducts({
                                 <span className="sr-only">Open product actions</span>
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44 rounded-xl">
+                            <DropdownMenuContent align="end" className="w-40 rounded-xl">
                               <DropdownMenuItem onSelect={() => openEditDialog(product)}>
                                 {canEditGlobalCatalog ? "Editar producto" : "Configurar sucursal"}
                               </DropdownMenuItem>
@@ -598,7 +598,7 @@ export function AdminCatalogProducts({
             </div>
 
             {filteredProducts.length === 0 ? (
-              <div className="mt-4 rounded-[1.5rem] border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+              <div className="mt-4 rounded-[1rem] border border-dashed border-border px-5 py-8 text-center text-sm text-muted-foreground">
                 {!hasCategories
                   ? "Este tenant aun no tiene categorias. Crea la primera categoria y luego podras registrar productos."
                   : products.length === 0
@@ -617,8 +617,8 @@ export function AdminCatalogProducts({
             <DialogDescription>Modal compacto para alta o edicion del producto sin salir de la tabla principal.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid max-h-[calc(88vh-11rem)] gap-4 overflow-y-auto px-6 pb-2">
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid max-h-[calc(88vh-11rem)] gap-3 overflow-y-auto px-6 pb-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
                 <Input value={productFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Fire Smash Burger" disabled={!canEditGlobalCatalog} />
@@ -629,7 +629,7 @@ export function AdminCatalogProducts({
                   value={productFormValues.category}
                   onChange={(event) => handleFieldChange("category", event.target.value)}
                   disabled={!canEditGlobalCatalog || !hasCategories}
-                  className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="">{hasCategories ? "Selecciona una categoria" : "Primero crea una categoria"}</option>
                   {categoryOptions.map((categoryName) => (
@@ -647,12 +647,12 @@ export function AdminCatalogProducts({
                 value={productFormValues.description}
                 onChange={(event) => handleFieldChange("description", event.target.value)}
                 disabled={!canEditGlobalCatalog}
-                className="min-h-28 rounded-xl border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="min-h-24 rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 placeholder="Describe el producto para el equipo y el storefront."
               />
             </label>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Precio base</span>
                 <Input value={productFormValues.basePrice} onChange={(event) => handleFieldChange("basePrice", event.target.value)} placeholder="Ej. $ 11.90" disabled={!canEditGlobalCatalog} />
@@ -663,7 +663,7 @@ export function AdminCatalogProducts({
                   value={productFormValues.status}
                   onChange={(event) => handleFieldChange("status", event.target.value as ProductStatus)}
                   disabled={!canEditGlobalCatalog}
-                  className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <option value="Activo">Activo</option>
                   <option value="Draft">Draft</option>
@@ -671,7 +671,7 @@ export function AdminCatalogProducts({
               </label>
             </div>
 
-            <div className="rounded-[1.25rem] border border-border p-4">
+            <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-card-foreground">Grupos de modificadores</p>
@@ -680,9 +680,9 @@ export function AdminCatalogProducts({
               </div>
 
               {modifierGroupOptions.length > 0 ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                   {modifierGroupOptions.map((modifierGroup) => (
-                    <label key={modifierGroup.id} className="flex items-start gap-3 rounded-[1rem] border border-border bg-secondary/20 px-4 py-3 text-sm text-card-foreground">
+                    <label key={modifierGroup.id} className="flex items-start gap-3 rounded-[0.9rem] border border-border bg-secondary/20 px-3 py-2.5 text-sm text-card-foreground">
                       <input
                         type="checkbox"
                         checked={productFormValues.modifierGroupIds.includes(modifierGroup.id)}
@@ -699,20 +699,20 @@ export function AdminCatalogProducts({
                   ))}
                 </div>
               ) : (
-                <div className="mt-4 rounded-[1rem] border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                  <div className="mt-3 rounded-[0.9rem] border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                   Primero crea grupos de modificadores en la seccion de modificadores para poder asignarlos a este producto.
                 </div>
               )}
             </div>
 
-            <div className="rounded-[1.25rem] border border-border p-4">
+            <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-card-foreground">Tamanos y presentaciones</p>
                   <p className="mt-1 text-xs text-muted-foreground">Define variantes vendibles cuando este producto cambie por tamano, porcion o presentacion.</p>
                 </div>
                 {canEditGlobalCatalog ? (
-                  <Button type="button" variant="outline" className="rounded-xl" onClick={addVariantRow}>
+                  <Button type="button" variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={addVariantRow}>
                     <Plus />
                     Agregar tamano
                   </Button>
@@ -720,9 +720,9 @@ export function AdminCatalogProducts({
               </div>
 
               {productFormValues.variants.length > 0 ? (
-                <div className="mt-4 grid gap-3">
+                <div className="mt-3 grid gap-2.5">
                   {productFormValues.variants.map((variant, index) => (
-                    <div key={variant.id} className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto_auto] md:items-end">
+                    <div key={variant.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto_auto] md:items-end">
                       <label className="grid gap-2 text-sm">
                         <span className="font-medium text-card-foreground">Nombre</span>
                         <Input value={variant.name} onChange={(event) => handleVariantChange(index, "name", event.target.value)} placeholder="Ej. Grande" disabled={!canEditGlobalCatalog} />
@@ -731,7 +731,7 @@ export function AdminCatalogProducts({
                         <span className="font-medium text-card-foreground">Precio</span>
                         <Input value={variant.basePrice} onChange={(event) => handleVariantChange(index, "basePrice", event.target.value)} placeholder="Ej. $ 14.90" disabled={!canEditGlobalCatalog} />
                       </label>
-                      <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm text-card-foreground">
+                      <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-card-foreground">
                         <input checked={variant.isDefault} onChange={() => handleDefaultVariantChange(index)} type="radio" name="defaultVariant" disabled={!canEditGlobalCatalog} />
                         Predeterminada
                       </label>
@@ -744,13 +744,13 @@ export function AdminCatalogProducts({
                   ))}
                 </div>
               ) : (
-                <div className="mt-4 rounded-[1rem] border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                  <div className="mt-3 rounded-[0.9rem] border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
                   Este producto usa un precio base unico hasta que agregues variantes.
                 </div>
               )}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
+            <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Primary image path</span>
                 <Input
@@ -776,9 +776,9 @@ export function AdminCatalogProducts({
               <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePrimaryImageFileChange} disabled={!canEditGlobalCatalog} />
             </label>
 
-            <div className="rounded-[1.25rem] border border-dashed border-border p-4">
+            <div className="rounded-[1rem] border border-dashed border-border p-3.5">
               <p className="text-sm font-medium text-card-foreground">Preview</p>
-              <div className="mt-3 flex aspect-[16/9] max-h-48 items-center justify-center overflow-hidden rounded-[1rem] border border-border bg-muted p-3">
+              <div className="mt-3 flex aspect-[16/9] max-h-44 items-center justify-center overflow-hidden rounded-[0.9rem] border border-border bg-muted p-3">
                 {primaryImagePreviewUrl ? (
                   <Image
                     alt={productFormValues.primaryImageAlt || productFormValues.name || "Product preview"}
@@ -792,7 +792,7 @@ export function AdminCatalogProducts({
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-border p-4">
+            <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-card-foreground">Configuracion por sucursal</p>
@@ -802,9 +802,9 @@ export function AdminCatalogProducts({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3">
+              <div className="mt-3 grid gap-2.5">
                 {productFormValues.branchOverrides.map((branchOverride) => (
-                  <div key={branchOverride.branchId} className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.2fr_1fr_1fr_1fr]">
+                  <div key={branchOverride.branchId} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.2fr_1fr_1fr_1fr]">
                     <div>
                       <p className="text-sm font-medium text-card-foreground">{branchOverride.branchName}</p>
                       <p className="mt-1 text-xs text-muted-foreground">Operacion local de esta sucursal</p>
@@ -815,7 +815,7 @@ export function AdminCatalogProducts({
                       <select
                         value={branchOverride.availabilityStatus}
                         onChange={(event) => handleBranchOverrideChange(branchOverride.branchId, "availabilityStatus", event.target.value)}
-                        className="h-9 rounded-xl border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
                         <option value="available">Disponible</option>
                         <option value="paused">Pausado</option>
@@ -845,14 +845,14 @@ export function AdminCatalogProducts({
               </div>
             </div>
 
-            {formErrorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
+            {formErrorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formErrorMessage}</p> : null}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => handleProductDialogOpenChange(false)} disabled={isSavingProduct}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => handleProductDialogOpenChange(false)} disabled={isSavingProduct}>
               Cerrar
             </Button>
-            <Button onClick={saveProduct} disabled={isSavingProduct || isRunningRowAction}>
+            <Button className="h-8 rounded-lg px-3 text-sm" onClick={saveProduct} disabled={isSavingProduct || isRunningRowAction}>
               {productDialogMode === "create" ? "Crear producto" : canEditGlobalCatalog ? "Guardar cambios" : "Guardar configuracion"}
             </Button>
           </DialogFooter>
@@ -866,13 +866,13 @@ export function AdminCatalogProducts({
             <DialogDescription>Detectamos cambios en el formulario. Si cierras ahora, puedes perderlos. Elige como quieres continuar.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUnsavedDialogOpen(false)} disabled={isSavingProduct}>
+            <Button variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={() => setIsUnsavedDialogOpen(false)} disabled={isSavingProduct}>
               Seguir editando
             </Button>
-            <Button variant="destructive" onClick={discardChanges} disabled={isSavingProduct}>
+            <Button variant="destructive" className="h-8 rounded-lg px-3 text-sm" onClick={discardChanges} disabled={isSavingProduct}>
               Cerrar sin guardar
             </Button>
-            <Button onClick={saveAndCloseUnsavedDialog} disabled={isSavingProduct}>
+            <Button className="h-8 rounded-lg px-3 text-sm" onClick={saveAndCloseUnsavedDialog} disabled={isSavingProduct}>
               Guardar y cerrar
             </Button>
           </DialogFooter>
