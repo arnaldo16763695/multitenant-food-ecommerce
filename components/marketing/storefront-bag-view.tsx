@@ -18,6 +18,7 @@ import { StorefrontProductSheet } from "@/components/marketing/storefront-produc
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
+import { formatModifierSelectionLabel, isExclusionGroup } from "@/lib/storefront/modifier-display"
 import { useToastStore } from "@/lib/ui/toast-store"
 
 type StorefrontBagViewProps = {
@@ -252,8 +253,15 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                         {item.modifierSelections.length > 0 ? (
                           <div className="flex flex-wrap gap-2 text-xs text-stone-500">
                             {item.modifierSelections.map((selection) => (
-                              <span key={`${selection.modifierGroupId}-${selection.modifierOptionId}`} className="rounded-full bg-white px-2.5 py-1">
-                                {selection.modifierGroupName}: {selection.modifierOptionName}
+                              <span
+                                key={`${selection.modifierGroupId}-${selection.modifierOptionId}`}
+                                className={
+                                  isExclusionGroup(selection.modifierGroupName)
+                                    ? "rounded-full border border-stone-300 bg-stone-100 px-2.5 py-1 text-stone-700"
+                                    : "rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800"
+                                }
+                              >
+                                {formatModifierSelectionLabel(selection)}
                               </span>
                             ))}
                           </div>

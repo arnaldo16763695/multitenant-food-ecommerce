@@ -6,6 +6,7 @@ import { Minus, Plus, ShoppingBag } from "lucide-react"
 
 import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
+import { formatExclusionAction, formatModifierGroupTitle, isExclusionGroup } from "@/lib/storefront/modifier-display"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useShoppingBagStore } from "@/lib/storefront/bag-store"
@@ -53,23 +54,6 @@ type StorefrontProductSheetProps = {
 function parsePriceLabel(value: string) {
   const numericValue = Number(value.replace(/[^0-9.-]+/g, ""))
   return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
-}
-
-function isExclusionGroup(groupName: string) {
-  const normalizedName = groupName.trim().toLowerCase()
-  return normalizedName.includes("exclusion") || normalizedName.includes("exclusión")
-}
-
-function formatModifierGroupTitle(groupName: string) {
-  if (!isExclusionGroup(groupName)) {
-    return groupName
-  }
-
-  return "Quitar ingredientes"
-}
-
-function formatExclusionAction(optionName: string) {
-  return `Sin ${optionName.toLowerCase()}`
 }
 
 export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar" }: StorefrontProductSheetProps) {
@@ -328,7 +312,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
                           type="button"
                           onClick={() => handleOptionToggle(group.id, option.id, group.selectionType)}
                           className={`flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
-                            isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
+                            isSelected
+                              ? exclusionGroup
+                                ? "border-stone-400 bg-stone-100 text-stone-950"
+                                : "border-orange-500 bg-orange-50 text-stone-950"
+                              : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
                           }`}
                         >
                           <span>{option.name}</span>
