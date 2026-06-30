@@ -3,13 +3,14 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Eye, MoreHorizontal } from "lucide-react"
+import { Eye, MoreHorizontal, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { updateAdminOrderPaymentStatusAction, updateAdminOrderStatusAction } from "@/app/app/[tenantSlug]/admin/orders/actions"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus, type AdminOrderSummary, type OrderStatus, type PaymentStatus } from "@/lib/domain/order"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,38 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
+type OrderQueueFilter = "all" | "needs_review" | "rejected" | "ready_to_confirm" | "confirmed"
+
+function getOrderPriority(order: AdminOrderSummary) {
+  if (order.paymentStatus === "failed") return 0
+  if (order.status === "pending_payment" && order.hasPaymentReceipt) return 1
+  if (order.status === "pending_payment") return 2
+  if (order.status === "confirmed") return 3
+  if (order.status === "in_preparation") return 4
+  if (order.status === "ready") return 5
+
+  return 6
+}
+
+function isReadyToConfirm(order: AdminOrderSummary) {
+  return order.status === "pending_payment" && order.paymentStatus === "pending" && order.hasPaymentReceipt
+}
+
+function matchesQueueFilter(order: AdminOrderSummary, queueFilter: OrderQueueFilter) {
+  switch (queueFilter) {
+    case "needs_review":
+      return order.status === "pending_payment"
+    case "rejected":
+      return order.paymentStatus === "failed"
+    case "ready_to_confirm":
+      return isReadyToConfirm(order)
+    case "confirmed":
+      return order.status === "confirmed" || order.status === "in_preparation" || order.status === "ready" || order.status === "completed"
+    default:
+      return true
+  }
+}
 
 type AdminOrdersTableProps = {
   readonly tenantSlug: string
@@ -97,6 +130,76 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isPending, startTransition] = React.useTransition()
   const [receiptOrderId, setReceiptOrderId] = React.useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [queueFilter, setQueueFilter] = React.useState<OrderQueueFilter>("all")
+  const [paymentFilter, setPaymentFilter] = React.useState<PaymentStatus | "all">("all")
+  const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
+  const [receiptFilter, setReceiptFilter] = React.useState<"all" | "with_receipt" | "without_receipt">("all")
+  const [branchFilter, setBranchFilter] = React.useState<string>("all")
+
+  const branchOptions = React.useMemo(
+    () => ["all", ...new Set(orders.map((order) => order.branchName).filter(Boolean))],
+    [orders]
+  )
+
+  const summary = React.useMemo(
+    () => ({
+      pending: orders.filter((order) => order.status === "pending_payment").length,
+      rejected: orders.filter((order) => order.paymentStatus === "failed").length,
+      readyToConfirm: orders.filter((order) => isReadyToConfirm(order)).length,
+      inKitchen: orders.filter((order) => order.status === "in_preparation" || order.status === "ready").length,
+    }),
+    [orders]
+  )
+
+  const filteredOrders = React.useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    return [...orders]
+      .sort((left, right) => {
+        const priorityDelta = getOrderPriority(left) - getOrderPriority(right)
+
+        if (priorityDelta !== 0) {
+          return priorityDelta
+        }
+
+        return new Date(right.placedAt).getTime() - new Date(left.placedAt).getTime()
+      })
+      .filter((order) => {
+        if (!matchesQueueFilter(order, queueFilter)) {
+          return false
+        }
+
+        if (paymentFilter !== "all" && order.paymentStatus !== paymentFilter) {
+          return false
+        }
+
+        if (statusFilter !== "all" && order.status !== statusFilter) {
+          return false
+        }
+
+        if (receiptFilter === "with_receipt" && !order.hasPaymentReceipt) {
+          return false
+        }
+
+        if (receiptFilter === "without_receipt" && order.hasPaymentReceipt) {
+          return false
+        }
+
+        if (branchFilter !== "all" && order.branchName !== branchFilter) {
+          return false
+        }
+
+        if (!normalizedQuery) {
+          return true
+        }
+
+        return [String(order.orderNumber), order.customerName, order.branchName, order.paymentMethod ?? "", order.channel]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery)
+      })
+  }, [orders, searchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
 
   function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
@@ -130,6 +233,100 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
 
   return (
     <>
+      <div className="mb-4 grid gap-3">
+        <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Cola operativa</p>
+              <p className="mt-1 text-sm text-muted-foreground">Prioriza rechazos, pagos pendientes con comprobante y órdenes listas para confirmar.</p>
+            </div>
+            <div className="relative max-w-md">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input className="pl-9" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Buscar pedido, cliente o sucursal" value={searchQuery} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("all")} type="button" variant={queueFilter === "all" ? "default" : "outline"}>
+                Todas
+              </Button>
+              <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("needs_review")} type="button" variant={queueFilter === "needs_review" ? "default" : "outline"}>
+                Pendientes
+              </Button>
+              <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("rejected")} type="button" variant={queueFilter === "rejected" ? "default" : "outline"}>
+                Rechazados
+              </Button>
+              <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("ready_to_confirm")} type="button" variant={queueFilter === "ready_to_confirm" ? "default" : "outline"}>
+                Listos para confirmar
+              </Button>
+              <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("confirmed")} type="button" variant={queueFilter === "confirmed" ? "default" : "outline"}>
+                Confirmados
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+            <div className="rounded-[1rem] border border-border bg-card p-3.5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Pendientes</p>
+              <p className="mt-1 text-2xl font-semibold text-card-foreground">{summary.pending}</p>
+            </div>
+            <div className="rounded-[1rem] border border-amber-200 bg-amber-50/60 p-3.5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Rechazados</p>
+              <p className="mt-1 text-2xl font-semibold text-amber-900">{summary.rejected}</p>
+            </div>
+            <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/60 p-3.5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Listos para confirmar</p>
+              <p className="mt-1 text-2xl font-semibold text-emerald-900">{summary.readyToConfirm}</p>
+            </div>
+            <div className="rounded-[1rem] border border-border bg-card p-3.5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">En cocina</p>
+              <p className="mt-1 text-2xl font-semibold text-card-foreground">{summary.inKitchen}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5 md:grid-cols-2 xl:grid-cols-4">
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium text-card-foreground">Estado de pago</span>
+            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" onChange={(event) => setPaymentFilter(event.target.value as PaymentStatus | "all")} value={paymentFilter}>
+              <option value="all">Todos</option>
+              <option value="pending">Pendiente</option>
+              <option value="failed">Rechazado</option>
+              <option value="paid">Pagado</option>
+              <option value="refunded">Reembolsado</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium text-card-foreground">Estado de orden</span>
+            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" onChange={(event) => setStatusFilter(event.target.value as OrderStatus | "all")} value={statusFilter}>
+              <option value="all">Todos</option>
+              <option value="pending_payment">Pago pendiente</option>
+              <option value="confirmed">Confirmado</option>
+              <option value="in_preparation">En preparación</option>
+              <option value="ready">Listo</option>
+              <option value="completed">Completado</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium text-card-foreground">Comprobante</span>
+            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" onChange={(event) => setReceiptFilter(event.target.value as "all" | "with_receipt" | "without_receipt")} value={receiptFilter}>
+              <option value="all">Todos</option>
+              <option value="with_receipt">Con comprobante</option>
+              <option value="without_receipt">Sin comprobante</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium text-card-foreground">Sucursal</span>
+            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" onChange={(event) => setBranchFilter(event.target.value)} value={branchFilter}>
+              {branchOptions.map((branchName) => (
+                <option key={branchName} value={branchName}>
+                  {branchName === "all" ? "Todas" : branchName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-[1rem] border border-border">
         <Table>
           <TableHeader className="bg-secondary/50">
@@ -147,7 +344,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((order) => {
+            {filteredOrders.map((order) => {
               const selectableStatuses = getSelectableStatuses(order.status)
               const selectablePaymentStatuses = getSelectablePaymentStatuses(order.paymentStatus)
               const paymentEditable = canEditPaymentStatus(order)
@@ -250,6 +447,12 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           </TableBody>
         </Table>
       </div>
+
+      {filteredOrders.length === 0 ? (
+        <div className="mt-4 rounded-[1rem] border border-dashed border-border px-5 py-8 text-center text-sm text-muted-foreground">
+          No encontramos órdenes con los filtros actuales.
+        </div>
+      ) : null}
 
       <div className="mt-4 rounded-[1.25rem] border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm text-stone-600">
         En este MVP, las órdenes nuevas llegan como <span className="font-semibold text-stone-950">pago pendiente</span>. La acción principal es <span className="font-semibold text-stone-950">Confirmar pedido y pago</span>, que habilita el flujo operativo hacia cocina.
