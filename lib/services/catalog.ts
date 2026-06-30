@@ -954,7 +954,7 @@ export async function createCatalogModifierGroup(
   if (normalizedOptionsResult.options.length > 0) {
     const optionsInsertResult = await supabase.from("modifier_group_options").insert(
       normalizedOptionsResult.options.map((option) => ({
-        id: option.id,
+        ...(option.id ? { id: option.id } : {}),
         modifier_group_id: insertResult.data.id,
         name: option.name,
         price_delta: option.priceDelta,
@@ -1027,22 +1027,43 @@ export async function updateCatalogModifierGroup(
   }
 
   if (normalizedOptionsResult.options.length > 0) {
-    const upsertResult = await supabase.from("modifier_group_options").upsert(
-      normalizedOptionsResult.options.map((option) => ({
-        id: option.id,
-        modifier_group_id: modifierGroupId,
-        name: option.name,
-        price_delta: option.priceDelta,
-        sort_order: option.sortOrder,
-        is_active: true,
-      })),
-      {
-        onConflict: "id",
-      }
-    )
+    const existingOptions = normalizedOptionsResult.options.filter((option): option is typeof option & { id: string } => Boolean(option.id))
+    const newOptions = normalizedOptionsResult.options.filter((option) => !option.id)
 
-    if (upsertResult.error) {
-      return { ok: false, error: upsertResult.error.message }
+    if (existingOptions.length > 0) {
+      const upsertResult = await supabase.from("modifier_group_options").upsert(
+        existingOptions.map((option) => ({
+          id: option.id,
+          modifier_group_id: modifierGroupId,
+          name: option.name,
+          price_delta: option.priceDelta,
+          sort_order: option.sortOrder,
+          is_active: true,
+        })),
+        {
+          onConflict: "id",
+        }
+      )
+
+      if (upsertResult.error) {
+        return { ok: false, error: upsertResult.error.message }
+      }
+    }
+
+    if (newOptions.length > 0) {
+      const insertResult = await supabase.from("modifier_group_options").insert(
+        newOptions.map((option) => ({
+          modifier_group_id: modifierGroupId,
+          name: option.name,
+          price_delta: option.priceDelta,
+          sort_order: option.sortOrder,
+          is_active: true,
+        }))
+      )
+
+      if (insertResult.error) {
+        return { ok: false, error: insertResult.error.message }
+      }
     }
   }
 
