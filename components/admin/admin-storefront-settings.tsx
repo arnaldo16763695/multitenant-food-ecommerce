@@ -20,6 +20,8 @@ type AdminStorefrontSettingsProps = {
   readonly initialStorefrontEnabled: boolean
   readonly initialHeroImageUrl: string | null
   readonly initialLogoImageUrl: string | null
+  readonly initialMobilePaymentInstructions: string | null
+  readonly initialBankTransferInstructions: string | null
 }
 
 export function AdminStorefrontSettings({
@@ -28,6 +30,8 @@ export function AdminStorefrontSettings({
   initialStorefrontEnabled,
   initialHeroImageUrl,
   initialLogoImageUrl,
+  initialMobilePaymentInstructions,
+  initialBankTransferInstructions,
 }: AdminStorefrontSettingsProps) {
   const router = useRouter()
   const [storefrontEnabled, setStorefrontEnabled] = React.useState(initialStorefrontEnabled)
@@ -37,6 +41,8 @@ export function AdminStorefrontSettings({
   const [selectedLogoFile, setSelectedLogoFile] = React.useState<File | null>(null)
   const [logoImageUrl, setLogoImageUrl] = React.useState(initialLogoImageUrl ?? "")
   const [logoPreviewUrl, setLogoPreviewUrl] = React.useState(initialLogoImageUrl)
+  const [mobilePaymentInstructions, setMobilePaymentInstructions] = React.useState(initialMobilePaymentInstructions ?? "")
+  const [bankTransferInstructions, setBankTransferInstructions] = React.useState(initialBankTransferInstructions ?? "")
   const [errorMessage, setErrorMessage] = React.useState("")
   const [successMessage, setSuccessMessage] = React.useState("")
   const [isSaving, startSaving] = React.useTransition()
@@ -129,6 +135,8 @@ export function AdminStorefrontSettings({
       formData.set("storefrontEnabled", storefrontEnabled ? "true" : "false")
       formData.set("heroImageUrl", nextHeroImageUrl)
       formData.set("logoImageUrl", nextLogoImageUrl)
+      formData.set("mobilePaymentInstructions", mobilePaymentInstructions)
+      formData.set("bankTransferInstructions", bankTransferInstructions)
 
       const result = await updateStorefrontBrandingAction(tenantSlug, formData)
 
@@ -151,14 +159,14 @@ export function AdminStorefrontSettings({
   return (
     <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>Branding del storefront</CardTitle>
           <CardDescription>
             Controla si la tienda pública está visible y define el hero principal y el logo que verán tus clientes.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-5">
-          <div className="flex items-center justify-between rounded-[1.25rem] border border-border bg-muted/30 px-4 py-3">
+        <CardContent className="grid gap-4">
+          <div className="flex items-center justify-between rounded-[1rem] border border-border bg-muted/30 px-3.5 py-2.5">
             <div>
               <p className="text-sm font-semibold text-card-foreground">Storefront público</p>
               <p className="text-sm text-muted-foreground">Activa o pausa la entrada pública del tenant sin tocar el admin interno.</p>
@@ -166,7 +174,7 @@ export function AdminStorefrontSettings({
             <Switch checked={storefrontEnabled} onCheckedChange={setStorefrontEnabled} />
           </div>
 
-          <div className="grid gap-3 rounded-[1.25rem] border border-border bg-muted/20 p-4">
+          <div className="grid gap-3 rounded-[1rem] border border-border bg-muted/20 p-3.5">
             <div>
               <p className="text-sm font-semibold text-card-foreground">Logo de marca</p>
               <p className="text-sm text-muted-foreground">Se usará en cabeceras y superficies públicas de la marca.</p>
@@ -183,14 +191,14 @@ export function AdminStorefrontSettings({
               <Input accept="image/png,image/jpeg,image/webp" onChange={handleLogoFileChange} type="file" />
             </label>
             <div>
-              <Button className="rounded-xl" disabled={isSaving || (!logoImageUrl && !selectedLogoFile)} onClick={clearLogoImage} type="button" variant="outline">
+              <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving || (!logoImageUrl && !selectedLogoFile)} onClick={clearLogoImage} type="button" variant="outline">
                 <Trash2 />
                 Quitar logo
               </Button>
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-[1.25rem] border border-border bg-muted/20 p-4">
+          <div className="grid gap-3 rounded-[1rem] border border-border bg-muted/20 p-3.5">
             <div>
               <p className="text-sm font-semibold text-card-foreground">Hero principal</p>
               <p className="text-sm text-muted-foreground">Esta imagen se guardará en Supabase Storage y se usará como portada general de la marca.</p>
@@ -200,33 +208,65 @@ export function AdminStorefrontSettings({
               <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
             </label>
             <div>
-              <Button className="rounded-xl" disabled={isSaving || (!heroImageUrl && !selectedHeroFile)} onClick={clearHeroImage} type="button" variant="outline">
+              <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving || (!heroImageUrl && !selectedHeroFile)} onClick={clearHeroImage} type="button" variant="outline">
                 <Trash2 />
                 Limpiar hero
               </Button>
             </div>
           </div>
 
-          {errorMessage ? <p className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
-          {successMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+          <div className="grid gap-3 rounded-[1rem] border border-border bg-muted/20 p-3.5">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Pago móvil</p>
+              <p className="text-sm text-muted-foreground">Escribe exactamente los datos que verá el cliente para pagar desde el checkout.</p>
+            </div>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-card-foreground">Instrucciones y datos</span>
+              <textarea
+                className="min-h-24 rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                onChange={(event) => setMobilePaymentInstructions(event.target.value)}
+                placeholder="Ej. Titular: Juan Perez\nBanco: Banco X\nTelefono: 0412...\nDocumento: V-..."
+                value={mobilePaymentInstructions}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 rounded-[1rem] border border-border bg-muted/20 p-3.5">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Transferencia bancaria</p>
+              <p className="text-sm text-muted-foreground">Incluye banco, titular, cuenta y cualquier instrucción necesaria para validar el pago.</p>
+            </div>
+            <label className="grid gap-2 text-sm">
+              <span className="font-medium text-card-foreground">Instrucciones y datos</span>
+              <textarea
+                className="min-h-24 rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                onChange={(event) => setBankTransferInstructions(event.target.value)}
+                placeholder="Ej. Banco: Banco Y\nTitular: Comercial ABC\nCuenta: 0102...\nRIF/Documento: J-..."
+                value={bankTransferInstructions}
+              />
+            </label>
+          </div>
+
+          {errorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+          {successMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button className="rounded-xl" disabled={isSaving} onClick={saveSettings} type="button">
+            <Button className="h-9 rounded-lg px-3.5 text-sm" disabled={isSaving} onClick={saveSettings} type="button">
               {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
-              Guardar storefront
+              Guardar configuración
             </Button>
           </div>
         </CardContent>
       </Card>
 
       <Card className="overflow-hidden">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>Preview hero</CardTitle>
           <CardDescription>Vista rápida del primer impacto visual que recibirá el cliente en el storefront público.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div
-            className="relative min-h-[22rem] overflow-hidden rounded-[1.75rem] border border-stone-950/10 bg-stone-950 bg-cover bg-center"
+            className="relative min-h-[20rem] overflow-hidden rounded-[1.25rem] border border-stone-950/10 bg-stone-950 bg-cover bg-center"
             style={{
               backgroundImage: heroPreviewUrl
                 ? `linear-gradient(90deg, rgba(28,25,23,0.88) 0%, rgba(28,25,23,0.58) 40%, rgba(28,25,23,0.18) 100%), url(${heroPreviewUrl})`
@@ -234,7 +274,7 @@ export function AdminStorefrontSettings({
             }}
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.22),_transparent_35%)]" />
-            <div className="relative flex min-h-[22rem] flex-col justify-between p-6 text-white">
+            <div className="relative flex min-h-[20rem] flex-col justify-between p-5 text-white">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-orange-200">
                 <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5">Public storefront</span>
                 <span className="rounded-full border border-white/15 bg-black/20 px-3 py-1.5">{storefrontEnabled ? "Activo" : "Oculto"}</span>
@@ -244,15 +284,15 @@ export function AdminStorefrontSettings({
                   <TenantBrandMark name={tenantName} logoImageUrl={logoPreviewUrl} size="md" className="border-white/15 bg-white" />
                   <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-200">{tenantName}</p>
                 </div>
-                <h3 className="max-w-xl text-4xl font-semibold tracking-tight">Hero comercial con imagen propia de la marca.</h3>
-                <p className="max-w-lg text-sm leading-7 text-stone-200">
+                <h3 className="max-w-xl text-3xl font-semibold tracking-tight">Hero comercial con imagen propia de la marca.</h3>
+                <p className="max-w-lg text-sm leading-6 text-stone-200">
                   Este bloque es el que posiciona visualmente la sucursal y prepara el contexto antes de mostrar el menú.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[1.25rem] border border-dashed border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-[1rem] border border-dashed border-border bg-muted/30 px-3.5 py-3 text-sm text-muted-foreground">
             <div className="flex items-start gap-3">
               <ImagePlus className="mt-0.5 size-4 text-orange-700" />
               <p>

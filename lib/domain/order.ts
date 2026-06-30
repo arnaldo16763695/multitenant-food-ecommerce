@@ -29,6 +29,21 @@ export type CheckoutCustomerInput = {
   readonly notes?: string
 }
 
+export type ManualPaymentMethod = "mobile_payment" | "bank_transfer"
+
+export function formatManualPaymentMethod(method: ManualPaymentMethod) {
+  if (method === "mobile_payment") {
+    return "Pago móvil"
+  }
+
+  return "Transferencia bancaria"
+}
+
+export type TenantManualPaymentSettings = {
+  readonly mobilePaymentInstructions: string | null
+  readonly bankTransferInstructions: string | null
+}
+
 export type CreateOrderInput = {
   readonly tenantSlug: string
   readonly branchId: string
@@ -62,6 +77,10 @@ export type AdminOrderSummary = {
   readonly branchName: string
   readonly status: string
   readonly paymentStatus: PaymentStatus
+  readonly paymentMethod: ManualPaymentMethod | null
+  readonly hasPaymentReceipt: boolean
+  readonly paymentReceiptImagePath?: string | null
+  readonly paymentReceiptSignedUrl?: string | null
   readonly channel: string
   readonly placedAt: string
   readonly totalAmount: number
@@ -117,7 +136,10 @@ export type CustomerOrderDetail = {
   readonly id: string
   readonly orderNumber: number
   readonly status: string
-  readonly fulfillmentType: "pickup" | "delivery"
+   readonly paymentStatus: PaymentStatus
+   readonly paymentMethod: ManualPaymentMethod | null
+   readonly paymentReceiptImageUrl: string | null
+   readonly fulfillmentType: "pickup" | "delivery"
   readonly totalAmount: number
   readonly subtotalAmount: number
   readonly placedAt: string
@@ -143,6 +165,8 @@ export type AdminOrderDetail = {
   readonly orderNumber: number
   readonly status: string
   readonly paymentStatus: PaymentStatus
+  readonly paymentMethod: ManualPaymentMethod | null
+  readonly paymentReceiptImageUrl: string | null
   readonly channel: string
   readonly fulfillmentType: "pickup" | "delivery"
   readonly customerName: string

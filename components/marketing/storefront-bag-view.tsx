@@ -286,7 +286,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <CardHeader>
               <CardTitle>Resumen</CardTitle>
-              <CardDescription>Base del siguiente paso: checkout, dirección y método de pago.</CardDescription>
+              <CardDescription>Siguiente paso: checkout para pickup y validación manual del negocio.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="rounded-[1.5rem] bg-stone-50/80 p-4">
@@ -298,6 +298,14 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                   <span className="text-stone-500">Subtotal</span>
                   <span className="font-semibold text-stone-950">{subtotal.label}</span>
                 </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-stone-500">Entrega</span>
+                  <span className="font-semibold text-stone-950">Pickup</span>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-stone-200 bg-white p-4 text-stone-600">
+                Al enviar tu pedido, el negocio lo revisará y lo confirmará antes de pasarlo a cocina.
               </div>
 
               <Button asChild className={`h-10 w-full rounded-full ${primaryStorefrontButtonClassName}`} disabled={items.length === 0 || !branchId}>

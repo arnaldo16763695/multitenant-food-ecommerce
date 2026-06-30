@@ -50,6 +50,8 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
   const storefrontEnabled = String(formData.get("storefrontEnabled") ?? "true") === "true"
   const heroImageUrl = String(formData.get("heroImageUrl") ?? "").trim()
   const logoImageUrl = String(formData.get("logoImageUrl") ?? "").trim()
+  const mobilePaymentInstructions = String(formData.get("mobilePaymentInstructions") ?? "").trim()
+  const bankTransferInstructions = String(formData.get("bankTransferInstructions") ?? "").trim()
 
   const updateResult = await supabase
     .from("tenants")
@@ -57,6 +59,8 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
       storefront_enabled: storefrontEnabled,
       hero_image_url: heroImageUrl || null,
       logo_image_url: logoImageUrl || null,
+      mobile_payment_instructions: mobilePaymentInstructions || null,
+      bank_transfer_instructions: bankTransferInstructions || null,
     })
     .eq("id", access.membership.tenantId)
     .select("id")

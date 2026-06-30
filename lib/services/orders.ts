@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, OrderStatus, PaymentStatus } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -54,6 +54,10 @@ type AdminOrderRow = {
   customer_name: string
   status: string
   payment_status: PaymentStatus
+  payments: {
+    payment_method: ManualPaymentMethod | null
+    receipt_image_path: string | null
+  }[] | null
   channel: string
   total_amount: number
   placed_at: string
@@ -120,6 +124,7 @@ type CustomerOrderDetailRow = {
   id: string
   order_number: number
   status: string
+  payment_status: PaymentStatus
   fulfillment_type: "pickup" | "delivery"
   total_amount: number
   subtotal_amount: number
@@ -141,8 +146,64 @@ type CustomerOrderDetailItemRow = {
   line_total: number
 }
 
+type PaymentReceiptRow = {
+  payment_method: ManualPaymentMethod | null
+  receipt_image_path: string | null
+}
+
+type TenantManualPaymentSettingsRow = {
+  mobile_payment_instructions: string | null
+  bank_transfer_instructions: string | null
+}
+
 function formatOrderItemProductName(productName: string, variantName?: string | null) {
   return variantName ? `${productName} · ${variantName}` : productName
+}
+
+export async function getTenantManualPaymentSettingsBySlug(
+  supabase: SupabaseClient,
+  tenantSlug: string
+): Promise<TenantManualPaymentSettings | null> {
+  const tenantResult = await supabase
+    .from("tenants")
+    .select("mobile_payment_instructions, bank_transfer_instructions")
+    .eq("slug", tenantSlug)
+    .limit(1)
+    .maybeSingle<TenantManualPaymentSettingsRow>()
+
+  if (tenantResult.error || !tenantResult.data) {
+    return null
+  }
+
+  return {
+    mobilePaymentInstructions: tenantResult.data.mobile_payment_instructions,
+    bankTransferInstructions: tenantResult.data.bank_transfer_instructions,
+  }
+}
+
+export async function attachManualPaymentReceipt(
+  supabase: SupabaseClient,
+  orderId: string,
+  input: {
+    readonly paymentMethod: ManualPaymentMethod
+    readonly receiptImagePath: string
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  const updateResult = await supabase
+    .from("payments")
+    .update({
+      provider: "manual",
+      payment_method: input.paymentMethod,
+      receipt_image_path: input.receiptImagePath,
+      receipt_submitted_at: new Date().toISOString(),
+    })
+    .eq("order_id", orderId)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  return { ok: true }
 }
 
 export async function createStorefrontOrder(supabase: SupabaseClient, input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -395,6 +456,10 @@ type AdminOrderDetailRow = {
   branches: {
     name: string
   } | null
+  payments: {
+    payment_method: ManualPaymentMethod | null
+    receipt_image_path: string | null
+  }[] | null
 }
 
 type AdminOrderDetailItemRow = {
@@ -412,7 +477,7 @@ type AdminOrderDetailItemRow = {
 export async function getAdminOrders(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminOrderSummary[]> {
   const ordersResult = await supabase
     .from("orders")
-    .select("id, order_number, customer_name, status, payment_status, channel, total_amount, placed_at, branches(name)")
+    .select("id, order_number, customer_name, status, payment_status, channel, total_amount, placed_at, branches(name), payments(payment_method, receipt_image_path)")
     .eq("tenant_id", tenantId)
     .order("placed_at", { ascending: false })
     .returns<AdminOrderRow[]>()
@@ -424,13 +489,16 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
   return (ordersResult.data ?? []).map((order) => ({
     id: order.id,
     orderNumber: order.order_number,
-    customerName: order.customer_name,
-    branchName: order.branches?.name ?? "Sucursal",
-    status: order.status,
-    paymentStatus: order.payment_status,
-    channel: order.channel,
-    placedAt: order.placed_at,
-    totalAmount: Number(order.total_amount),
+      customerName: order.customer_name,
+      branchName: order.branches?.name ?? "Sucursal",
+      status: order.status,
+      paymentStatus: order.payment_status,
+      paymentMethod: order.payments?.[0]?.payment_method ?? null,
+      hasPaymentReceipt: Boolean(order.payments?.[0]?.receipt_image_path),
+      paymentReceiptImagePath: order.payments?.[0]?.receipt_image_path ?? null,
+      channel: order.channel,
+      placedAt: order.placed_at,
+      totalAmount: Number(order.total_amount),
   }))
 }
 
@@ -716,6 +784,23 @@ export async function updateAdminOrderStatus(
     return { ok: false, error: `No se puede cambiar de ${currentStatus} a ${nextStatus}.` }
   }
 
+  if (currentStatus === "pending_payment" && nextStatus === "confirmed") {
+    const paymentResult = await supabase
+      .from("payments")
+      .select("payment_method, receipt_image_path")
+      .eq("order_id", orderId)
+      .limit(1)
+      .maybeSingle<PaymentReceiptRow>()
+
+    if (paymentResult.error || !paymentResult.data) {
+      return { ok: false, error: "La orden no tiene un registro de pago válido para ser confirmada." }
+    }
+
+    if (!paymentResult.data.payment_method || !paymentResult.data.receipt_image_path) {
+      return { ok: false, error: "Adjunta y valida el comprobante de pago antes de confirmar esta orden." }
+    }
+  }
+
   const updateResult = await supabase.rpc("update_order_status_atomic", {
     p_tenant_id: tenantId,
     p_order_id: orderId,
@@ -856,7 +941,7 @@ export async function getAdminOrderDetail(
 ): Promise<AdminOrderDetail | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name)")
+    .select("id, order_number, status, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
@@ -881,6 +966,8 @@ export async function getAdminOrderDetail(
     orderNumber: orderResult.data.order_number,
     status: orderResult.data.status,
     paymentStatus: orderResult.data.payment_status,
+    paymentMethod: orderResult.data.payments?.[0]?.payment_method ?? null,
+    paymentReceiptImageUrl: orderResult.data.payments?.[0]?.receipt_image_path ?? null,
     channel: orderResult.data.channel,
     fulfillmentType: orderResult.data.fulfillment_type,
     customerName: orderResult.data.customer_name,
@@ -917,7 +1004,7 @@ export async function getCustomerOrderDetail(
 
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
+    .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
     .eq("tenant_id", tenantResult.data.id)
     .eq("customer_id", customerId)
     .eq("id", orderId)
@@ -938,10 +1025,24 @@ export async function getCustomerOrderDetail(
     return null
   }
 
+  const paymentResult = await supabase
+    .from("payments")
+    .select("payment_method, receipt_image_path")
+    .eq("order_id", orderResult.data.id)
+    .limit(1)
+    .maybeSingle<PaymentReceiptRow>()
+
+  if (paymentResult.error) {
+    return null
+  }
+
   return {
     id: orderResult.data.id,
     orderNumber: orderResult.data.order_number,
     status: orderResult.data.status,
+    paymentStatus: orderResult.data.payment_status,
+    paymentMethod: paymentResult.data?.payment_method ?? null,
+    paymentReceiptImageUrl: paymentResult.data?.receipt_image_path ?? null,
     fulfillmentType: orderResult.data.fulfillment_type,
     totalAmount: Number(orderResult.data.total_amount),
     subtotalAmount: Number(orderResult.data.subtotal_amount),

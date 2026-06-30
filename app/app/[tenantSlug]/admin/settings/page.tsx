@@ -21,7 +21,7 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
 
   const tenantResult = await supabase
     .from("tenants")
-    .select("name, storefront_enabled, hero_image_url, logo_image_url")
+    .select("name, storefront_enabled, hero_image_url, logo_image_url, mobile_payment_instructions, bank_transfer_instructions")
     .eq("id", access.membership.tenantId)
     .limit(1)
     .maybeSingle<{
@@ -29,6 +29,8 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
       storefront_enabled: boolean
       hero_image_url: string | null
       logo_image_url: string | null
+      mobile_payment_instructions: string | null
+      bank_transfer_instructions: string | null
     }>()
 
   if (tenantResult.error || !tenantResult.data) {
@@ -39,7 +41,7 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
     <AdminPageShell
       eyebrow="Configuracion"
       title="Preferencias y governance del tenant"
-      description="Aqui deberian vivir branding del admin, ajustes del negocio, permisos, integraciones y reglas operativas globales del tenant."
+      description="Aquí viven el branding público, los datos de cobro manual, permisos, integraciones y reglas operativas globales del tenant."
     >
       <AdminStorefrontSettings
         tenantSlug={tenantSlug}
@@ -47,6 +49,8 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
         initialStorefrontEnabled={tenantResult.data.storefront_enabled}
         initialHeroImageUrl={tenantResult.data.hero_image_url}
         initialLogoImageUrl={tenantResult.data.logo_image_url}
+        initialMobilePaymentInstructions={tenantResult.data.mobile_payment_instructions}
+        initialBankTransferInstructions={tenantResult.data.bank_transfer_instructions}
       />
 
       <section className="grid gap-4 lg:grid-cols-2">

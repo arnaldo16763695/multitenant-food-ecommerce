@@ -1,7 +1,12 @@
 const CATALOG_MEDIA_BUCKET = "catalog-media"
+const PAYMENT_PROOFS_BUCKET = "payment-proofs"
 
 export function getCatalogMediaBucket() {
   return CATALOG_MEDIA_BUCKET
+}
+
+export function getPaymentProofsBucket() {
+  return PAYMENT_PROOFS_BUCKET
 }
 
 export function buildCategoryImagePath(tenantId: string, categoryId: string, fileName: string) {
@@ -26,6 +31,10 @@ export function buildTenantLogoImagePath(tenantId: string, fileName: string) {
 
 export function buildBranchHeroImagePath(tenantId: string, branchId: string, fileName: string) {
   return `tenants/${tenantId}/branches/${branchId}/hero/${fileName}`
+}
+
+export function buildPaymentProofImagePath(tenantId: string, orderId: string, fileName: string) {
+  return `tenants/${tenantId}/orders/${orderId}/payment-proof/${fileName}`
 }
 
 export function getFileExtension(fileName: string) {

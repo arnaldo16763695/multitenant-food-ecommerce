@@ -4,6 +4,7 @@ import { StorefrontCheckoutView } from "@/components/marketing/storefront-checko
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getPublicStorefrontBySlug } from "@/lib/data/public-storefront"
 import { getCustomerBagItems } from "@/lib/services/customer-bag"
+import { getTenantManualPaymentSettingsBySlug } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 type StorefrontCheckoutPageProps = {
@@ -28,6 +29,7 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
   const storefront = await getPublicStorefrontBySlug(tenantSlug, requestedBranchId)
   const supabase = createSupabaseAdminClient()
   const initialBagItems = storefront?.activeBranch?.id && supabase ? await getCustomerBagItems(supabase, tenantSlug, storefront.activeBranch.id, customerContext.customer.id) : []
+  const paymentSettings = supabase ? await getTenantManualPaymentSettingsBySlug(supabase, tenantSlug) : null
 
   return (
     <StorefrontCheckoutView
@@ -40,6 +42,7 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
         email: customerContext?.customer.email,
         phone: customerContext?.customer.phone,
       }}
+      manualPaymentSettings={paymentSettings}
       initialBagItems={initialBagItems}
     />
   )
