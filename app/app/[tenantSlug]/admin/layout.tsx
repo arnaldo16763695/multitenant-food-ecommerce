@@ -19,6 +19,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
   const cookieStore = await cookies()
   const { tenantSlug } = await params
   const initialTheme = cookieStore.get("admin-theme")?.value === "dark" ? "dark" : "light"
+  const initialSidebarOpen = cookieStore.get("sidebar_state")?.value === "true"
   const access = await requireAdminAccess(tenantSlug)
 
   if (!access.membership) {
@@ -27,7 +28,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
 
   return (
     <AdminThemeProvider initialTheme={initialTheme as AdminTheme}>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={initialSidebarOpen}>
         <AppSidebar
           tenantSlug={tenantSlug}
           role={access.membership.role}

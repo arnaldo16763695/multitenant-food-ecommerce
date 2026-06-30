@@ -234,17 +234,19 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   return (
     <>
       <div className="mb-4 grid gap-3">
-        <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5">
-            <div>
+        <div className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-card-foreground">Cola operativa</p>
-              <p className="mt-1 text-sm text-muted-foreground">Prioriza rechazos, pagos pendientes con comprobante y órdenes listas para confirmar.</p>
+              <p className="truncate text-xs text-muted-foreground">Prioriza rechazos, pagos pendientes con comprobante y órdenes listas para confirmar.</p>
             </div>
-            <div className="relative max-w-md">
+            <div className="relative w-full xl:max-w-sm xl:min-w-[20rem]">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-9" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Buscar pedido, cliente o sucursal" value={searchQuery} />
             </div>
-            <div className="flex flex-wrap gap-2">
+          </div>
+
+          <div className="flex flex-wrap gap-2 xl:flex-nowrap xl:overflow-x-auto">
               <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("all")} type="button" variant={queueFilter === "all" ? "default" : "outline"}>
                 Todas
               </Button>
@@ -260,10 +262,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <Button className="h-7 rounded-full px-3 text-xs" onClick={() => setQueueFilter("confirmed")} type="button" variant={queueFilter === "confirmed" ? "default" : "outline"}>
                 Confirmados
               </Button>
-            </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
             <div className="rounded-[1rem] border border-border bg-card p-3.5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Pendientes</p>
               <p className="mt-1 text-2xl font-semibold text-card-foreground">{summary.pending}</p>
@@ -283,7 +284,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 rounded-[1rem] border border-border bg-card p-3.5 md:grid-cols-2 xl:grid-cols-4">
           <label className="grid gap-2 text-sm">
             <span className="font-medium text-card-foreground">Estado de pago</span>
             <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" onChange={(event) => setPaymentFilter(event.target.value as PaymentStatus | "all")} value={paymentFilter}>
