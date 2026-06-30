@@ -365,24 +365,47 @@ async function syncProductVariants(
     return { ok: false, error: resetDefaultsResult.error.message }
   }
 
-  const upsertResult = await supabase.from("product_variants").upsert(
-    normalizedVariants.map((variant) => ({
-      id: variant.id,
-      tenant_id: tenantId,
-      product_id: productId,
-      name: variant.name,
-      base_price: variant.basePrice,
-      is_default: variant.isDefault,
-      is_active: true,
-      sort_order: variant.sortOrder,
-    })),
-    {
-      onConflict: "id",
-    }
-  )
+  const existingVariants = normalizedVariants.filter((variant): variant is typeof variant & { id: string } => Boolean(variant.id))
+  const newVariants = normalizedVariants.filter((variant) => !variant.id)
 
-  if (upsertResult.error) {
-    return { ok: false, error: upsertResult.error.message }
+  if (existingVariants.length > 0) {
+    const upsertResult = await supabase.from("product_variants").upsert(
+      existingVariants.map((variant) => ({
+        id: variant.id,
+        tenant_id: tenantId,
+        product_id: productId,
+        name: variant.name,
+        base_price: variant.basePrice,
+        is_default: variant.isDefault,
+        is_active: true,
+        sort_order: variant.sortOrder,
+      })),
+      {
+        onConflict: "id",
+      }
+    )
+
+    if (upsertResult.error) {
+      return { ok: false, error: upsertResult.error.message }
+    }
+  }
+
+  if (newVariants.length > 0) {
+    const insertResult = await supabase.from("product_variants").insert(
+      newVariants.map((variant) => ({
+        tenant_id: tenantId,
+        product_id: productId,
+        name: variant.name,
+        base_price: variant.basePrice,
+        is_default: variant.isDefault,
+        is_active: true,
+        sort_order: variant.sortOrder,
+      }))
+    )
+
+    if (insertResult.error) {
+      return { ok: false, error: insertResult.error.message }
+    }
   }
 
   return { ok: true }
