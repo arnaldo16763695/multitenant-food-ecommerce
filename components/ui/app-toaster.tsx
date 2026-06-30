@@ -29,7 +29,7 @@ export function AppToaster() {
   }, [dismissToast, toasts])
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 top-4 z-[100] flex flex-col items-end gap-3 sm:inset-x-auto sm:right-4 sm:left-auto sm:w-full sm:max-w-sm">
+    <div className="pointer-events-none fixed inset-x-4 top-24 z-[100] flex flex-col items-end gap-3 sm:inset-x-auto sm:top-28 sm:right-4 sm:left-auto sm:w-full sm:max-w-sm">
       {toasts.map((toast) => (
         <div
           key={toast.id}
