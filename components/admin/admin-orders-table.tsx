@@ -265,21 +265,21 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           </div>
 
           <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-            <div className="rounded-[1rem] border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3 rounded-[1rem] border border-border bg-card p-3.5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Pendientes</p>
-              <p className="mt-1 text-2xl font-semibold text-card-foreground">{summary.pending}</p>
+              <p className="text-2xl font-semibold text-card-foreground">{summary.pending}</p>
             </div>
-            <div className="rounded-[1rem] border border-amber-200 bg-amber-50/60 p-3.5">
+            <div className="flex items-center justify-between gap-3 rounded-[1rem] border border-amber-200 bg-amber-50/60 p-3.5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Rechazados</p>
-              <p className="mt-1 text-2xl font-semibold text-amber-900">{summary.rejected}</p>
+              <p className="text-2xl font-semibold text-amber-900">{summary.rejected}</p>
             </div>
-            <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/60 p-3.5">
+            <div className="flex items-center justify-between gap-3 rounded-[1rem] border border-emerald-200 bg-emerald-50/60 p-3.5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Listos para confirmar</p>
-              <p className="mt-1 text-2xl font-semibold text-emerald-900">{summary.readyToConfirm}</p>
+              <p className="text-2xl font-semibold text-emerald-900">{summary.readyToConfirm}</p>
             </div>
-            <div className="rounded-[1rem] border border-border bg-card p-3.5">
+            <div className="flex items-center justify-between gap-3 rounded-[1rem] border border-border bg-card p-3.5">
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">En cocina</p>
-              <p className="mt-1 text-2xl font-semibold text-card-foreground">{summary.inKitchen}</p>
+              <p className="text-2xl font-semibold text-card-foreground">{summary.inKitchen}</p>
             </div>
           </div>
         </div>
