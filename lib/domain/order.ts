@@ -136,10 +136,11 @@ export type CustomerOrderDetail = {
   readonly id: string
   readonly orderNumber: number
   readonly status: string
-   readonly paymentStatus: PaymentStatus
-   readonly paymentMethod: ManualPaymentMethod | null
-   readonly paymentReceiptImageUrl: string | null
-   readonly fulfillmentType: "pickup" | "delivery"
+  readonly paymentStatus: PaymentStatus
+  readonly paymentMethod: ManualPaymentMethod | null
+  readonly paymentReceiptImageUrl: string | null
+  readonly paymentRejectionReason: string | null
+  readonly fulfillmentType: "pickup" | "delivery"
   readonly totalAmount: number
   readonly subtotalAmount: number
   readonly placedAt: string
@@ -167,6 +168,7 @@ export type AdminOrderDetail = {
   readonly paymentStatus: PaymentStatus
   readonly paymentMethod: ManualPaymentMethod | null
   readonly paymentReceiptImageUrl: string | null
+  readonly paymentRejectionReason: string | null
   readonly channel: string
   readonly fulfillmentType: "pickup" | "delivery"
   readonly customerName: string

@@ -74,7 +74,7 @@ function formatOrderStatusOption(status: OrderStatus, currentStatus: string) {
 function getNextPaymentStatuses(status: PaymentStatus): readonly PaymentStatus[] {
   switch (status) {
     case "pending":
-      return ["paid", "failed"]
+      return ["paid"]
     case "paid":
       return ["refunded"]
     case "failed":

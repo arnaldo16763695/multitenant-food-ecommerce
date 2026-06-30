@@ -2,6 +2,7 @@ import Image from "next/image"
 import Link from "next/link"
 
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
+import { AdminOrderPaymentReview } from "@/components/admin/admin-order-payment-review"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus } from "@/lib/domain/order"
 import { getAdminOrderDetail } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -107,6 +108,19 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
               <div className="rounded-[1rem] border border-stone-200 bg-stone-50/80 p-3.5 text-sm leading-6 text-stone-600">
                 En este MVP, la confirmación de la orden también valida manualmente el pago. Una vez confirmada, la orden puede avanzar al flujo de cocina.
               </div>
+
+              {order.paymentRejectionReason ? (
+                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/70 p-3.5 text-sm leading-6 text-amber-900">
+                  Último rechazo registrado: {order.paymentRejectionReason}
+                </div>
+              ) : null}
+
+              <AdminOrderPaymentReview
+                tenantSlug={tenantSlug}
+                orderId={orderId}
+                paymentStatus={order.paymentStatus}
+                existingReason={order.paymentRejectionReason}
+              />
 
               {paymentReceiptUrl ? (
                 <div className="rounded-[1rem] border border-border p-3.5">

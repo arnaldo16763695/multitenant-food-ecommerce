@@ -149,19 +149,19 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
               <div className="min-w-0">
                 <p className="mt-2 line-clamp-3 text-sm leading-7 text-stone-600">{item.description}</p>
               </div>
-              <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
-                <p className="min-w-0 flex-1 break-words text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
+              <div className="mt-6 flex flex-col gap-3">
+                <p className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
                 {customerSession ? (
                   <Button
                     size="lg"
-                    className="shrink-0 rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
+                    className="w-full rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
                     onClick={() => setSheetProductId(item.id)}
                   >
                     <ShoppingBag />
                     Agregar
                   </Button>
                 ) : (
-                  <Button asChild size="lg" className="shrink-0 rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
+                  <Button asChild size="lg" className="w-full rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
                     <Link href={loginHref}>
                       <ShoppingBag />
                       Agregar

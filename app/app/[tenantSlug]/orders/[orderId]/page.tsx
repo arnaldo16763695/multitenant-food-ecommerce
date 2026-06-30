@@ -2,10 +2,11 @@ import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { OrderPaymentProofResubmission } from "@/components/marketing/order-payment-proof-resubmission"
 import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { formatManualPaymentMethod, formatOrderStatus } from "@/lib/domain/order"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
-import { getCustomerOrderDetail } from "@/lib/services/orders"
+import { getCustomerOrderDetail, getTenantManualPaymentSettingsBySlug } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getPaymentProofsBucket } from "@/lib/supabase/storage"
 
@@ -35,6 +36,14 @@ function getCustomerOrderStatusMessage(status: string) {
   }
 }
 
+function getCustomerPaymentStatusMessage(paymentStatus: string) {
+  if (paymentStatus === "failed") {
+    return "Tu comprobante fue rechazado. Revisa el motivo y vuelve a subirlo para que el negocio pueda validar tu pedido." 
+  }
+
+  return null
+}
+
 export default async function StorefrontOrderPage({ params }: StorefrontOrderPageProps) {
   const { tenantSlug, orderId } = await params
   const customerContext = await getCustomerAccountContext()
@@ -47,6 +56,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
   const order = adminClient
     ? await getCustomerOrderDetail(adminClient, tenantSlug, customerContext.customer.id, orderId)
     : null
+  const paymentSettings = adminClient ? await getTenantManualPaymentSettingsBySlug(adminClient, tenantSlug) : null
   const paymentReceiptUrl =
     order?.paymentReceiptImageUrl && adminClient
       ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.paymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
@@ -64,6 +74,12 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
               {getCustomerOrderStatusMessage(order.status)}
             </div>
 
+            {getCustomerPaymentStatusMessage(order.paymentStatus) ? (
+              <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50/70 p-5 text-sm leading-7 text-amber-900">
+                {getCustomerPaymentStatusMessage(order.paymentStatus)}
+              </div>
+            ) : null}
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-[1.5rem] bg-stone-50 p-5 text-sm text-stone-600">
                 <p>Orden: <span className="font-semibold text-stone-950">#{order.orderNumber}</span></p>
@@ -72,6 +88,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
                 <p className="mt-2">Pago: <span className="font-semibold text-stone-950">{order.paymentMethod ? formatManualPaymentMethod(order.paymentMethod) : "Manual"}</span></p>
                 <p className="mt-2">Entrega: <span className="font-semibold text-stone-950">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</span></p>
                 <p className="mt-2">Total: <span className="font-semibold text-stone-950">$ {order.totalAmount.toFixed(2)}</span></p>
+                {order.paymentRejectionReason ? <p className="mt-2">Motivo del rechazo: <span className="font-semibold text-stone-950">{order.paymentRejectionReason}</span></p> : null}
               </div>
               <div className="rounded-[1.5rem] bg-stone-50 p-5 text-sm leading-7 text-stone-600">
                 Este MVP opera con <span className="font-semibold text-stone-950">validación manual del negocio</span>. Después de confirmar tu pedido, el equipo lo moverá al flujo de cocina y aquí verás el avance actualizado.
@@ -107,6 +124,15 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
                   width={1280}
                 />
               </div>
+            ) : null}
+
+            {order.paymentStatus === "failed" ? (
+              <OrderPaymentProofResubmission
+                tenantSlug={tenantSlug}
+                orderId={orderId}
+                currentPaymentMethod={order.paymentMethod}
+                manualPaymentSettings={paymentSettings}
+              />
             ) : null}
           </div>
         ) : (
