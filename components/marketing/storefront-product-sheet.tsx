@@ -55,6 +55,23 @@ function parsePriceLabel(value: string) {
   return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
 }
 
+function isExclusionGroup(groupName: string) {
+  const normalizedName = groupName.trim().toLowerCase()
+  return normalizedName.includes("exclusion") || normalizedName.includes("exclusión")
+}
+
+function formatModifierGroupTitle(groupName: string) {
+  if (!isExclusionGroup(groupName)) {
+    return groupName
+  }
+
+  return "Quitar ingredientes"
+}
+
+function formatExclusionAction(optionName: string) {
+  return `Sin ${optionName.toLowerCase()}`
+}
+
 export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar" }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
@@ -251,7 +268,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
                       key={variant.id}
                       type="button"
                       onClick={() => setSelectedVariantId(variant.id)}
-                      className={`flex items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition ${
+                      className={`flex cursor-pointer items-center justify-between rounded-[1rem] border px-4 py-3 text-left transition ${
                         isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
                       }`}
                     >
@@ -290,27 +307,42 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               {product.modifierGroups.map((group) => (
                 <div key={group.id} className="space-y-2 rounded-[1rem] border border-stone-200 bg-white p-3">
                   <div>
-                    <p className="text-sm font-semibold text-stone-950">{group.name}</p>
+                    <p className="text-sm font-semibold text-stone-950">{formatModifierGroupTitle(group.name)}</p>
                     <p className="mt-1 text-xs text-stone-500">
-                      {group.selectionType === "single" ? "Elige una opcion" : `Elige entre ${group.minSelect} y ${group.maxSelect} opciones`}
+                      {isExclusionGroup(group.name)
+                        ? `Marca lo que quieres quitar${group.maxSelect > 0 ? `, hasta ${group.maxSelect} opciones` : ""}.`
+                        : group.selectionType === "single"
+                          ? "Elige una opcion"
+                          : `Elige entre ${group.minSelect} y ${group.maxSelect} opciones`}
                     </p>
                   </div>
 
                   <div className="grid gap-2">
                     {group.options.map((option) => {
                       const isSelected = (selectedOptionsByGroup[group.id] ?? []).includes(option.id)
+                      const exclusionGroup = isExclusionGroup(group.name)
 
                       return (
                         <button
                           key={option.id}
                           type="button"
                           onClick={() => handleOptionToggle(group.id, option.id, group.selectionType)}
-                          className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
+                          className={`flex cursor-pointer items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
                             isSelected ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
                           }`}
                         >
                           <span>{option.name}</span>
-                          <span className="font-semibold">{option.priceDelta > 0 ? `+ ${option.priceDeltaLabel}` : "Incluido"}</span>
+                          <span className="font-semibold">
+                            {exclusionGroup
+                              ? isSelected
+                                ? formatExclusionAction(option.name)
+                                : "Dejar"
+                              : option.priceDelta > 0
+                                ? `+ ${option.priceDeltaLabel}`
+                                : isSelected
+                                  ? "Seleccionado"
+                                  : "Incluido"}
+                          </span>
                         </button>
                       )
                     })}
