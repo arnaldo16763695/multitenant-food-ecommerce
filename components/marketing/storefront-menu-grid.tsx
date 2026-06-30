@@ -125,7 +125,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
         {visibleItems.map((item) => (
           <article
             key={item.id}
-            className="group rounded-[1.9rem] border border-stone-200 bg-white p-6 shadow-[0_18px_50px_rgba(28,25,23,0.06)] transition hover:-translate-y-1.5 hover:shadow-[0_28px_70px_rgba(28,25,23,0.12)]"
+            className="group flex h-full flex-col rounded-[1.9rem] border border-stone-200 bg-white p-6 shadow-[0_18px_50px_rgba(28,25,23,0.06)] transition hover:-translate-y-1.5 hover:shadow-[0_28px_70px_rgba(28,25,23,0.12)]"
           >
             <div className="mb-5 flex aspect-[5/4] items-center justify-center overflow-hidden rounded-[1.5rem] border border-stone-200 bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.18),_transparent_38%),linear-gradient(180deg,_#f5f5f4_0%,_#fafaf9_100%)] p-4">
               {item.imageUrl ? (
@@ -139,32 +139,36 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                 />
               ) : null}
             </div>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-1 flex-col">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 break-words text-xl font-semibold tracking-tight text-stone-950">{item.name}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-orange-100 px-3.5 py-1.5 text-sm font-semibold text-orange-700">{item.hasVariants ? `Desde ${item.basePrice}` : item.basePrice}</span>
+              </div>
               <div className="min-w-0">
-                <p className="text-xl font-semibold tracking-tight text-stone-950">{item.name}</p>
                 <p className="mt-2 line-clamp-3 text-sm leading-7 text-stone-600">{item.description}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-orange-100 px-3.5 py-1.5 text-sm font-semibold text-orange-700">{item.hasVariants ? `Desde ${item.basePrice}` : item.basePrice}</span>
-            </div>
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
-              {customerSession ? (
-                <Button
-                  size="lg"
-                  className="rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
-                  onClick={() => setSheetProductId(item.id)}
-                >
-                  <ShoppingBag />
-                  Agregar
-                </Button>
-              ) : (
-                <Button asChild size="lg" className="rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
-                  <Link href={loginHref}>
+              <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
+                <p className="min-w-0 flex-1 break-words text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
+                {customerSession ? (
+                  <Button
+                    size="lg"
+                    className="shrink-0 rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
+                    onClick={() => setSheetProductId(item.id)}
+                  >
                     <ShoppingBag />
                     Agregar
-                  </Link>
-                </Button>
-              )}
+                  </Button>
+                ) : (
+                  <Button asChild size="lg" className="shrink-0 rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
+                    <Link href={loginHref}>
+                      <ShoppingBag />
+                      Agregar
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </div>
           </article>
         ))}
