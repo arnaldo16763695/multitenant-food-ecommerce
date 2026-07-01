@@ -8,6 +8,7 @@ import {
   assignKitchenOrder,
   canKitchenMarkOrderReady,
   ensureKitchenAssignmentAccess,
+  releaseKitchenOrder,
   updateAdminOrderStatus,
   updateKitchenOrderItemPrepStatus,
 } from "@/lib/services/orders"
@@ -78,6 +79,31 @@ export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId
     revalidatePath(`/app/${tenantSlug}/admin/orders`)
     revalidatePath(`/app/${tenantSlug}/account/orders`)
     revalidatePath(`/app/${tenantSlug}/orders/${orderId}`)
+  }
+
+  return result
+}
+
+export async function releaseKitchenOrderAction(tenantSlug: string, orderId: string) {
+  const access = await requireKitchenAccess(tenantSlug)
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
+
+  if (!supabase) {
+    throw new Error("Supabase client is not configured.")
+  }
+
+  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const result = await releaseKitchenOrder(
+    supabase,
+    access.membership.tenantId,
+    orderId,
+    access.membership.id,
+    branchIds
+  )
+
+  if (result.ok) {
+    revalidatePath(`/app/${tenantSlug}/kitchen`)
+    revalidatePath(`/app/${tenantSlug}/admin/orders`)
   }
 
   return result

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import type { OrderStatus, PaymentStatus } from "@/lib/domain/order"
-import { rejectManualPayment, updateAdminOrderPaymentStatus, updateAdminOrderStatus } from "@/lib/services/orders"
+import { releaseAdminOrderAssignment, rejectManualPayment, updateAdminOrderPaymentStatus, updateAdminOrderStatus } from "@/lib/services/orders"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function updateAdminOrderStatusAction(tenantSlug: string, orderId: string, nextStatus: OrderStatus) {
@@ -41,6 +41,27 @@ export async function updateAdminOrderPaymentStatusAction(tenantSlug: string, or
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/admin/orders`)
     revalidatePath(`/app/${tenantSlug}/admin/orders/${orderId}`)
+    revalidatePath(`/app/${tenantSlug}/account/orders`)
+    revalidatePath(`/app/${tenantSlug}/orders/${orderId}`)
+  }
+
+  return result
+}
+
+export async function releaseAdminOrderAssignmentAction(tenantSlug: string, orderId: string) {
+  const access = await requireAdminAccess(tenantSlug)
+  const supabase = await createSupabaseServerClient()
+
+  if (!supabase) {
+    throw new Error("Supabase environment variables are missing.")
+  }
+
+  const result = await releaseAdminOrderAssignment(supabase, access.membership.tenantId, orderId)
+
+  if (result.ok) {
+    revalidatePath(`/app/${tenantSlug}/admin/orders`)
+    revalidatePath(`/app/${tenantSlug}/admin/orders/${orderId}`)
+    revalidatePath(`/app/${tenantSlug}/kitchen`)
     revalidatePath(`/app/${tenantSlug}/account/orders`)
     revalidatePath(`/app/${tenantSlug}/orders/${orderId}`)
   }

@@ -3,10 +3,14 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { CheckCircle2, Eye, Search } from "lucide-react"
+import { CheckCircle2, Eye, Search, Undo2 } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { updateAdminOrderPaymentStatusAction, updateAdminOrderStatusAction } from "@/app/app/[tenantSlug]/admin/orders/actions"
+import {
+  releaseAdminOrderAssignmentAction,
+  updateAdminOrderPaymentStatusAction,
+  updateAdminOrderStatusAction,
+} from "@/app/app/[tenantSlug]/admin/orders/actions"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus, type AdminOrderSummary, type OrderStatus, type PaymentStatus } from "@/lib/domain/order"
 
 import { Button } from "@/components/ui/button"
@@ -117,6 +121,18 @@ function getSelectablePaymentStatuses(status: PaymentStatus) {
 
 function canEditPaymentStatus(order: AdminOrderSummary) {
   return order.status !== "pending_payment"
+}
+
+function getOrderAssignmentLabel(order: AdminOrderSummary) {
+  if (order.assignedStaffName) {
+    return `Tomada por ${order.assignedStaffName}`
+  }
+
+  if (order.status === "in_preparation" || order.status === "ready") {
+    return "Movida desde admin, pendiente de tomar"
+  }
+
+  return "Sin asignar"
 }
 
 function parseQueueFilter(value: string | null): OrderQueueFilter {
@@ -329,6 +345,21 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     handleStatusChange(orderId, "confirmed")
   }
 
+  function handleReleaseAssignment(orderId: string) {
+    setErrorMessage("")
+
+    startTransition(async () => {
+      const result = await releaseAdminOrderAssignmentAction(tenantSlug, orderId)
+
+      if (!result.ok) {
+        setErrorMessage(result.error ?? "No pudimos liberar la asignación.")
+        return
+      }
+
+      router.refresh()
+    })
+  }
+
   return (
     <>
       <div className="mb-4 grid gap-3">
@@ -436,6 +467,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead className="h-10 px-3 text-xs">Pago</TableHead>
               <TableHead className="h-10 px-3 text-xs">Comprobante</TableHead>
               <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
+              <TableHead className="h-10 px-3 text-xs">Asignación</TableHead>
               <TableHead className="h-10 px-3 text-xs">Canal</TableHead>
               <TableHead className="h-10 px-3 text-xs">Fecha</TableHead>
               <TableHead className="h-10 px-3 text-right text-xs">Total</TableHead>
@@ -518,6 +550,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                       ))}
                     </select>
                   </TableCell>
+                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">{getOrderAssignmentLabel(order)}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">{formatOrderChannel(order.channel)}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">
                     <LocalizedDateTime value={order.placedAt} />
@@ -529,6 +562,12 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                         <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleQuickConfirm(order.id)} type="button">
                           <CheckCircle2 />
                           Confirmar
+                        </Button>
+                      ) : null}
+                      {order.assignedMembershipId ? (
+                        <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleReleaseAssignment(order.id)} type="button" variant="outline">
+                          <Undo2 />
+                          Liberar
                         </Button>
                       ) : null}
                       <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">

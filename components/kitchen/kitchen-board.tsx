@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { ChefHat, Clock3, Hand, PackageCheck, PartyPopper, Search, TimerReset } from "lucide-react"
+import { ChefHat, Clock3, Hand, PackageCheck, PartyPopper, Search, TimerReset, Undo2 } from "lucide-react"
 
 import {
   assignKitchenOrderAction,
+  releaseKitchenOrderAction,
   updateKitchenOrderItemPrepStatusAction,
   updateKitchenOrderStatusAction,
 } from "@/app/app/[tenantSlug]/kitchen/actions"
@@ -22,6 +23,7 @@ type KitchenBoardProps = {
   readonly tenantSlug: string
   readonly orders: readonly KitchenOrderSummary[]
   readonly currentMembershipId: string
+  readonly currentStaffName: string
   readonly activeBranchName: string
 }
 
@@ -98,7 +100,7 @@ function formatOrderAmount(value: number) {
   return normalizedValue.toFixed(2)
 }
 
-export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBranchName }: KitchenBoardProps) {
+export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentStaffName, activeBranchName }: KitchenBoardProps) {
   const [errorMessage, setErrorMessage] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
@@ -143,11 +145,11 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
     const previousOrders = optimisticOrders
     setPendingOrderIds((current) => [...current, orderId])
     setOptimisticOrders((current) =>
-      updateOrderInCollection(current, orderId, (order) => ({
-        ...order,
-        assignedMembershipId: currentMembershipId,
-        assignedStaffName: "Tu sesion",
-      }))
+        updateOrderInCollection(current, orderId, (order) => ({
+          ...order,
+          assignedMembershipId: currentMembershipId,
+          assignedStaffName: currentStaffName,
+        }))
     )
 
     const result = await assignKitchenOrderAction(tenantSlug, orderId)
@@ -158,6 +160,42 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
       setOptimisticOrders(previousOrders)
       setErrorMessage(result.error ?? "No pudimos tomar la orden.")
     }
+  }
+
+  async function handleReleaseOrder(orderId: string) {
+    setErrorMessage("")
+
+    const previousOrders = optimisticOrders
+    setPendingOrderIds((current) => [...current, orderId])
+    setOptimisticOrders((current) =>
+      updateOrderInCollection(current, orderId, (order) => ({
+        ...order,
+        assignedMembershipId: null,
+        assignedStaffName: null,
+      }))
+    )
+
+    const result = await releaseKitchenOrderAction(tenantSlug, orderId)
+
+    setPendingOrderIds((current) => current.filter((id) => id !== orderId))
+
+    if (!result.ok) {
+      setOptimisticOrders(previousOrders)
+      setErrorMessage(result.error ?? "No pudimos soltar la orden.")
+    }
+  }
+
+  function getAssignedLabel(order: KitchenOrderSummary) {
+    if (order.assignedStaffName) {
+      return `Tomada por ${order.assignedStaffName}`
+    }
+
+    // Unassigned orders already in kitchen states were likely advanced from admin.
+    if (order.status !== "confirmed") {
+      return "Movida desde admin, pendiente de tomar"
+    }
+
+    return "Sin asignar"
   }
 
   async function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
@@ -274,11 +312,8 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
                     const isAssignedToCurrentMember = order.assignedMembershipId === currentMembershipId
                     const canOperateOrder = isAssignedToCurrentMember
                     const needsAssignment = !order.assignedMembershipId
-                    const assignedLabel = order.assignedStaffName
-                      ? isAssignedToCurrentMember
-                        ? "Tomada por ti"
-                        : `Tomada por ${order.assignedStaffName}`
-                      : "Sin asignar"
+                    const assignedLabel = getAssignedLabel(order)
+                    const canReleaseOrder = isAssignedToCurrentMember && order.status !== "completed"
 
                     return (
                       <article key={order.id} className="rounded-[1.35rem] border border-border bg-secondary/35 p-4 transition-opacity data-[pending=true]:opacity-80" data-pending={isOrderPending}>
@@ -320,6 +355,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
                                   <div className="rounded-[1.25rem] bg-secondary/40 p-4 text-muted-foreground">
                                     <p>Cliente: <span className="font-semibold text-card-foreground">{selectedOrder.customerName}</span></p>
                                     <p className="mt-2">Sucursal: <span className="font-semibold text-card-foreground">{selectedOrder.branchName}</span></p>
+                                    <p className="mt-2">Asignación: <span className="font-semibold text-card-foreground">{getAssignedLabel(selectedOrder)}</span></p>
                                     <p className="mt-2">Notas: <span className="font-semibold text-card-foreground">{selectedOrder.notes || "Sin notas"}</span></p>
                                   </div>
 
@@ -390,6 +426,13 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
                           </Button>
                         ) : null}
 
+                        {order.status !== "confirmed" && order.status !== "completed" && needsAssignment ? (
+                          <Button className="mt-4 w-full rounded-xl" disabled={isOrderPending} onClick={() => handleAssignOrder(order.id)}>
+                            <Hand />
+                            {isOrderPending ? "Tomando orden..." : "Tomar desde kitchen"}
+                          </Button>
+                        ) : null}
+
                         {nextStatus && nextLabel ? (
                           <Button
                             className="mt-4 w-full rounded-xl"
@@ -401,9 +444,22 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, activeBr
                           </Button>
                         ) : null}
 
+                        {canReleaseOrder ? (
+                          <Button className="mt-3 w-full rounded-xl" variant="outline" disabled={isOrderPending} onClick={() => handleReleaseOrder(order.id)}>
+                            <Undo2 />
+                            {isOrderPending ? "Soltando orden..." : "Soltar orden"}
+                          </Button>
+                        ) : null}
+
                         {!canOperateOrder && order.assignedStaffName ? (
                           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
                             Esta orden esta siendo trabajada por {order.assignedStaffName}.
+                          </p>
+                        ) : null}
+
+                        {!order.assignedStaffName && order.status !== "confirmed" && order.status !== "completed" ? (
+                          <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                            Admin movió esta orden y sigue sin preparador asignado. Tómala para continuarla desde kitchen.
                           </p>
                         ) : null}
                       </article>

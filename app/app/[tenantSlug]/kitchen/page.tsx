@@ -73,6 +73,7 @@ export default async function KitchenPage({ params, searchParams }: KitchenPageP
         tenantSlug={tenantSlug}
         orders={orders}
         currentMembershipId={access.membership.id}
+        currentStaffName={access.profile.fullName}
         activeBranchName={activeBranch?.name ?? "Sin sucursal activa"}
       />
     </AdminPageShell>

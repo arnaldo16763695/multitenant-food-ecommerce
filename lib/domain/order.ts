@@ -76,6 +76,8 @@ export type AdminOrderSummary = {
   readonly customerName: string
   readonly branchName: string
   readonly status: string
+  readonly assignedMembershipId: string | null
+  readonly assignedStaffName: string | null
   readonly paymentStatus: PaymentStatus
   readonly paymentMethod: ManualPaymentMethod | null
   readonly hasPaymentReceipt: boolean
