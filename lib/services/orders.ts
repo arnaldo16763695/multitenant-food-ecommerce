@@ -593,6 +593,7 @@ type AdminOrderDetailRow = {
   id: string
   order_number: number
   status: string
+  assigned_tenant_membership_id: string | null
   payment_status: PaymentStatus
   channel: string
   fulfillment_type: "pickup" | "delivery"
@@ -1335,7 +1336,7 @@ export async function getAdminOrderDetail(
 ): Promise<AdminOrderDetail | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
+    .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
@@ -1355,10 +1356,21 @@ export async function getAdminOrderDetail(
     return null
   }
 
+  const assignedMembershipResult = orderResult.data.assigned_tenant_membership_id
+    ? await supabase
+        .from("tenant_memberships")
+        .select("id, profiles(full_name)")
+        .eq("id", orderResult.data.assigned_tenant_membership_id)
+        .limit(1)
+        .maybeSingle<AssignedMembershipRow>()
+    : { data: null, error: null }
+
   return {
     id: orderResult.data.id,
     orderNumber: orderResult.data.order_number,
     status: orderResult.data.status,
+    assignedMembershipId: orderResult.data.assigned_tenant_membership_id,
+    assignedStaffName: assignedMembershipResult.data?.profiles?.full_name?.trim() || null,
     paymentStatus: orderResult.data.payment_status,
     paymentMethod: orderResult.data.payments?.[0]?.payment_method ?? null,
     paymentReceiptImageUrl: orderResult.data.payments?.[0]?.receipt_image_path ?? null,

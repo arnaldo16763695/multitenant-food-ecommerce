@@ -38,6 +38,21 @@ function formatOrderChannel(channel: string) {
   return channel
 }
 
+function getOrderAssignmentLabel(order: {
+  assignedStaffName: string | null
+  status: string
+}) {
+  if (order.assignedStaffName) {
+    return `Tomada por ${order.assignedStaffName}`
+  }
+
+  if (order.status === "in_preparation" || order.status === "ready") {
+    return "Movida desde admin, pendiente de tomar"
+  }
+
+  return "Sin asignar"
+}
+
 type AdminOrderDetailPageProps = {
   readonly params: Promise<{
     tenantSlug: string
@@ -94,6 +109,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                   <p className="font-semibold text-card-foreground">Orden</p>
                   <p className="mt-1.5 text-muted-foreground">Sucursal: {order.branchName}</p>
                   <p className="mt-1 text-muted-foreground">Canal: {formatOrderChannel(order.channel)}</p>
+                  <p className="mt-1 text-muted-foreground">Asignación: {getOrderAssignmentLabel(order)}</p>
                   <p className="mt-1 text-muted-foreground">Método de pago: {order.paymentMethod ? formatManualPaymentMethod(order.paymentMethod) : "Manual"}</p>
                   <p className="mt-1 text-muted-foreground">Fecha: {new Date(order.placedAt).toLocaleString("es-MX")}</p>
                 </div>

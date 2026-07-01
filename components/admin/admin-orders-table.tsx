@@ -62,14 +62,6 @@ type AdminOrdersTableProps = {
   readonly orders: readonly AdminOrderSummary[]
 }
 
-function formatOrderChannel(channel: string) {
-  if (channel === "web") return "Web"
-  if (channel === "mobile") return "Mobile"
-  if (channel === "admin") return "Admin"
-
-  return channel
-}
-
 function getNextStatuses(status: string): readonly OrderStatus[] {
   switch (status) {
     case "pending_payment":
@@ -120,18 +112,6 @@ function getSelectablePaymentStatuses(status: PaymentStatus) {
 
 function canEditPaymentStatus(order: AdminOrderSummary) {
   return order.status !== "pending_payment"
-}
-
-function getOrderAssignmentLabel(order: AdminOrderSummary) {
-  if (order.assignedStaffName) {
-    return `Tomada por ${order.assignedStaffName}`
-  }
-
-  if (order.status === "in_preparation" || order.status === "ready") {
-    return "Movida desde admin, pendiente de tomar"
-  }
-
-  return "Sin asignar"
 }
 
 function parseQueueFilter(value: string | null): OrderQueueFilter {
@@ -303,7 +283,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           return true
         }
 
-        return [String(order.orderNumber), order.customerName, order.branchName, order.paymentMethod ?? "", order.channel]
+        return [String(order.orderNumber), order.customerName, order.branchName, order.paymentMethod ?? ""]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery)
@@ -451,8 +431,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead className="h-10 px-3 text-xs">Pago</TableHead>
               <TableHead className="h-10 px-3 text-xs">Comprobante</TableHead>
               <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
-              <TableHead className="h-10 px-3 text-xs">Asignación</TableHead>
-              <TableHead className="h-10 px-3 text-xs">Canal</TableHead>
               <TableHead className="h-10 px-3 text-xs">Fecha</TableHead>
               <TableHead className="h-10 px-3 text-right text-xs">Total</TableHead>
               <TableHead className="h-10 w-[160px] px-3 text-right text-xs">Acciones</TableHead>
@@ -534,8 +512,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                       ))}
                     </select>
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">{getOrderAssignmentLabel(order)}</TableCell>
-                  <TableCell className="px-3 py-2 text-muted-foreground">{formatOrderChannel(order.channel)}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">
                     <LocalizedDateTime value={order.placedAt} />
                   </TableCell>

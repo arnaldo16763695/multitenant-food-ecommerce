@@ -167,6 +167,8 @@ export type AdminOrderDetail = {
   readonly id: string
   readonly orderNumber: number
   readonly status: string
+  readonly assignedMembershipId: string | null
+  readonly assignedStaffName: string | null
   readonly paymentStatus: PaymentStatus
   readonly paymentMethod: ManualPaymentMethod | null
   readonly paymentReceiptImageUrl: string | null
