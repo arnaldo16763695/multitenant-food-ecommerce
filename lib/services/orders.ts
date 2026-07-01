@@ -129,6 +129,17 @@ type KitchenOrderItemRow = {
   prep_status: "pending" | "ready"
 }
 
+type KitchenOrderItemPreview = {
+  id: string
+  productName: string
+  quantity: number
+  prepStatus: "pending" | "ready"
+  modifiers: readonly {
+    modifierGroupName: string
+    modifierOptionName: string
+  }[]
+}
+
 type OrderItemModifierRow = {
   order_item_id: string
   modifier_group_name_snapshot: string
@@ -873,7 +884,7 @@ export async function getKitchenOrders(
     return map
   }, new Map())
 
-  const itemPreviewMap = orderItems.reduce<Map<string, { id: string; productName: string; quantity: number; prepStatus: "pending" | "ready" }[]>>((map, item) => {
+  const itemPreviewMap = orderItems.reduce<Map<string, KitchenOrderItemPreview[]>>((map, item) => {
     const currentItems = map.get(item.order_id) ?? []
     map.set(item.order_id, [
       ...currentItems,
