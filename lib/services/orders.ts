@@ -129,6 +129,12 @@ type KitchenOrderItemRow = {
   prep_status: "pending" | "ready"
 }
 
+type OrderItemModifierRow = {
+  order_item_id: string
+  modifier_group_name_snapshot: string
+  modifier_option_name_snapshot: string
+}
+
 type OrderItemCountRow = {
   order_id: string
   quantity: number
@@ -838,6 +844,29 @@ export async function getKitchenOrders(
     : { data: [], error: null }
 
   const orderItems = orderItemsResult.data ?? []
+  const orderItemIds = orderItems.map((item) => item.id)
+
+  const orderItemModifiersResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_modifiers")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .in("order_item_id", orderItemIds)
+        .returns<OrderItemModifierRow[]>()
+    : { data: [], error: null }
+
+  const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
+    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+  >((map, modifier) => {
+    const currentModifiers = map.get(modifier.order_item_id) ?? []
+    map.set(modifier.order_item_id, [
+      ...currentModifiers,
+      {
+        modifierGroupName: modifier.modifier_group_name_snapshot,
+        modifierOptionName: modifier.modifier_option_name_snapshot,
+      },
+    ])
+    return map
+  }, new Map())
 
   const itemCountMap = orderItems.reduce<Map<string, number>>((map, item) => {
     map.set(item.order_id, (map.get(item.order_id) ?? 0) + item.quantity)
@@ -846,7 +875,16 @@ export async function getKitchenOrders(
 
   const itemPreviewMap = orderItems.reduce<Map<string, { id: string; productName: string; quantity: number; prepStatus: "pending" | "ready" }[]>>((map, item) => {
     const currentItems = map.get(item.order_id) ?? []
-    map.set(item.order_id, [...currentItems, { id: item.id, productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot), quantity: item.quantity, prepStatus: item.prep_status }])
+    map.set(item.order_id, [
+      ...currentItems,
+      {
+        id: item.id,
+        productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot),
+        quantity: item.quantity,
+        prepStatus: item.prep_status,
+        modifiers: orderItemModifiersMap.get(item.id) ?? [],
+      },
+    ])
     return map
   }, new Map())
 

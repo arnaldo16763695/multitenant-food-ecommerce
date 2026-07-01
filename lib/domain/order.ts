@@ -203,5 +203,9 @@ export type KitchenOrderSummary = {
     productName: string
     quantity: number
     prepStatus: "pending" | "ready"
+    modifiers: readonly {
+      modifierGroupName: string
+      modifierOptionName: string
+    }[]
   }[]
 }

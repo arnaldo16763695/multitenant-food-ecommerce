@@ -3,11 +3,10 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { CheckCircle2, Eye, Search, Undo2 } from "lucide-react"
+import { CheckCircle2, Eye, Search } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
-  releaseAdminOrderAssignmentAction,
   updateAdminOrderPaymentStatusAction,
   updateAdminOrderStatusAction,
 } from "@/app/app/[tenantSlug]/admin/orders/actions"
@@ -345,21 +344,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     handleStatusChange(orderId, "confirmed")
   }
 
-  function handleReleaseAssignment(orderId: string) {
-    setErrorMessage("")
-
-    startTransition(async () => {
-      const result = await releaseAdminOrderAssignmentAction(tenantSlug, orderId)
-
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos liberar la asignación.")
-        return
-      }
-
-      router.refresh()
-    })
-  }
-
   return (
     <>
       <div className="mb-4 grid gap-3">
@@ -562,12 +546,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                         <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleQuickConfirm(order.id)} type="button">
                           <CheckCircle2 />
                           Confirmar
-                        </Button>
-                      ) : null}
-                      {order.assignedMembershipId ? (
-                        <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleReleaseAssignment(order.id)} type="button" variant="outline">
-                          <Undo2 />
-                          Liberar
                         </Button>
                       ) : null}
                       <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">

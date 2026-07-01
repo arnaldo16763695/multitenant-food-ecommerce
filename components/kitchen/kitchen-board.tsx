@@ -10,6 +10,7 @@ import {
   updateKitchenOrderStatusAction,
 } from "@/app/app/[tenantSlug]/kitchen/actions"
 import type { KitchenOrderSummary, OrderStatus } from "@/lib/domain/order"
+import { formatModifierSelectionLabel } from "@/lib/storefront/modifier-display"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -383,10 +384,22 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                                               onCheckedChange={(checked) => handleItemPrepStatusChange(selectedOrder.id, item.id, checked === true)}
                                             />
                                             <div className="flex flex-1 items-center justify-between gap-3">
-                                              <div>
-                                                <span className="text-card-foreground">{item.productName}</span>
-                                                {isItemPending ? <p className="mt-1 text-xs text-amber-700">Guardando cambio...</p> : null}
-                                              </div>
+                                               <div>
+                                                 <span className="text-card-foreground">{item.productName}</span>
+                                                 {item.modifiers.length > 0 ? (
+                                                   <div className="mt-1 flex flex-wrap gap-1.5">
+                                                     {item.modifiers.map((modifier) => (
+                                                       <span
+                                                         key={`${modifier.modifierGroupName}:${modifier.modifierOptionName}`}
+                                                         className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground"
+                                                       >
+                                                         {formatModifierSelectionLabel(modifier)}
+                                                       </span>
+                                                     ))}
+                                                   </div>
+                                                 ) : null}
+                                                 {isItemPending ? <p className="mt-1 text-xs text-amber-700">Guardando cambio...</p> : null}
+                                               </div>
                                               <span className="font-medium text-muted-foreground">x{item.quantity}</span>
                                             </div>
                                           </label>
