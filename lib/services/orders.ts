@@ -66,6 +66,19 @@ type AdminOrderRow = {
   } | null
 }
 
+type OverviewOrderRow = {
+  id: string
+  order_number: number
+  status: OrderStatus
+  payment_status: PaymentStatus
+  branch_id: string
+  total_amount: number
+  placed_at: string
+  branches: {
+    name: string
+  } | null
+}
+
 type KitchenOrderRow = {
   id: string
   order_number: number
@@ -594,6 +607,31 @@ type AdminOrderDetailItemRow = {
   notes: string | null
 }
 
+export type AdminOverviewMetrics = {
+  readonly pendingPaymentCount: number
+  readonly rejectedPaymentCount: number
+  readonly readyToConfirmCount: number
+  readonly inKitchenCount: number
+  readonly completedTodayCount: number
+  readonly activeBranchCount: number
+  readonly totalSalesToday: number
+  readonly recentOrders: readonly {
+    id: string
+    orderNumber: number
+    branchName: string
+    status: OrderStatus
+    paymentStatus: PaymentStatus
+    totalAmount: number
+    placedAt: string
+  }[]
+  readonly branchVolumes: readonly {
+    branchId: string
+    branchName: string
+    orderCount: number
+    totalAmount: number
+  }[]
+}
+
 export async function getAdminOrders(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminOrderSummary[]> {
   const ordersResult = await supabase
     .from("orders")
@@ -620,6 +658,90 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
       placedAt: order.placed_at,
       totalAmount: Number(order.total_amount),
   }))
+}
+
+export async function getAdminOverviewMetrics(
+  supabase: SupabaseClient,
+  tenantId: string,
+  options?: {
+    readonly branchIds?: readonly string[]
+  }
+): Promise<AdminOverviewMetrics> {
+  const branchIds = options?.branchIds ?? []
+  const hasBranchScope = branchIds.length > 0
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+  sevenDaysAgo.setHours(0, 0, 0, 0)
+
+  let ordersQuery = supabase
+    .from("orders")
+    .select("id, order_number, status, payment_status, branch_id, total_amount, placed_at, branches(name)")
+    .eq("tenant_id", tenantId)
+    .gte("placed_at", sevenDaysAgo.toISOString())
+    .order("placed_at", { ascending: false })
+
+  if (hasBranchScope) {
+    ordersQuery = ordersQuery.in("branch_id", [...branchIds])
+  }
+
+  let activeBranchesQuery = supabase
+    .from("branches")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+
+  if (hasBranchScope) {
+    activeBranchesQuery = activeBranchesQuery.in("id", [...branchIds])
+  }
+
+  const [ordersResult, activeBranchesResult] = await Promise.all([
+    ordersQuery.returns<OverviewOrderRow[]>(),
+    activeBranchesQuery.returns<{ id: string }[]>(),
+  ])
+
+  if (ordersResult.error || activeBranchesResult.error) {
+    throw new Error(ordersResult.error?.message ?? activeBranchesResult.error?.message ?? "No pudimos cargar el overview del admin.")
+  }
+
+  const orders = ordersResult.data ?? []
+  const activeBranchCount = (activeBranchesResult.data ?? []).length
+  const todayOrders = orders.filter((order) => new Date(order.placed_at) >= todayStart)
+  const branchVolumeMap = todayOrders.reduce<Map<string, { branchId: string; branchName: string; orderCount: number; totalAmount: number }>>((map, order) => {
+    const current = map.get(order.branch_id) ?? {
+      branchId: order.branch_id,
+      branchName: order.branches?.name ?? "Sucursal",
+      orderCount: 0,
+      totalAmount: 0,
+    }
+    current.orderCount += 1
+    current.totalAmount += Number(order.total_amount)
+    map.set(order.branch_id, current)
+    return map
+  }, new Map())
+
+  return {
+    pendingPaymentCount: orders.filter((order) => order.status === "pending_payment").length,
+    rejectedPaymentCount: orders.filter((order) => order.payment_status === "failed").length,
+    readyToConfirmCount: orders.filter((order) => order.status === "pending_payment" && order.payment_status === "pending").length,
+    inKitchenCount: orders.filter((order) => order.status === "in_preparation" || order.status === "ready").length,
+    completedTodayCount: todayOrders.filter((order) => order.status === "completed").length,
+    activeBranchCount,
+    totalSalesToday: todayOrders
+      .filter((order) => order.status !== "cancelled")
+      .reduce((total, order) => total + Number(order.total_amount), 0),
+    recentOrders: orders.slice(0, 5).map((order) => ({
+      id: order.id,
+      orderNumber: order.order_number,
+      branchName: order.branches?.name ?? "Sucursal",
+      status: order.status,
+      paymentStatus: order.payment_status,
+      totalAmount: Number(order.total_amount),
+      placedAt: order.placed_at,
+    })),
+    branchVolumes: [...branchVolumeMap.values()].sort((left, right) => right.orderCount - left.orderCount).slice(0, 6),
+  }
 }
 
 export async function getKitchenOrders(
