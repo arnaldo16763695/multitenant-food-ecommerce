@@ -164,7 +164,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">(parseStatusFilter(searchParams.get("status")))
   const [receiptFilter, setReceiptFilter] = React.useState<"all" | "with_receipt" | "without_receipt">(parseReceiptFilter(searchParams.get("receipt")))
   const [branchFilter, setBranchFilter] = React.useState<string>(searchParams.get("branch") ?? "all")
-  const deferredSearchQuery = React.useDeferredValue(searchQuery)
+  const [persistedSearchQuery, setPersistedSearchQuery] = React.useState(searchParams.get("q") ?? "")
 
   const branchOptions = React.useMemo(
     () => ["all", ...new Set(orders.map((order) => order.branchName).filter(Boolean))],
@@ -182,19 +182,28 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   )
 
   React.useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setPersistedSearchQuery(searchQuery)
+    }, 220)
+
+    return () => window.clearTimeout(timeout)
+  }, [searchQuery])
+
+  React.useEffect(() => {
     setSearchQuery(searchParams.get("q") ?? "")
     setQueueFilter(parseQueueFilter(searchParams.get("queue")))
     setPaymentFilter(parsePaymentFilter(searchParams.get("payment")))
     setStatusFilter(parseStatusFilter(searchParams.get("status")))
     setReceiptFilter(parseReceiptFilter(searchParams.get("receipt")))
     setBranchFilter(searchParams.get("branch") ?? "all")
+    setPersistedSearchQuery(searchParams.get("q") ?? "")
   }, [searchParams])
 
   React.useEffect(() => {
     const params = new URLSearchParams(searchParams.toString())
 
-    if (deferredSearchQuery.trim()) {
-      params.set("q", deferredSearchQuery.trim())
+    if (persistedSearchQuery.trim()) {
+      params.set("q", persistedSearchQuery.trim())
     } else {
       params.delete("q")
     }
@@ -235,10 +244,10 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     if (nextQuery !== currentQuery) {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
     }
-  }, [branchFilter, deferredSearchQuery, pathname, paymentFilter, queueFilter, receiptFilter, router, searchParams, statusFilter])
+  }, [branchFilter, pathname, paymentFilter, persistedSearchQuery, queueFilter, receiptFilter, router, searchParams, statusFilter])
 
   const filteredOrders = React.useMemo(() => {
-    const normalizedQuery = deferredSearchQuery.trim().toLowerCase()
+    const normalizedQuery = searchQuery.trim().toLowerCase()
 
     return [...orders]
       .sort((left, right) => {
@@ -284,7 +293,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           .toLowerCase()
           .includes(normalizedQuery)
       })
-  }, [orders, deferredSearchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
+  }, [orders, searchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
 
   function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
