@@ -961,6 +961,7 @@ export async function assignKitchenOrder(
     .update({
       assigned_tenant_membership_id: membershipId,
       assigned_at: new Date().toISOString(),
+      status: currentAssignment.status === "confirmed" ? "in_preparation" : currentAssignment.status,
     })
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
@@ -1007,11 +1008,16 @@ async function releaseOrderAssignment(
     return { ok: false, error: "Solo puedes soltar una orden que esté asignada a tu sesión." }
   }
 
+  const nextStatus = currentAssignment.status === "in_preparation" || currentAssignment.status === "ready"
+    ? "confirmed"
+    : currentAssignment.status
+
   const updateResult = await supabase
     .from("orders")
     .update({
       assigned_tenant_membership_id: null,
       assigned_at: null,
+      status: nextStatus,
     })
     .eq("tenant_id", tenantId)
     .eq("id", orderId)

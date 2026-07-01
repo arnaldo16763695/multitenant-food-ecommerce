@@ -145,8 +145,9 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
     const previousOrders = optimisticOrders
     setPendingOrderIds((current) => [...current, orderId])
     setOptimisticOrders((current) =>
-        updateOrderInCollection(current, orderId, (order) => ({
+      updateOrderInCollection(current, orderId, (order) => ({
           ...order,
+          status: order.status === "confirmed" ? "in_preparation" : order.status,
           assignedMembershipId: currentMembershipId,
           assignedStaffName: currentStaffName,
         }))
@@ -170,6 +171,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
     setOptimisticOrders((current) =>
       updateOrderInCollection(current, orderId, (order) => ({
         ...order,
+        status: order.status === "in_preparation" || order.status === "ready" ? "confirmed" : order.status,
         assignedMembershipId: null,
         assignedStaffName: null,
       }))
