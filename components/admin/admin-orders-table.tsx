@@ -3,8 +3,8 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Eye, MoreHorizontal, Search } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { CheckCircle2, Eye, Search } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { updateAdminOrderPaymentStatusAction, updateAdminOrderStatusAction } from "@/app/app/[tenantSlug]/admin/orders/actions"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus, type AdminOrderSummary, type OrderStatus, type PaymentStatus } from "@/lib/domain/order"
@@ -19,12 +19,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -125,17 +119,52 @@ function canEditPaymentStatus(order: AdminOrderSummary) {
   return order.status !== "pending_payment"
 }
 
+function parseQueueFilter(value: string | null): OrderQueueFilter {
+  if (value === "needs_review" || value === "rejected" || value === "ready_to_confirm" || value === "confirmed") {
+    return value
+  }
+
+  return "all"
+}
+
+function parsePaymentFilter(value: string | null): PaymentStatus | "all" {
+  if (value === "pending" || value === "paid" || value === "failed" || value === "refunded") {
+    return value
+  }
+
+  return "all"
+}
+
+function parseStatusFilter(value: string | null): OrderStatus | "all" {
+  if (value === "pending_payment" || value === "confirmed" || value === "in_preparation" || value === "ready" || value === "completed" || value === "cancelled") {
+    return value
+  }
+
+  return "all"
+}
+
+function parseReceiptFilter(value: string | null): "all" | "with_receipt" | "without_receipt" {
+  if (value === "with_receipt" || value === "without_receipt") {
+    return value
+  }
+
+  return "all"
+}
+
 export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isPending, startTransition] = React.useTransition()
   const [receiptOrderId, setReceiptOrderId] = React.useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = React.useState("")
-  const [queueFilter, setQueueFilter] = React.useState<OrderQueueFilter>("all")
-  const [paymentFilter, setPaymentFilter] = React.useState<PaymentStatus | "all">("all")
-  const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">("all")
-  const [receiptFilter, setReceiptFilter] = React.useState<"all" | "with_receipt" | "without_receipt">("all")
-  const [branchFilter, setBranchFilter] = React.useState<string>("all")
+  const [searchQuery, setSearchQuery] = React.useState(searchParams.get("q") ?? "")
+  const [queueFilter, setQueueFilter] = React.useState<OrderQueueFilter>(parseQueueFilter(searchParams.get("queue")))
+  const [paymentFilter, setPaymentFilter] = React.useState<PaymentStatus | "all">(parsePaymentFilter(searchParams.get("payment")))
+  const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">(parseStatusFilter(searchParams.get("status")))
+  const [receiptFilter, setReceiptFilter] = React.useState<"all" | "with_receipt" | "without_receipt">(parseReceiptFilter(searchParams.get("receipt")))
+  const [branchFilter, setBranchFilter] = React.useState<string>(searchParams.get("branch") ?? "all")
+  const deferredSearchQuery = React.useDeferredValue(searchQuery)
 
   const branchOptions = React.useMemo(
     () => ["all", ...new Set(orders.map((order) => order.branchName).filter(Boolean))],
@@ -152,8 +181,64 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     [orders]
   )
 
+  React.useEffect(() => {
+    setSearchQuery(searchParams.get("q") ?? "")
+    setQueueFilter(parseQueueFilter(searchParams.get("queue")))
+    setPaymentFilter(parsePaymentFilter(searchParams.get("payment")))
+    setStatusFilter(parseStatusFilter(searchParams.get("status")))
+    setReceiptFilter(parseReceiptFilter(searchParams.get("receipt")))
+    setBranchFilter(searchParams.get("branch") ?? "all")
+  }, [searchParams])
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (deferredSearchQuery.trim()) {
+      params.set("q", deferredSearchQuery.trim())
+    } else {
+      params.delete("q")
+    }
+
+    if (queueFilter === "all") {
+      params.delete("queue")
+    } else {
+      params.set("queue", queueFilter)
+    }
+
+    if (paymentFilter === "all") {
+      params.delete("payment")
+    } else {
+      params.set("payment", paymentFilter)
+    }
+
+    if (statusFilter === "all") {
+      params.delete("status")
+    } else {
+      params.set("status", statusFilter)
+    }
+
+    if (receiptFilter === "all") {
+      params.delete("receipt")
+    } else {
+      params.set("receipt", receiptFilter)
+    }
+
+    if (branchFilter === "all") {
+      params.delete("branch")
+    } else {
+      params.set("branch", branchFilter)
+    }
+
+    const nextQuery = params.toString()
+    const currentQuery = searchParams.toString()
+
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
+    }
+  }, [branchFilter, deferredSearchQuery, pathname, paymentFilter, queueFilter, receiptFilter, router, searchParams, statusFilter])
+
   const filteredOrders = React.useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
+    const normalizedQuery = deferredSearchQuery.trim().toLowerCase()
 
     return [...orders]
       .sort((left, right) => {
@@ -199,7 +284,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           .toLowerCase()
           .includes(normalizedQuery)
       })
-  }, [orders, searchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
+  }, [orders, deferredSearchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
 
   function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
@@ -229,6 +314,10 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
 
       router.refresh()
     })
+  }
+
+  function handleQuickConfirm(orderId: string) {
+    handleStatusChange(orderId, "confirmed")
   }
 
   return (
@@ -341,7 +430,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead className="h-10 px-3 text-xs">Canal</TableHead>
               <TableHead className="h-10 px-3 text-xs">Fecha</TableHead>
               <TableHead className="h-10 px-3 text-right text-xs">Total</TableHead>
-              <TableHead className="h-10 w-[64px] px-3 text-right text-xs">Acciones</TableHead>
+              <TableHead className="h-10 w-[160px] px-3 text-right text-xs">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -426,20 +515,16 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right font-medium text-card-foreground">$ {order.totalAmount.toFixed(2)}</TableCell>
                   <TableCell className="px-3 py-2">
-                    <div className="flex justify-end">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm">
-                            <MoreHorizontal />
-                            <span className="sr-only">Open order actions</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40 rounded-xl">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/app/${tenantSlug}/admin/orders/${order.id}`}>Ver detalle</Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    <div className="flex justify-end gap-2">
+                      {isReadyToConfirm(order) ? (
+                        <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleQuickConfirm(order.id)} type="button">
+                          <CheckCircle2 />
+                          Confirmar
+                        </Button>
+                      ) : null}
+                      <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">
+                        <Link href={`/app/${tenantSlug}/admin/orders/${order.id}`}>Detalle</Link>
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
