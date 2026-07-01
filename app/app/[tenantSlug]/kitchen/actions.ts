@@ -16,7 +16,7 @@ import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
-const ALLOWED_KITCHEN_STATUSES: readonly OrderStatus[] = ["in_preparation", "ready", "completed"]
+const ALLOWED_KITCHEN_STATUSES: readonly OrderStatus[] = ["in_preparation", "ready"]
 
 export async function assignKitchenOrderAction(tenantSlug: string, orderId: string) {
   const access = await requireKitchenAccess(tenantSlug)

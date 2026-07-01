@@ -50,7 +50,7 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
                       </div>
                       <div className="flex flex-wrap gap-2 text-sm">
                         <span className="rounded-full bg-white px-3 py-1 font-semibold text-stone-700">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</span>
-                        <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-700">{formatOrderStatus(order.status)}</span>
+                        <span className="rounded-full bg-orange-100 px-3 py-1 font-semibold text-orange-700">{formatOrderStatus(order.status, order.fulfillmentType)}</span>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 text-sm text-stone-600 md:grid-cols-3">

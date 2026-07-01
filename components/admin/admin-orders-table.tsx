@@ -51,7 +51,7 @@ function matchesQueueFilter(order: AdminOrderSummary, queueFilter: OrderQueueFil
     case "ready_to_confirm":
       return isReadyToConfirm(order)
     case "confirmed":
-      return order.status === "confirmed" || order.status === "in_preparation" || order.status === "ready" || order.status === "completed"
+      return order.status === "confirmed" || order.status === "in_preparation" || order.status === "ready" || order.status === "fulfilled" || order.status === "completed"
     default:
       return true
   }
@@ -71,7 +71,7 @@ function getNextStatuses(status: string): readonly OrderStatus[] {
     case "in_preparation":
       return ["ready", "cancelled"]
     case "ready":
-      return ["completed", "cancelled"]
+      return ["fulfilled", "cancelled"]
     default:
       return []
   }
@@ -131,7 +131,7 @@ function parsePaymentFilter(value: string | null): PaymentStatus | "all" {
 }
 
 function parseStatusFilter(value: string | null): OrderStatus | "all" {
-  if (value === "pending_payment" || value === "confirmed" || value === "in_preparation" || value === "ready" || value === "completed" || value === "cancelled") {
+  if (value === "pending_payment" || value === "confirmed" || value === "in_preparation" || value === "ready" || value === "fulfilled" || value === "cancelled") {
     return value
   }
 
@@ -396,7 +396,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <option value="confirmed">Confirmado</option>
               <option value="in_preparation">En preparación</option>
               <option value="ready">Listo</option>
-              <option value="completed">Completado</option>
+              <option value="fulfilled">Finalizado</option>
               <option value="cancelled">Cancelado</option>
             </select>
           </label>

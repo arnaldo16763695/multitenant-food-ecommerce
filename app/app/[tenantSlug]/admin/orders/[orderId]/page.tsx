@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 function getOrderBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  if (status === "ready" || status === "completed") return "success"
+  if (status === "ready" || status === "fulfilled" || status === "completed") return "success"
   if (status === "in_preparation") return "secondary"
 
   return "warning"
@@ -117,7 +117,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
 
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant={getPaymentBadgeVariant(order.paymentStatus)}>{formatPaymentStatus(order.paymentStatus)}</Badge>
-                <Badge variant={getOrderBadgeVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
+                <Badge variant={getOrderBadgeVariant(order.status)}>{formatOrderStatus(order.status, order.fulfillmentType)}</Badge>
                 <Badge variant="outline">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</Badge>
               </div>
 

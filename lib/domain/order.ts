@@ -88,10 +88,10 @@ export type AdminOrderSummary = {
   readonly totalAmount: number
 }
 
-export type OrderStatus = "pending_payment" | "confirmed" | "in_preparation" | "ready" | "completed" | "cancelled"
+export type OrderStatus = "pending_payment" | "confirmed" | "in_preparation" | "ready" | "fulfilled" | "cancelled"
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded"
 
-export function formatOrderStatus(status: string) {
+export function formatOrderStatus(status: string, fulfillmentType?: "pickup" | "delivery") {
   switch (status) {
     case "pending_payment":
       return "Pago pendiente"
@@ -101,8 +101,26 @@ export function formatOrderStatus(status: string) {
       return "En preparación"
     case "ready":
       return "Listo"
+    case "fulfilled":
+      if (fulfillmentType === "delivery") {
+        return "Entregado"
+      }
+
+      if (fulfillmentType === "pickup") {
+        return "Retirado"
+      }
+
+      return "Finalizado"
     case "completed":
-      return "Completado"
+      if (fulfillmentType === "delivery") {
+        return "Entregado"
+      }
+
+      if (fulfillmentType === "pickup") {
+        return "Retirado"
+      }
+
+      return "Finalizado"
     case "cancelled":
       return "Cancelado"
     default:

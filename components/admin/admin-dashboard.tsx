@@ -16,7 +16,7 @@ function formatCurrency(value: number) {
 }
 
 function getOrderBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  if (status === "ready" || status === "completed") return "success"
+  if (status === "ready" || status === "fulfilled" || status === "completed") return "success"
   if (status === "in_preparation") return "secondary"
   return "warning"
 }
@@ -67,8 +67,8 @@ export function AdminDashboard({ tenantSlug, metrics }: AdminDashboardProps) {
               <span className="font-semibold text-card-foreground">{metrics.readyToConfirmCount}</span>
             </div>
             <div className="flex items-center justify-between rounded-[1rem] border border-border bg-secondary/30 px-3.5 py-3 text-sm">
-              <span className="text-muted-foreground">Completados hoy</span>
-              <span className="font-semibold text-card-foreground">{metrics.completedTodayCount}</span>
+              <span className="text-muted-foreground">Finalizados hoy</span>
+              <span className="font-semibold text-card-foreground">{metrics.fulfilledTodayCount}</span>
             </div>
             <div className="flex items-center justify-between rounded-[1rem] border border-border bg-secondary/30 px-3.5 py-3 text-sm">
               <span className="text-muted-foreground">Sucursales activas</span>

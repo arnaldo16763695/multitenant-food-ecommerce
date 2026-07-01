@@ -631,7 +631,7 @@ export type AdminOverviewMetrics = {
   readonly rejectedPaymentCount: number
   readonly readyToConfirmCount: number
   readonly inKitchenCount: number
-  readonly completedTodayCount: number
+  readonly fulfilledTodayCount: number
   readonly activeBranchCount: number
   readonly totalSalesToday: number
   readonly recentOrders: readonly {
@@ -769,7 +769,7 @@ export async function getAdminOverviewMetrics(
     rejectedPaymentCount: orders.filter((order) => order.payment_status === "failed").length,
     readyToConfirmCount: orders.filter((order) => order.status === "pending_payment" && order.payment_status === "pending").length,
     inKitchenCount: orders.filter((order) => order.status === "in_preparation" || order.status === "ready").length,
-    completedTodayCount: todayOrders.filter((order) => order.status === "completed").length,
+    fulfilledTodayCount: todayOrders.filter((order) => order.status === "fulfilled" || String(order.status) === "completed").length,
     activeBranchCount,
     totalSalesToday: todayOrders
       .filter((order) => order.status !== "cancelled")
@@ -791,7 +791,7 @@ export async function getKitchenOrders(
   supabase: SupabaseClient,
   tenantId: string,
   branchIds: readonly string[],
-  statuses: readonly OrderStatus[] = ["confirmed", "in_preparation", "ready", "completed"]
+  statuses: readonly OrderStatus[] = ["confirmed", "in_preparation", "ready"]
 ): Promise<readonly KitchenOrderSummary[]> {
   if (!branchIds.length) {
     return []
@@ -940,7 +940,7 @@ export async function getKitchenDiagnostics(
     .select("id, status, branch_id, branches(name)")
     .eq("tenant_id", tenantId)
     .in("branch_id", [...branchIds])
-    .in("status", ["confirmed", "in_preparation", "ready", "completed"])
+    .in("status", ["confirmed", "in_preparation", "ready"])
     .order("placed_at", { ascending: false })
     .returns<KitchenDiagnosticOrderRow[]>()
 
@@ -1170,8 +1170,8 @@ export async function updateAdminOrderStatus(
     pending_payment: ["confirmed", "cancelled"],
     confirmed: ["in_preparation", "cancelled"],
     in_preparation: ["ready", "cancelled"],
-    ready: ["completed", "cancelled"],
-    completed: [],
+    ready: ["fulfilled", "cancelled"],
+    fulfilled: [],
     cancelled: [],
   }
 

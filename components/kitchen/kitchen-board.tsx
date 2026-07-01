@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChefHat, Clock3, Hand, PackageCheck, PartyPopper, Search, TimerReset, Undo2 } from "lucide-react"
+import { ChefHat, Clock3, Hand, PackageCheck, Search, TimerReset, Undo2 } from "lucide-react"
 
 import {
   assignKitchenOrderAction,
@@ -38,7 +38,6 @@ const kitchenColumns: readonly KitchenColumn[] = [
   { key: "confirmed", title: "Confirmado", description: "Pedidos listos para entrar a preparación." },
   { key: "in_preparation", title: "En preparación", description: "Órdenes activas en cocina." },
   { key: "ready", title: "Listo", description: "Órdenes terminadas esperando entrega." },
-  { key: "completed", title: "Completado", description: "Órdenes cerradas en este turno." },
 ] as const
 
 function getColumnIcon(status: OrderStatus) {
@@ -46,7 +45,7 @@ function getColumnIcon(status: OrderStatus) {
   if (status === "in_preparation") return ChefHat
   if (status === "ready") return PackageCheck
 
-  return PartyPopper
+  return PackageCheck
 }
 
 function getNextKitchenStatus(status: OrderStatus) {
@@ -55,8 +54,6 @@ function getNextKitchenStatus(status: OrderStatus) {
       return "in_preparation" as const
     case "in_preparation":
       return "ready" as const
-    case "ready":
-      return "completed" as const
     default:
       return null
   }
@@ -68,8 +65,6 @@ function getNextKitchenLabel(status: OrderStatus) {
       return "Iniciar preparación"
     case "in_preparation":
       return "Marcar orden lista"
-    case "ready":
-      return "Completar orden"
     default:
       return null
   }
@@ -130,7 +125,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
 
   const summary = React.useMemo(
     () => ({
-      active: filteredOrders.filter((order) => order.status !== "completed").length,
+      active: filteredOrders.length,
       preparing: filteredOrders.filter((order) => order.status === "in_preparation").length,
       ready: filteredOrders.filter((order) => order.status === "ready").length,
     }),
@@ -286,7 +281,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
         </Card>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-4">
+      <section className="grid gap-4 lg:grid-cols-3">
         {kitchenColumns.map((column) => {
           const Icon = getColumnIcon(column.key)
           const columnOrders = filteredOrders.filter((order) => order.status === column.key)
@@ -316,7 +311,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                     const canOperateOrder = isAssignedToCurrentMember
                     const needsAssignment = !order.assignedMembershipId
                     const assignedLabel = getAssignedLabel(order)
-                    const canReleaseOrder = isAssignedToCurrentMember && order.status !== "completed"
+                    const canReleaseOrder = isAssignedToCurrentMember
 
                     return (
                       <article key={order.id} className="rounded-[1.35rem] border border-border bg-secondary/35 p-4 transition-opacity data-[pending=true]:opacity-80" data-pending={isOrderPending}>
@@ -380,7 +375,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                                           >
                                             <Checkbox
                                               checked={item.prepStatus === "ready"}
-                                              disabled={isItemPending || selectedOrder.status === "completed" || !selectedOrderCanOperate}
+                                              disabled={isItemPending || !selectedOrderCanOperate}
                                               onCheckedChange={(checked) => handleItemPrepStatusChange(selectedOrder.id, item.id, checked === true)}
                                             />
                                             <div className="flex flex-1 items-center justify-between gap-3">
@@ -441,7 +436,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                           </Button>
                         ) : null}
 
-                        {order.status !== "confirmed" && order.status !== "completed" && needsAssignment ? (
+                        {order.status !== "confirmed" && needsAssignment ? (
                           <Button className="mt-4 w-full rounded-xl" disabled={isOrderPending} onClick={() => handleAssignOrder(order.id)}>
                             <Hand />
                             {isOrderPending ? "Tomando orden..." : "Tomar desde kitchen"}
@@ -472,7 +467,7 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                           </p>
                         ) : null}
 
-                        {!order.assignedStaffName && order.status !== "confirmed" && order.status !== "completed" ? (
+                        {!order.assignedStaffName && order.status !== "confirmed" ? (
                           <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
                             Admin movió esta orden y sigue sin preparador asignado. Tómala para continuarla desde kitchen.
                           </p>

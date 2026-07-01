@@ -17,7 +17,7 @@ type StorefrontOrderPageProps = {
   }>
 }
 
-function getCustomerOrderStatusMessage(status: string) {
+function getCustomerOrderStatusMessage(status: string, fulfillmentType: "pickup" | "delivery") {
   switch (status) {
     case "pending_payment":
       return "Tu pedido ya fue registrado. El negocio lo está revisando antes de confirmarlo y pasarlo a cocina."
@@ -26,9 +26,17 @@ function getCustomerOrderStatusMessage(status: string) {
     case "in_preparation":
       return "Tu pedido ya está en preparación en cocina."
     case "ready":
-      return "Tu pedido ya está listo para recoger en sucursal."
+      return fulfillmentType === "pickup"
+        ? "Tu pedido ya está listo para recoger en sucursal."
+        : "Tu pedido ya está listo y esperando la entrega final."
+    case "fulfilled":
+      return fulfillmentType === "pickup"
+        ? "Tu pedido ya fue retirado y marcado como finalizado."
+        : "Tu pedido fue entregado y marcado como finalizado."
     case "completed":
-      return "Tu pedido fue entregado y marcado como completado."
+      return fulfillmentType === "pickup"
+        ? "Tu pedido ya fue retirado y marcado como finalizado."
+        : "Tu pedido fue entregado y marcado como finalizado."
     case "cancelled":
       return "Tu pedido fue cancelado. Si necesitas ayuda, contacta directamente al negocio."
     default:
@@ -71,7 +79,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
         {order ? (
           <div className="mt-5 space-y-4">
             <div className="rounded-[1.5rem] border border-stone-200 bg-orange-50/70 p-5 text-sm leading-7 text-stone-700">
-              {getCustomerOrderStatusMessage(order.status)}
+               {getCustomerOrderStatusMessage(order.status, order.fulfillmentType)}
             </div>
 
             {getCustomerPaymentStatusMessage(order.paymentStatus) ? (
@@ -84,7 +92,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
               <div className="rounded-[1.5rem] bg-stone-50 p-5 text-sm text-stone-600">
                 <p>Orden: <span className="font-semibold text-stone-950">#{order.orderNumber}</span></p>
                 <p className="mt-2">Cliente: <span className="font-semibold text-stone-950">{order.customerName}</span></p>
-                <p className="mt-2">Estado: <span className="font-semibold text-stone-950">{formatOrderStatus(order.status)}</span></p>
+                <p className="mt-2">Estado: <span className="font-semibold text-stone-950">{formatOrderStatus(order.status, order.fulfillmentType)}</span></p>
                 <p className="mt-2">Pago: <span className="font-semibold text-stone-950">{order.paymentMethod ? formatManualPaymentMethod(order.paymentMethod) : "Manual"}</span></p>
                 <p className="mt-2">Entrega: <span className="font-semibold text-stone-950">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</span></p>
                 <p className="mt-2">Total: <span className="font-semibold text-stone-950">$ {order.totalAmount.toFixed(2)}</span></p>
