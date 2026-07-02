@@ -1361,13 +1361,23 @@ export async function getAdminOrderDetail(
   tenantId: string,
   orderId: string
 ): Promise<AdminOrderDetail | null> {
-  const orderResult = await supabase
+  const orderDetailWithPreviousReceiptResult = await supabase
     .from("orders")
     .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
     .maybeSingle<AdminOrderDetailRow>()
+
+  const orderResult = orderDetailWithPreviousReceiptResult.error
+    ? await supabase
+        .from("orders")
+        .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
+        .eq("tenant_id", tenantId)
+        .eq("id", orderId)
+        .limit(1)
+        .maybeSingle<AdminOrderDetailRow>()
+    : orderDetailWithPreviousReceiptResult
 
   if (orderResult.error || !orderResult.data) {
     return null
@@ -1460,12 +1470,21 @@ export async function getCustomerOrderDetail(
     return null
   }
 
-  const paymentResult = await supabase
+  const paymentWithPreviousReceiptResult = await supabase
     .from("payments")
     .select("payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason")
     .eq("order_id", orderResult.data.id)
     .limit(1)
     .maybeSingle<PaymentReceiptRow>()
+
+  const paymentResult = paymentWithPreviousReceiptResult.error
+    ? await supabase
+        .from("payments")
+        .select("payment_method, receipt_image_path, rejection_reason")
+        .eq("order_id", orderResult.data.id)
+        .limit(1)
+        .maybeSingle<PaymentReceiptRow>()
+    : paymentWithPreviousReceiptResult
 
   if (paymentResult.error) {
     return null
