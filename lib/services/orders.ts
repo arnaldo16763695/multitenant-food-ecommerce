@@ -180,7 +180,7 @@ type CustomerOrderDetailItemRow = {
 type PaymentReceiptRow = {
   payment_method: ManualPaymentMethod | null
   receipt_image_path: string | null
-  previous_receipt_image_path?: string | null
+  previous_receipt_image_path: string | null
   rejection_reason: string | null
 }
 
@@ -340,7 +340,6 @@ export async function replaceCustomerManualPaymentReceipt(
   }
 
   const shouldPreservePreviousReceipt = currentPaymentResult.data.status === "failed" && Boolean(currentPaymentResult.data.receipt_image_path)
-
   const paymentUpdateResult = await supabase
     .from("payments")
     .update({
@@ -786,7 +785,7 @@ export async function getAdminOverviewMetrics(
     rejectedPaymentCount: orders.filter((order) => order.payment_status === "failed").length,
     readyToConfirmCount: orders.filter((order) => order.status === "pending_payment" && order.payment_status === "pending").length,
     inKitchenCount: orders.filter((order) => order.status === "in_preparation" || order.status === "ready").length,
-    fulfilledTodayCount: todayOrders.filter((order) => order.status === "fulfilled" || String(order.status) === "completed").length,
+    fulfilledTodayCount: todayOrders.filter((order) => order.status === "fulfilled").length,
     activeBranchCount,
     totalSalesToday: todayOrders
       .filter((order) => order.status !== "cancelled")
@@ -1213,33 +1212,23 @@ export async function updateAdminOrderStatus(
     }
   }
 
-  const statusAttempts = nextStatus === "fulfilled" ? ["fulfilled", "completed"] as const : [nextStatus]
+  const updateResult = await supabase.rpc("update_order_status_atomic", {
+    p_tenant_id: tenantId,
+    p_order_id: orderId,
+    p_from_status: currentStatus,
+    p_to_status: nextStatus,
+    p_changed_by_profile_id: changedByProfileId ?? null,
+  })
 
-  for (const attemptedStatus of statusAttempts) {
-    const updateResult = await supabase.rpc("update_order_status_atomic", {
-      p_tenant_id: tenantId,
-      p_order_id: orderId,
-      p_from_status: currentStatus,
-      p_to_status: attemptedStatus,
-      p_changed_by_profile_id: changedByProfileId ?? null,
-    })
-
-    if (updateResult.error) {
-      if (nextStatus === "fulfilled" && attemptedStatus === "fulfilled") {
-        continue
-      }
-
-      return { ok: false, error: updateResult.error.message }
-    }
-
-    if (!updateResult.data) {
-      return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
-    }
-
-    return { ok: true }
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
   }
 
-  return { ok: false, error: "No pudimos finalizar la orden con el esquema actual. Intenta de nuevo después de aplicar las migraciones." }
+  if (!updateResult.data) {
+    return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
+  }
+
+  return { ok: true }
 }
 
 export async function updateAdminOrderPaymentStatus(
@@ -1361,23 +1350,13 @@ export async function getAdminOrderDetail(
   tenantId: string,
   orderId: string
 ): Promise<AdminOrderDetail | null> {
-  const orderDetailWithPreviousReceiptResult = await supabase
+  const orderResult = await supabase
     .from("orders")
     .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
     .maybeSingle<AdminOrderDetailRow>()
-
-  const orderResult = orderDetailWithPreviousReceiptResult.error
-    ? await supabase
-        .from("orders")
-        .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
-        .eq("tenant_id", tenantId)
-        .eq("id", orderId)
-        .limit(1)
-        .maybeSingle<AdminOrderDetailRow>()
-    : orderDetailWithPreviousReceiptResult
 
   if (orderResult.error || !orderResult.data) {
     return null
@@ -1470,21 +1449,12 @@ export async function getCustomerOrderDetail(
     return null
   }
 
-  const paymentWithPreviousReceiptResult = await supabase
+  const paymentResult = await supabase
     .from("payments")
     .select("payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason")
     .eq("order_id", orderResult.data.id)
     .limit(1)
     .maybeSingle<PaymentReceiptRow>()
-
-  const paymentResult = paymentWithPreviousReceiptResult.error
-    ? await supabase
-        .from("payments")
-        .select("payment_method, receipt_image_path, rejection_reason")
-        .eq("order_id", orderResult.data.id)
-        .limit(1)
-        .maybeSingle<PaymentReceiptRow>()
-    : paymentWithPreviousReceiptResult
 
   if (paymentResult.error) {
     return null

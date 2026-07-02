@@ -111,16 +111,6 @@ export function formatOrderStatus(status: string, fulfillmentType?: "pickup" | "
       }
 
       return "Finalizado"
-    case "completed":
-      if (fulfillmentType === "delivery") {
-        return "Entregado"
-      }
-
-      if (fulfillmentType === "pickup") {
-        return "Retirado"
-      }
-
-      return "Finalizado"
     case "cancelled":
       return "Cancelado"
     default:
