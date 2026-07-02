@@ -75,6 +75,10 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
     order?.paymentReceiptImageUrl && adminClient
       ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.paymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
       : null
+  const previousPaymentReceiptUrl =
+    order?.previousPaymentReceiptImageUrl && adminClient
+      ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.previousPaymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
+      : null
 
   return (
     <AdminPageShell
@@ -146,6 +150,21 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                     className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
                     height={720}
                     src={paymentReceiptUrl}
+                    unoptimized
+                    width={1280}
+                  />
+                </div>
+              ) : null}
+
+              {previousPaymentReceiptUrl ? (
+                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/40 p-3.5">
+                  <p className="font-semibold text-card-foreground">Comprobante anterior rechazado</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Se conserva para comparar el nuevo envío contra la evidencia anterior.</p>
+                  <Image
+                    alt="Comprobante anterior rechazado"
+                    className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
+                    height={720}
+                    src={previousPaymentReceiptUrl}
                     unoptimized
                     width={1280}
                   />

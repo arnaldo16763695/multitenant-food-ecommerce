@@ -180,6 +180,7 @@ type CustomerOrderDetailItemRow = {
 type PaymentReceiptRow = {
   payment_method: ManualPaymentMethod | null
   receipt_image_path: string | null
+  previous_receipt_image_path?: string | null
   rejection_reason: string | null
 }
 
@@ -327,11 +328,26 @@ export async function replaceCustomerManualPaymentReceipt(
     return { ok: false, error: "Solo puedes actualizar el comprobante mientras la orden siga pendiente de pago." }
   }
 
+  const currentPaymentResult = await supabase
+    .from("payments")
+    .select("receipt_image_path, receipt_submitted_at, status")
+    .eq("order_id", input.orderId)
+    .limit(1)
+    .maybeSingle<{ receipt_image_path: string | null; receipt_submitted_at: string | null; status: PaymentStatus }>()
+
+  if (currentPaymentResult.error || !currentPaymentResult.data) {
+    return { ok: false, error: "No encontramos el pago asociado a esta orden." }
+  }
+
+  const shouldPreservePreviousReceipt = currentPaymentResult.data.status === "failed" && Boolean(currentPaymentResult.data.receipt_image_path)
+
   const paymentUpdateResult = await supabase
     .from("payments")
     .update({
       status: "pending",
       payment_method: input.paymentMethod,
+      previous_receipt_image_path: shouldPreservePreviousReceipt ? currentPaymentResult.data.receipt_image_path : null,
+      previous_receipt_submitted_at: shouldPreservePreviousReceipt ? currentPaymentResult.data.receipt_submitted_at : null,
       receipt_image_path: input.receiptImagePath,
       receipt_submitted_at: new Date().toISOString(),
       rejection_reason: null,
@@ -610,6 +626,7 @@ type AdminOrderDetailRow = {
   payments: {
     payment_method: ManualPaymentMethod | null
     receipt_image_path: string | null
+    previous_receipt_image_path: string | null
     rejection_reason: string | null
   }[] | null
 }
@@ -1346,7 +1363,7 @@ export async function getAdminOrderDetail(
 ): Promise<AdminOrderDetail | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
+    .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason)")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
@@ -1384,6 +1401,7 @@ export async function getAdminOrderDetail(
     paymentStatus: orderResult.data.payment_status,
     paymentMethod: orderResult.data.payments?.[0]?.payment_method ?? null,
     paymentReceiptImageUrl: orderResult.data.payments?.[0]?.receipt_image_path ?? null,
+    previousPaymentReceiptImageUrl: orderResult.data.payments?.[0]?.previous_receipt_image_path ?? null,
     paymentRejectionReason: orderResult.data.payments?.[0]?.rejection_reason ?? null,
     channel: orderResult.data.channel,
     fulfillmentType: orderResult.data.fulfillment_type,
@@ -1444,7 +1462,7 @@ export async function getCustomerOrderDetail(
 
   const paymentResult = await supabase
     .from("payments")
-    .select("payment_method, receipt_image_path, rejection_reason")
+    .select("payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason")
     .eq("order_id", orderResult.data.id)
     .limit(1)
     .maybeSingle<PaymentReceiptRow>()
@@ -1460,6 +1478,7 @@ export async function getCustomerOrderDetail(
     paymentStatus: orderResult.data.payment_status,
     paymentMethod: paymentResult.data?.payment_method ?? null,
     paymentReceiptImageUrl: paymentResult.data?.receipt_image_path ?? null,
+    previousPaymentReceiptImageUrl: paymentResult.data?.previous_receipt_image_path ?? null,
     paymentRejectionReason: paymentResult.data?.rejection_reason ?? null,
     fulfillmentType: orderResult.data.fulfillment_type,
     totalAmount: Number(orderResult.data.total_amount),
