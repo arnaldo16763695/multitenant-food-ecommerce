@@ -1196,23 +1196,33 @@ export async function updateAdminOrderStatus(
     }
   }
 
-  const updateResult = await supabase.rpc("update_order_status_atomic", {
-    p_tenant_id: tenantId,
-    p_order_id: orderId,
-    p_from_status: currentStatus,
-    p_to_status: nextStatus,
-    p_changed_by_profile_id: changedByProfileId ?? null,
-  })
+  const statusAttempts = nextStatus === "fulfilled" ? ["fulfilled", "completed"] as const : [nextStatus]
 
-  if (updateResult.error) {
-    return { ok: false, error: updateResult.error.message }
+  for (const attemptedStatus of statusAttempts) {
+    const updateResult = await supabase.rpc("update_order_status_atomic", {
+      p_tenant_id: tenantId,
+      p_order_id: orderId,
+      p_from_status: currentStatus,
+      p_to_status: attemptedStatus,
+      p_changed_by_profile_id: changedByProfileId ?? null,
+    })
+
+    if (updateResult.error) {
+      if (nextStatus === "fulfilled" && attemptedStatus === "fulfilled") {
+        continue
+      }
+
+      return { ok: false, error: updateResult.error.message }
+    }
+
+    if (!updateResult.data) {
+      return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
+    }
+
+    return { ok: true }
   }
 
-  if (!updateResult.data) {
-    return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
-  }
-
-  return { ok: true }
+  return { ok: false, error: "No pudimos finalizar la orden con el esquema actual. Intenta de nuevo después de aplicar las migraciones." }
 }
 
 export async function updateAdminOrderPaymentStatus(
