@@ -34,9 +34,9 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
   return (
     <TenantShell
       tenantSlug={storefront.tenant.slug}
-      eyebrow="Public storefront"
+      eyebrow="Tienda Pública"
       title={storefront.tenant.name}
-      description="Comparte este storefront con tus clientes y llevalos directo a una experiencia de compra por sucursal, sin pasar por el admin ni por pasos extra."
+      description=""
       requiresBranchSelection={storefront.branches.length > 1 && !requestedBranchId}
       activeBranchId={storefront.activeBranch?.id}
       activeBranchLabel={storefront.activeBranch?.name ?? "Sin sucursal activa"}

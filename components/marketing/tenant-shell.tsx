@@ -88,8 +88,8 @@ export function TenantShell({
   const bagHref = activeBranchId ? `/app/${tenantSlug}/bag?branch=${activeBranchId}` : `/app/${tenantSlug}/bag`
 
   return (
-    <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.14),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_38%,_#fffdfa_100%)]">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
+    <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-radial-gradient(circle_at_top,_rgba(251,146,60,0.14),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_38%,_#fffdfa_100%)">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.18] background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px) background-size:48px_48px" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
         <StorefrontHeader
@@ -104,15 +104,15 @@ export function TenantShell({
 
         <section className="overflow-hidden rounded-[2.4rem] border border-stone-950/10 bg-stone-950 shadow-[0_28px_80px_rgba(28,25,23,0.18)]">
           <div
-            className="relative min-h-[28rem] bg-cover bg-center"
+            className="relative min-h-28rem bg-cover bg-center"
             style={{
               backgroundImage: visibleHeroImage
                 ? `linear-gradient(90deg, rgba(28,25,23,0.88) 0%, rgba(28,25,23,0.62) 38%, rgba(28,25,23,0.22) 100%), url(${visibleHeroImage})`
                 : "linear-gradient(135deg, rgba(28,25,23,0.96) 0%, rgba(120,53,15,0.9) 46%, rgba(251,146,60,0.78) 100%)",
             }}
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.24),_transparent_32%)]" />
-            <div className="relative flex h-full flex-col justify-between gap-10 p-6 text-white md:p-8 lg:min-h-[34rem] lg:p-10">
+            <div className="absolute inset-0 bg-radial-gradient(circle_at_top_left,_rgba(251,146,60,0.24),_transparent_32%)" />
+            <div className="relative flex h-full flex-col justify-between gap-10 p-6 text-white md:p-8 lg:min-h-34rem lg:p-10">
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-orange-200">
                 <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5">{eyebrow}</span>
                 <span className="rounded-full border border-white/15 bg-black/20 px-3 py-1.5">{publicBranchLabel}</span>
@@ -202,7 +202,7 @@ export function TenantShell({
                 initialBagItems={initialBagItems}
               />
             ) : (
-              <div className="rounded-[2rem] border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
+              <div className="rounded-2rem border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Menú vacío</p>
                 <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">Esta sucursal aún no tiene productos publicados.</h3>
                 <p className="mt-3 text-sm leading-7 text-stone-600">
