@@ -91,7 +91,7 @@ export function TenantShell({
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-radial-gradient(circle_at_top,_rgba(251,146,60,0.14),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_38%,_#fffdfa_100%)">
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px) background-size:48px_48px" />
 
-      <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
+      <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 pb-28 sm:px-10 md:pb-8 lg:px-12 lg:py-10">
         <StorefrontHeader
           tenantSlug={tenantSlug}
           brandName={title}

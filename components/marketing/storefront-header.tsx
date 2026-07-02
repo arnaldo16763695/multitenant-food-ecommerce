@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ChevronDown, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
+import { ChevronDown, House, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
@@ -37,6 +37,8 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
   const previousCountRef = React.useRef(liveCartItemsCount)
   const homeHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const bagHref = branchId ? `/app/${tenantSlug}/bag?branch=${branchId}` : `/app/${tenantSlug}/bag`
+  const ordersHref = `/app/${tenantSlug}/account/orders`
+  const accountHref = `/app/${tenantSlug}/account`
 
   React.useEffect(() => {
     if (liveCartItemsCount > previousCountRef.current) {
@@ -69,7 +71,7 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
 
   return (
     <>
-      <div className="h-[5.5rem]" />
+      <div className="h-12" />
       <header className="fixed top-4 left-1/2 z-40 w-[min(calc(100vw-1.5rem),80rem)] -translate-x-1/2 rounded-[1.8rem] border border-stone-950/10 bg-white/80 px-4 py-3 shadow-[0_18px_40px_rgba(120,53,15,0.08)] backdrop-blur md:px-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
@@ -85,7 +87,7 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
             </Link>
           </div>
 
-          <div className="flex items-center gap-2 self-end lg:self-auto">
+          <div className="hidden items-center gap-2 self-end md:flex lg:self-auto">
             <Button asChild variant="outline" className={`rounded-full px-4 transition-transform ${isBagAnimating ? "animate-bag-attention" : ""}`}>
               <Link href={bagHref}>
                 <ShoppingBag className={isBagAnimating ? "text-orange-600" : undefined} />
@@ -141,6 +143,42 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
           </div>
         </div>
       </header>
+
+      <nav className="fixed right-0 bottom-0 left-0 z-40 md:hidden" aria-label="Navegacion principal movil">
+        <div className="grid grid-cols-4 border-t border-stone-950/10 bg-white/92 px-4 py-2 shadow-[0_-12px_30px_rgba(120,53,15,0.12)] backdrop-blur">
+          <Link
+            className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            href={accountHref}
+            aria-label="Mi perfil"
+          >
+            <UserRound className="size-4.5" />
+          </Link>
+          <Link
+            className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            href={homeHref}
+            aria-label="Inicio"
+          >
+            <House className="size-4.5" />
+          </Link>
+          <Link
+            className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            href={ordersHref}
+            aria-label="Mis pedidos"
+          >
+            <ReceiptText className="size-4.5" />
+          </Link>
+          <Link
+            className={`relative flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950 ${isBagAnimating ? "animate-bag-attention text-orange-600" : ""}`}
+            href={bagHref}
+            aria-label="Bolsa"
+          >
+            <ShoppingBag className="size-4.5" />
+            <span className={`absolute top-1.5 right-1.5 min-w-4 rounded-full px-1 text-center text-[10px] font-semibold text-white ${isBagAnimating ? "bg-orange-600" : "bg-stone-950"}`}>
+              {liveCartItemsCount}
+            </span>
+          </Link>
+        </div>
+      </nav>
     </>
   )
 }
