@@ -220,23 +220,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
             </CardHeader>
             <CardContent>
               <form className="grid gap-4" onSubmit={handleSubmit}>
-                <div className="grid gap-3 rounded-[1.5rem] border border-stone-200 bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">Flujo de checkout</p>
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-[1.1rem] bg-stone-50 px-4 py-3 text-sm">
-                      <p className="font-semibold text-stone-950">1. Elegir pago</p>
-                      <p className="mt-1 leading-6 text-stone-600">Selecciona pago móvil o transferencia.</p>
-                    </div>
-                    <div className="rounded-[1.1rem] bg-stone-50 px-4 py-3 text-sm">
-                      <p className="font-semibold text-stone-950">2. Adjuntar comprobante</p>
-                      <p className="mt-1 leading-6 text-stone-600">Sube la imagen antes de enviar el pedido.</p>
-                    </div>
-                    <div className="rounded-[1.1rem] bg-stone-50 px-4 py-3 text-sm">
-                      <p className="font-semibold text-stone-950">3. Esperar validación</p>
-                      <p className="mt-1 leading-6 text-stone-600">El negocio revisa pago y luego pasa la orden a cocina.</p>
-                    </div>
-                  </div>
-                </div>
+             
 
                 <div className="grid gap-4 rounded-[1.5rem] border border-orange-200 bg-orange-50/70 p-4">
                   <div>
@@ -252,7 +236,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
                         <button
                           key={method.key}
                           type="button"
-                          className={`rounded-[1.25rem] border px-4 py-4 text-left transition ${
+                          className={`rounded-[1.25rem] border px-4 py-4 text-left transition cursor-pointer ${
                             isSelected ? "border-orange-500 bg-white shadow-sm" : "border-stone-200 bg-white/80 hover:border-stone-300"
                           }`}
                           onClick={() => setPaymentMethod(method.key)}
@@ -260,7 +244,6 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-semibold text-stone-950">{method.title}</p>
-                              <p className="mt-1 text-sm leading-6 text-stone-600">Pago manual con validación por comprobante.</p>
                             </div>
                             {isSelected ? <CheckCircle2 className="size-5 text-orange-600" /> : null}
                           </div>
@@ -291,7 +274,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
 
                   <label className="grid gap-2 text-sm">
                     <span className="font-medium text-card-foreground">Comprobante de pago</span>
-                    <Input accept="image/png,image/jpeg,image/webp" onChange={handlePaymentProofFileChange} type="file" />
+                    <Input className="cursor-pointer" accept="image/png,image/jpeg,image/webp" onChange={handlePaymentProofFileChange} type="file" />
                     <span className="text-xs text-stone-500">Acepta JPG, PNG o WEBP de hasta 5 MB.</span>
                   </label>
 
