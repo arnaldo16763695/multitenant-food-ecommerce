@@ -3,6 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { OrderPaymentProofResubmission } from "@/components/marketing/order-payment-proof-resubmission"
+import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { formatManualPaymentMethod, formatOrderStatus } from "@/lib/domain/order"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
@@ -71,9 +72,13 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
       : null
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-8 sm:px-10">
-      <OrderRealtimeRefresh orderId={orderId} />
-      <section className="rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
+    <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)">
+      <div className="pointer-events-none absolute inset-0 opacity-[0.16] background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px) background-size:48px_48px" />
+
+      <div className="relative mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
+        <StorefrontHeader tenantSlug={tenantSlug} brandName="Pedidos" branchId={null} branchLabel="Sucursal activa" customerSession={customerContext} />
+        <OrderRealtimeRefresh orderId={orderId} />
+        <section className="mx-auto w-full max-w-5xl rounded-[2rem] border border-stone-200 bg-white p-8 shadow-[0_12px_40px_rgba(28,25,23,0.07)]">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Seguimiento de pedido</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950">Tu orden ya quedó registrada.</h1>
         {order ? (
@@ -155,7 +160,8 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
             Ver mis pedidos
           </Link>
         </div>
-      </section>
+        </section>
+      </div>
     </main>
   )
 }
