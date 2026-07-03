@@ -800,6 +800,12 @@ type AdminOrderDetailItemRow = {
   notes: string | null
 }
 
+type AdminOrderItemModifierRow = {
+  order_item_id: string
+  modifier_group_name_snapshot: string
+  modifier_option_name_snapshot: string
+}
+
 type AdminOrderPaymentReceiptSubmissionRow = {
   id: string
   payment_method: ManualPaymentMethod
@@ -1552,6 +1558,15 @@ export async function getAdminOrderDetail(
     .eq("order_id", orderId)
     .returns<AdminOrderDetailItemRow[]>()
 
+  const orderItemIds = (itemsResult.data ?? []).map((item) => item.id)
+  const orderItemModifiersResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_modifiers")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .in("order_item_id", orderItemIds)
+        .returns<AdminOrderItemModifierRow[]>()
+    : { data: [], error: null }
+
   const receiptSubmissionsResult = await supabase
     .from("payment_receipt_submissions")
     .select("id, payment_method, receipt_image_path, review_status, rejection_reason, submitted_at, reviewed_at, reviewed_by_profile_id, profiles(full_name)")
@@ -1560,9 +1575,23 @@ export async function getAdminOrderDetail(
     .order("created_at", { ascending: false })
     .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
 
-  if (itemsResult.error || receiptSubmissionsResult.error) {
+  if (itemsResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error) {
     return null
   }
+
+  const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
+    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+  >((map, modifier) => {
+    const currentModifiers = map.get(modifier.order_item_id) ?? []
+    map.set(modifier.order_item_id, [
+      ...currentModifiers,
+      {
+        modifierGroupName: modifier.modifier_group_name_snapshot,
+        modifierOptionName: modifier.modifier_option_name_snapshot,
+      },
+    ])
+    return map
+  }, new Map())
 
   const assignedMembershipResult = orderResult.data.assigned_tenant_membership_id
     ? await supabase
@@ -1603,6 +1632,7 @@ export async function getAdminOrderDetail(
       unitPrice: Number(item.unit_price_snapshot),
       lineTotal: Number(item.line_total),
       notes: item.notes,
+      modifiers: orderItemModifiersMap.get(item.id) ?? [],
     })),
   }
 }

@@ -5,6 +5,7 @@ import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { AdminOrderPaymentReview } from "@/components/admin/admin-order-payment-review"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus } from "@/lib/domain/order"
 import { getAdminOrderDetail } from "@/lib/services/orders"
+import { formatModifierSelectionLabel } from "@/lib/storefront/modifier-display"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { getPaymentProofsBucket } from "@/lib/supabase/storage"
@@ -283,6 +284,18 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                         <TableCell className="px-3 py-2 font-semibold text-card-foreground">
                           <div>
                             <p>{item.productName}</p>
+                            {item.modifiers.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {item.modifiers.map((modifier) => (
+                                  <span
+                                    key={`${modifier.modifierGroupName}:${modifier.modifierOptionName}`}
+                                    className="rounded-full bg-secondary/60 px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                  >
+                                    {formatModifierSelectionLabel(modifier)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                             {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
                           </div>
                         </TableCell>

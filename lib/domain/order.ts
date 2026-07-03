@@ -175,6 +175,10 @@ export type AdminOrderDetailItem = {
   readonly unitPrice: number
   readonly lineTotal: number
   readonly notes: string | null
+  readonly modifiers: readonly {
+    modifierGroupName: string
+    modifierOptionName: string
+  }[]
 }
 
 export type PaymentReceiptSubmissionSummary = {
