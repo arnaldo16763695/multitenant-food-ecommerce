@@ -125,13 +125,28 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                 <Badge variant="outline">{order.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}</Badge>
               </div>
 
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/70 p-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Total esperado</p>
+                  <p className="mt-2 text-2xl font-semibold text-emerald-950">$ {order.totalAmount.toFixed(2)}</p>
+                  <p className="mt-1 text-sm text-emerald-800">Usa este monto como referencia principal para validar el comprobante.</p>
+                </div>
+                <div className="rounded-[1rem] border border-border bg-secondary/40 p-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Lectura rápida</p>
+                  <p className="mt-2 text-sm text-card-foreground">Método: {order.paymentMethod ? formatManualPaymentMethod(order.paymentMethod) : "Manual"}</p>
+                  <p className="mt-1 text-sm text-card-foreground">Estado del pago: {formatPaymentStatus(order.paymentStatus)}</p>
+                  <p className="mt-1 text-sm text-card-foreground">Canal del pedido: {formatOrderChannel(order.channel)}</p>
+                </div>
+              </div>
+
               <div className="rounded-[1rem] border border-stone-200 bg-stone-50/80 p-3.5 text-sm leading-6 text-stone-600">
                 En este MVP, la confirmación de la orden también valida manualmente el pago. Una vez confirmada, la orden puede avanzar al flujo de cocina.
               </div>
 
               {order.paymentRejectionReason ? (
-                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/70 p-3.5 text-sm leading-6 text-amber-900">
-                  Último rechazo registrado: {order.paymentRejectionReason}
+                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/70 p-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Último rechazo</p>
+                  <p className="mt-2 text-sm leading-6 text-amber-950">{order.paymentRejectionReason}</p>
                 </div>
               ) : null}
 
@@ -142,32 +157,37 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                 existingReason={order.paymentRejectionReason}
               />
 
-              {paymentReceiptUrl ? (
-                <div className="rounded-[1rem] border border-border p-3.5">
-                  <p className="font-semibold text-card-foreground">Comprobante de pago</p>
-                  <Image
-                    alt="Comprobante de pago"
-                    className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
-                    height={720}
-                    src={paymentReceiptUrl}
-                    unoptimized
-                    width={1280}
-                  />
-                </div>
-              ) : null}
+              {paymentReceiptUrl || previousPaymentReceiptUrl ? (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {paymentReceiptUrl ? (
+                    <div className="rounded-[1rem] border border-border p-3.5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Comprobante actual</p>
+                      <p className="mt-1 text-sm text-card-foreground">Este es el comprobante vigente sobre el que debe tomarse la decisión.</p>
+                      <Image
+                        alt="Comprobante de pago actual"
+                        className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
+                        height={720}
+                        src={paymentReceiptUrl}
+                        unoptimized
+                        width={1280}
+                      />
+                    </div>
+                  ) : null}
 
-              {previousPaymentReceiptUrl ? (
-                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/40 p-3.5">
-                  <p className="font-semibold text-card-foreground">Comprobante anterior rechazado</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Se conserva para comparar el nuevo envío contra la evidencia anterior.</p>
-                  <Image
-                    alt="Comprobante anterior rechazado"
-                    className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
-                    height={720}
-                    src={previousPaymentReceiptUrl}
-                    unoptimized
-                    width={1280}
-                  />
+                  {previousPaymentReceiptUrl ? (
+                    <div className="rounded-[1rem] border border-amber-200 bg-amber-50/40 p-3.5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Comprobante anterior rechazado</p>
+                      <p className="mt-1 text-sm text-amber-900">Se conserva para comparar diferencias de monto, legibilidad o cuenta de destino.</p>
+                      <Image
+                        alt="Comprobante anterior rechazado"
+                        className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
+                        height={720}
+                        src={previousPaymentReceiptUrl}
+                        unoptimized
+                        width={1280}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
