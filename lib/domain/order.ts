@@ -153,7 +153,6 @@ export type CustomerOrderDetail = {
   readonly paymentStatus: PaymentStatus
   readonly paymentMethod: ManualPaymentMethod | null
   readonly paymentReceiptImageUrl: string | null
-  readonly previousPaymentReceiptImageUrl: string | null
   readonly paymentRejectionReason: string | null
   readonly fulfillmentType: "pickup" | "delivery"
   readonly totalAmount: number
@@ -201,7 +200,6 @@ export type AdminOrderDetail = {
   readonly paymentStatus: PaymentStatus
   readonly paymentMethod: ManualPaymentMethod | null
   readonly paymentReceiptImageUrl: string | null
-  readonly previousPaymentReceiptImageUrl: string | null
   readonly paymentRejectionReason: string | null
   readonly channel: string
   readonly fulfillmentType: "pickup" | "delivery"
