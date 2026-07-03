@@ -639,11 +639,13 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
       throw new Error(`Product ${item.productId} not found during checkout.`)
     }
 
-    const unitPrice = Number(
+    const baseUnitPrice = Number(
       productVariant
         ? branchVariantOverrideMap.get(productVariant.id)?.price_override ?? productVariant.base_price
         : branchOverrideMap.get(product.id)?.price_override ?? product.base_price
     )
+    const modifierDelta = item.modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)
+    const unitPrice = Number((baseUnitPrice + modifierDelta).toFixed(2))
 
     return {
       product_id: product.id,
