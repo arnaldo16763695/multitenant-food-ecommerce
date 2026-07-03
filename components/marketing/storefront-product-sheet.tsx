@@ -220,7 +220,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto border-l border-stone-200 bg-white sm:max-w-xl">
+      <SheetContent side="right" className="overflow-y-auto border-l border-stone-200 bg-white data-[side=right]:w-full sm:data-[side=right]:max-w-xl">
         <SheetHeader className="border-b border-stone-100 px-6 py-5">
           <SheetTitle>{product.name}</SheetTitle>
           <SheetDescription>Configura tamano, cantidad y opciones disponibles antes de confirmar la bolsa.</SheetDescription>
