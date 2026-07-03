@@ -140,6 +140,10 @@ export type CustomerOrderDetailItem = {
   readonly quantity: number
   readonly unitPrice: number
   readonly lineTotal: number
+  readonly modifiers: readonly {
+    modifierGroupName: string
+    modifierOptionName: string
+  }[]
 }
 
 export type CustomerOrderDetail = {

@@ -177,6 +177,12 @@ type CustomerOrderDetailItemRow = {
   line_total: number
 }
 
+type CustomerOrderItemModifierRow = {
+  order_item_id: string
+  modifier_group_name_snapshot: string
+  modifier_option_name_snapshot: string
+}
+
 type PaymentReceiptRow = {
   payment_method: ManualPaymentMethod | null
   receipt_image_path: string | null
@@ -1636,6 +1642,15 @@ export async function getCustomerOrderDetail(
     return null
   }
 
+  const orderItemIds = (orderItemsResult.data ?? []).map((item) => item.id)
+  const orderItemModifiersResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_modifiers")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .in("order_item_id", orderItemIds)
+        .returns<CustomerOrderItemModifierRow[]>()
+    : { data: [], error: null }
+
   const paymentResult = await supabase
     .from("payments")
     .select("payment_method, receipt_image_path, previous_receipt_image_path, rejection_reason")
@@ -1651,9 +1666,23 @@ export async function getCustomerOrderDetail(
     .order("created_at", { ascending: false })
     .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
 
-  if (paymentResult.error || receiptSubmissionsResult.error) {
+  if (paymentResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error) {
     return null
   }
+
+  const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
+    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+  >((map, modifier) => {
+    const currentModifiers = map.get(modifier.order_item_id) ?? []
+    map.set(modifier.order_item_id, [
+      ...currentModifiers,
+      {
+        modifierGroupName: modifier.modifier_group_name_snapshot,
+        modifierOptionName: modifier.modifier_option_name_snapshot,
+      },
+    ])
+    return map
+  }, new Map())
 
   return {
     id: orderResult.data.id,
@@ -1680,6 +1709,7 @@ export async function getCustomerOrderDetail(
       quantity: item.quantity,
       unitPrice: Number(item.unit_price_snapshot),
       lineTotal: Number(item.line_total),
+      modifiers: orderItemModifiersMap.get(item.id) ?? [],
     })),
   }
 }

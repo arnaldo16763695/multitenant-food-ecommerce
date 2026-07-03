@@ -6,6 +6,7 @@ import { OrderPaymentProofResubmission } from "@/components/marketing/order-paym
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { formatManualPaymentMethod, formatOrderStatus } from "@/lib/domain/order"
+import { formatModifierSelectionLabel } from "@/lib/storefront/modifier-display"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getCustomerOrderDetail, getTenantManualPaymentSettingsBySlug } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -152,6 +153,18 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
                       <div>
                         <p className="font-semibold text-stone-950">{item.productName}</p>
                         <p className="mt-1 text-stone-500">{item.quantity} x $ {item.unitPrice.toFixed(2)}</p>
+                        {item.modifiers.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {item.modifiers.map((modifier) => (
+                              <span
+                                key={`${modifier.modifierGroupName}:${modifier.modifierOptionName}`}
+                                className="rounded-full bg-white px-2.5 py-1 text-xs text-stone-600"
+                              >
+                                {formatModifierSelectionLabel(modifier)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                       <span className="font-semibold text-stone-950">$ {item.lineTotal.toFixed(2)}</span>
                     </div>
