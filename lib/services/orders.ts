@@ -1643,7 +1643,15 @@ export async function getCustomerOrderDetail(
     .limit(1)
     .maybeSingle<PaymentReceiptRow>()
 
-  if (paymentResult.error) {
+  const receiptSubmissionsResult = await supabase
+    .from("payment_receipt_submissions")
+    .select("id, payment_method, receipt_image_path, review_status, rejection_reason, submitted_at, reviewed_at, reviewed_by_profile_id, profiles(full_name)")
+    .eq("order_id", orderResult.data.id)
+    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
+
+  if (paymentResult.error || receiptSubmissionsResult.error) {
     return null
   }
 
@@ -1664,6 +1672,7 @@ export async function getCustomerOrderDetail(
     customerPhone: orderResult.data.customer_phone,
     customerEmail: orderResult.data.customer_email,
     notes: orderResult.data.notes,
+    paymentReceiptSubmissions: (receiptSubmissionsResult.data ?? []).map(mapPaymentReceiptSubmission),
     items: (orderItemsResult.data ?? []).map((item) => ({
       id: item.id,
       productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot),

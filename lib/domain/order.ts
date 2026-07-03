@@ -159,6 +159,7 @@ export type CustomerOrderDetail = {
   readonly customerPhone: string | null
   readonly customerEmail: string | null
   readonly notes: string | null
+  readonly paymentReceiptSubmissions: readonly PaymentReceiptSubmissionSummary[]
   readonly items: readonly CustomerOrderDetailItem[]
 }
 

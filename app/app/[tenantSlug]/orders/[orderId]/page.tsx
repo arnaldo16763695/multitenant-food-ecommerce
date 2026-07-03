@@ -53,6 +53,25 @@ function getCustomerPaymentStatusMessage(paymentStatus: string) {
   return null
 }
 
+function getReceiptSubmissionBadgeClasses(status: "pending" | "rejected" | "accepted") {
+  if (status === "accepted") {
+    return "bg-emerald-100 text-emerald-800"
+  }
+
+  if (status === "rejected") {
+    return "bg-amber-100 text-amber-800"
+  }
+
+  return "bg-stone-200 text-stone-700"
+}
+
+function formatReceiptSubmissionStatus(status: "pending" | "rejected" | "accepted") {
+  if (status === "accepted") return "Aceptado"
+  if (status === "rejected") return "Rechazado"
+
+  return "Pendiente"
+}
+
 export default async function StorefrontOrderPage({ params }: StorefrontOrderPageProps) {
   const { tenantSlug, orderId } = await params
   const customerContext = await getCustomerAccountContext()
@@ -70,6 +89,22 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
     order?.paymentReceiptImageUrl && adminClient
       ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.paymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
       : null
+  const paymentReceiptSubmissions =
+    order && adminClient
+      ? await Promise.all(
+          order.paymentReceiptSubmissions.map(async (submission, index) => {
+            const signedUrlResult = await adminClient.storage
+              .from(getPaymentProofsBucket())
+              .createSignedUrl(submission.receiptImagePath, 60 * 60)
+
+            return {
+              ...submission,
+              signedUrl: signedUrlResult.data?.signedUrl ?? null,
+              isCurrent: index === 0,
+            }
+          })
+        )
+      : []
 
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)">
@@ -125,7 +160,44 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
               </div>
             </div>
 
-            {paymentReceiptUrl ? (
+            {paymentReceiptSubmissions.length > 0 ? (
+              <div className="rounded-[1.5rem] border border-stone-200 p-5">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-500">Historial de comprobantes</h2>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  {paymentReceiptSubmissions.map((submission) => (
+                    <div
+                      key={submission.id}
+                      className={`rounded-[1.25rem] border p-4 ${submission.isCurrent ? "border-stone-200 bg-stone-50" : "border-amber-200 bg-amber-50/50"}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-stone-950">{submission.isCurrent ? "Comprobante actual" : "Intento anterior"}</p>
+                          <p className="mt-1 text-sm text-stone-500">Enviado: {new Date(submission.submittedAt).toLocaleString("es-MX")}</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getReceiptSubmissionBadgeClasses(submission.reviewStatus)}`}>
+                          {formatReceiptSubmissionStatus(submission.reviewStatus)}
+                        </span>
+                      </div>
+
+                      {submission.rejectionReason ? (
+                        <p className="mt-3 text-sm leading-6 text-amber-900">Motivo: {submission.rejectionReason}</p>
+                      ) : null}
+
+                      {submission.signedUrl ? (
+                        <Image
+                          alt={submission.isCurrent ? "Comprobante actual" : "Comprobante histórico"}
+                          className="mt-4 max-h-[22rem] rounded-[1rem] border border-stone-200 object-contain"
+                          height={720}
+                          src={submission.signedUrl}
+                          unoptimized
+                          width={1280}
+                        />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : paymentReceiptUrl ? (
               <div className="rounded-[1.5rem] border border-stone-200 p-5">
                 <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-500">Comprobante enviado</h2>
                 <Image
