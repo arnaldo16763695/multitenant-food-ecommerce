@@ -65,7 +65,11 @@ export async function POST(request: Request, context: PaymentProofRouteContext) 
   }
 
   const fileExtension = getFileExtension(paymentProofFile.name)
-  const paymentProofPath = buildPaymentProofImagePath(tenantResult.data.id, orderId, `receipt.${fileExtension}`)
+  const paymentProofPath = buildPaymentProofImagePath(
+    tenantResult.data.id,
+    orderId,
+    `receipt-${Date.now()}-${crypto.randomUUID()}.${fileExtension}`
+  )
   const uploadResult = await adminClient.storage
     .from(getPaymentProofsBucket())
     .upload(paymentProofPath, Buffer.from(await paymentProofFile.arrayBuffer()), {

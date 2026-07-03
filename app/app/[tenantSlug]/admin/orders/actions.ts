@@ -77,7 +77,7 @@ export async function rejectManualPaymentAction(tenantSlug: string, orderId: str
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await rejectManualPayment(supabase, access.membership.tenantId, orderId, rejectionReason)
+  const result = await rejectManualPayment(supabase, access.membership.tenantId, orderId, rejectionReason, access.profile.id)
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/admin/orders`)

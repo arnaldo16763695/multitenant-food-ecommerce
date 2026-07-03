@@ -53,6 +53,20 @@ function getOrderAssignmentLabel(order: {
   return "Sin asignar"
 }
 
+function getReceiptSubmissionBadgeVariant(status: "pending" | "rejected" | "accepted"): React.ComponentProps<typeof Badge>["variant"] {
+  if (status === "accepted") return "success"
+  if (status === "rejected") return "warning"
+
+  return "secondary"
+}
+
+function formatReceiptSubmissionStatus(status: "pending" | "rejected" | "accepted") {
+  if (status === "accepted") return "Aceptado"
+  if (status === "rejected") return "Rechazado"
+
+  return "Pendiente"
+}
+
 type AdminOrderDetailPageProps = {
   readonly params: Promise<{
     tenantSlug: string
@@ -75,10 +89,22 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
     order?.paymentReceiptImageUrl && adminClient
       ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.paymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
       : null
-  const previousPaymentReceiptUrl =
-    order?.previousPaymentReceiptImageUrl && adminClient
-      ? (await adminClient.storage.from(getPaymentProofsBucket()).createSignedUrl(order.previousPaymentReceiptImageUrl, 60 * 60)).data?.signedUrl ?? null
-      : null
+  const paymentReceiptSubmissions =
+    order && adminClient
+      ? await Promise.all(
+          order.paymentReceiptSubmissions.map(async (submission, index) => {
+            const signedUrlResult = await adminClient.storage
+              .from(getPaymentProofsBucket())
+              .createSignedUrl(submission.receiptImagePath, 60 * 60)
+
+            return {
+              ...submission,
+              signedUrl: signedUrlResult.data?.signedUrl ?? null,
+              isCurrent: index === 0,
+            }
+          })
+        )
+      : []
 
   return (
     <AdminPageShell
@@ -157,37 +183,62 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                 existingReason={order.paymentRejectionReason}
               />
 
-              {paymentReceiptUrl || previousPaymentReceiptUrl ? (
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {paymentReceiptUrl ? (
-                    <div className="rounded-[1rem] border border-border p-3.5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Comprobante actual</p>
-                      <p className="mt-1 text-sm text-card-foreground">Este es el comprobante vigente sobre el que debe tomarse la decisión.</p>
-                      <Image
-                        alt="Comprobante de pago actual"
-                        className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
-                        height={720}
-                        src={paymentReceiptUrl}
-                        unoptimized
-                        width={1280}
-                      />
-                    </div>
-                  ) : null}
+              {paymentReceiptSubmissions.length > 0 ? (
+                <div className="grid gap-3">
+                  <div>
+                    <p className="font-semibold text-card-foreground">Historial de comprobantes</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Cada reenvío queda guardado con su resultado de revisión para comparar la evolución del pago.</p>
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-2">
+                    {paymentReceiptSubmissions.map((submission) => (
+                      <div
+                        key={submission.id}
+                        className={`rounded-[1rem] border p-3.5 ${submission.isCurrent ? "border-border bg-white" : "border-amber-200 bg-amber-50/40"}`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              {submission.isCurrent ? "Comprobante actual" : "Intento anterior"}
+                            </p>
+                            <p className="mt-1 text-sm text-card-foreground">{formatManualPaymentMethod(submission.paymentMethod)}</p>
+                          </div>
+                          <Badge variant={getReceiptSubmissionBadgeVariant(submission.reviewStatus)}>
+                            {formatReceiptSubmissionStatus(submission.reviewStatus)}
+                          </Badge>
+                        </div>
 
-                  {previousPaymentReceiptUrl ? (
-                    <div className="rounded-[1rem] border border-amber-200 bg-amber-50/40 p-3.5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Comprobante anterior rechazado</p>
-                      <p className="mt-1 text-sm text-amber-900">Se conserva para comparar diferencias de monto, legibilidad o cuenta de destino.</p>
-                      <Image
-                        alt="Comprobante anterior rechazado"
-                        className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
-                        height={720}
-                        src={previousPaymentReceiptUrl}
-                        unoptimized
-                        width={1280}
-                      />
-                    </div>
-                  ) : null}
+                        <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                          <p>Enviado: {new Date(submission.submittedAt).toLocaleString("es-MX")}</p>
+                          {submission.reviewedAt ? <p>Revisado: {new Date(submission.reviewedAt).toLocaleString("es-MX")}</p> : null}
+                          {submission.reviewedByName ? <p>Revisó: {submission.reviewedByName}</p> : null}
+                          {submission.rejectionReason ? <p className="text-amber-900">Motivo: {submission.rejectionReason}</p> : null}
+                        </div>
+
+                        {submission.signedUrl ? (
+                          <Image
+                            alt={submission.isCurrent ? "Comprobante de pago actual" : "Comprobante de pago histórico"}
+                            className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
+                            height={720}
+                            src={submission.signedUrl}
+                            unoptimized
+                            width={1280}
+                          />
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : paymentReceiptUrl ? (
+                <div className="rounded-[1rem] border border-border p-3.5">
+                  <p className="font-semibold text-card-foreground">Comprobante de pago</p>
+                  <Image
+                    alt="Comprobante de pago"
+                    className="mt-3 max-h-[24rem] rounded-[0.9rem] border border-border object-contain"
+                    height={720}
+                    src={paymentReceiptUrl}
+                    unoptimized
+                    width={1280}
+                  />
                 </div>
               ) : null}
 

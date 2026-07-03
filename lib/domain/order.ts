@@ -172,6 +172,17 @@ export type AdminOrderDetailItem = {
   readonly notes: string | null
 }
 
+export type PaymentReceiptSubmissionSummary = {
+  readonly id: string
+  readonly paymentMethod: ManualPaymentMethod
+  readonly receiptImagePath: string
+  readonly reviewStatus: "pending" | "rejected" | "accepted"
+  readonly rejectionReason: string | null
+  readonly submittedAt: string
+  readonly reviewedAt: string | null
+  readonly reviewedByName: string | null
+}
+
 export type AdminOrderDetail = {
   readonly id: string
   readonly orderNumber: number
@@ -193,6 +204,7 @@ export type AdminOrderDetail = {
   readonly totalAmount: number
   readonly placedAt: string
   readonly notes: string | null
+  readonly paymentReceiptSubmissions: readonly PaymentReceiptSubmissionSummary[]
   readonly items: readonly AdminOrderDetailItem[]
 }
 

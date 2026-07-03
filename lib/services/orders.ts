@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -184,6 +184,28 @@ type PaymentReceiptRow = {
   rejection_reason: string | null
 }
 
+type PaymentRecordRow = {
+  id: string
+  payment_method: ManualPaymentMethod | null
+  receipt_image_path: string | null
+  receipt_submitted_at: string | null
+  status: PaymentStatus
+}
+
+type PaymentReceiptSubmissionRow = {
+  id: string
+  payment_method: ManualPaymentMethod
+  receipt_image_path: string
+  review_status: "pending" | "rejected" | "accepted"
+  rejection_reason: string | null
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by_profile_id: string | null
+  profiles: {
+    full_name: string | null
+  } | null
+}
+
 type TenantManualPaymentSettingsRow = {
   mobile_payment_instructions: string | null
   bank_transfer_instructions: string | null
@@ -191,6 +213,98 @@ type TenantManualPaymentSettingsRow = {
 
 function formatOrderItemProductName(productName: string, variantName?: string | null) {
   return variantName ? `${productName} · ${variantName}` : productName
+}
+
+async function getPaymentRecordForOrder(supabase: SupabaseClient, orderId: string): Promise<PaymentRecordRow | null> {
+  const paymentResult = await supabase
+    .from("payments")
+    .select("id, payment_method, receipt_image_path, receipt_submitted_at, status")
+    .eq("order_id", orderId)
+    .limit(1)
+    .maybeSingle<PaymentRecordRow>()
+
+  if (paymentResult.error || !paymentResult.data) {
+    return null
+  }
+
+  return paymentResult.data
+}
+
+async function createPaymentReceiptSubmission(
+  supabase: SupabaseClient,
+  input: {
+    readonly paymentId: string
+    readonly orderId: string
+    readonly paymentMethod: ManualPaymentMethod
+    readonly receiptImagePath: string
+    readonly submittedAt?: string
+  }
+) {
+  return supabase.from("payment_receipt_submissions").insert({
+    payment_id: input.paymentId,
+    order_id: input.orderId,
+    payment_method: input.paymentMethod,
+    receipt_image_path: input.receiptImagePath,
+    review_status: "pending",
+    submitted_at: input.submittedAt ?? new Date().toISOString(),
+  })
+}
+
+async function updateLatestPaymentReceiptSubmissionReview(
+  supabase: SupabaseClient,
+  input: {
+    readonly orderId: string
+    readonly reviewStatus: "accepted" | "rejected"
+    readonly rejectionReason?: string | null
+    readonly reviewedByProfileId?: string | null
+  }
+): Promise<{ ok: boolean; error?: string }> {
+  const submissionResult = await supabase
+    .from("payment_receipt_submissions")
+    .select("id")
+    .eq("order_id", input.orderId)
+    .eq("review_status", "pending")
+    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (submissionResult.error) {
+    return { ok: false, error: submissionResult.error.message }
+  }
+
+  if (!submissionResult.data) {
+    return { ok: true }
+  }
+
+  const updateResult = await supabase
+    .from("payment_receipt_submissions")
+    .update({
+      review_status: input.reviewStatus,
+      rejection_reason: input.reviewStatus === "rejected" ? input.rejectionReason?.trim() || null : null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by_profile_id: input.reviewedByProfileId ?? null,
+    })
+    .eq("id", submissionResult.data.id)
+
+  if (updateResult.error) {
+    return { ok: false, error: updateResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+function mapPaymentReceiptSubmission(row: PaymentReceiptSubmissionRow): PaymentReceiptSubmissionSummary {
+  return {
+    id: row.id,
+    paymentMethod: row.payment_method,
+    receiptImagePath: row.receipt_image_path,
+    reviewStatus: row.review_status,
+    rejectionReason: row.rejection_reason,
+    submittedAt: row.submitted_at,
+    reviewedAt: row.reviewed_at,
+    reviewedByName: row.profiles?.full_name?.trim() || null,
+  }
 }
 
 export async function getTenantManualPaymentSettingsBySlug(
@@ -222,13 +336,20 @@ export async function attachManualPaymentReceipt(
     readonly receiptImagePath: string
   }
 ): Promise<{ ok: boolean; error?: string }> {
+  const payment = await getPaymentRecordForOrder(supabase, orderId)
+
+  if (!payment) {
+    return { ok: false, error: "No encontramos el pago asociado a la orden." }
+  }
+
+  const submittedAt = new Date().toISOString()
   const updateResult = await supabase
     .from("payments")
     .update({
       provider: "manual",
       payment_method: input.paymentMethod,
       receipt_image_path: input.receiptImagePath,
-      receipt_submitted_at: new Date().toISOString(),
+      receipt_submitted_at: submittedAt,
       rejection_reason: null,
       rejected_at: null,
     })
@@ -238,6 +359,18 @@ export async function attachManualPaymentReceipt(
     return { ok: false, error: updateResult.error.message }
   }
 
+  const submissionInsertResult = await createPaymentReceiptSubmission(supabase, {
+    paymentId: payment.id,
+    orderId,
+    paymentMethod: input.paymentMethod,
+    receiptImagePath: input.receiptImagePath,
+    submittedAt,
+  })
+
+  if (submissionInsertResult.error) {
+    return { ok: false, error: submissionInsertResult.error.message }
+  }
+
   return { ok: true }
 }
 
@@ -245,7 +378,8 @@ export async function rejectManualPayment(
   supabase: SupabaseClient,
   tenantId: string,
   orderId: string,
-  rejectionReason: string
+  rejectionReason: string,
+  reviewedByProfileId?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
   const normalizedReason = rejectionReason.trim()
 
@@ -280,6 +414,17 @@ export async function rejectManualPayment(
 
   if (paymentUpdateResult.error) {
     return { ok: false, error: paymentUpdateResult.error.message }
+  }
+
+  const submissionReviewResult = await updateLatestPaymentReceiptSubmissionReview(supabase, {
+    orderId,
+    reviewStatus: "rejected",
+    rejectionReason: normalizedReason,
+    reviewedByProfileId,
+  })
+
+  if (!submissionReviewResult.ok) {
+    return submissionReviewResult
   }
 
   const orderUpdateResult = await supabase
@@ -328,27 +473,20 @@ export async function replaceCustomerManualPaymentReceipt(
     return { ok: false, error: "Solo puedes actualizar el comprobante mientras la orden siga pendiente de pago." }
   }
 
-  const currentPaymentResult = await supabase
-    .from("payments")
-    .select("receipt_image_path, receipt_submitted_at, status")
-    .eq("order_id", input.orderId)
-    .limit(1)
-    .maybeSingle<{ receipt_image_path: string | null; receipt_submitted_at: string | null; status: PaymentStatus }>()
+  const currentPaymentResult = await getPaymentRecordForOrder(supabase, input.orderId)
 
-  if (currentPaymentResult.error || !currentPaymentResult.data) {
+  if (!currentPaymentResult) {
     return { ok: false, error: "No encontramos el pago asociado a esta orden." }
   }
 
-  const shouldPreservePreviousReceipt = currentPaymentResult.data.status === "failed" && Boolean(currentPaymentResult.data.receipt_image_path)
+  const submittedAt = new Date().toISOString()
   const paymentUpdateResult = await supabase
     .from("payments")
     .update({
       status: "pending",
       payment_method: input.paymentMethod,
-      previous_receipt_image_path: shouldPreservePreviousReceipt ? currentPaymentResult.data.receipt_image_path : null,
-      previous_receipt_submitted_at: shouldPreservePreviousReceipt ? currentPaymentResult.data.receipt_submitted_at : null,
       receipt_image_path: input.receiptImagePath,
-      receipt_submitted_at: new Date().toISOString(),
+      receipt_submitted_at: submittedAt,
       rejection_reason: null,
       rejected_at: null,
     })
@@ -356,6 +494,18 @@ export async function replaceCustomerManualPaymentReceipt(
 
   if (paymentUpdateResult.error) {
     return { ok: false, error: paymentUpdateResult.error.message }
+  }
+
+  const submissionInsertResult = await createPaymentReceiptSubmission(supabase, {
+    paymentId: currentPaymentResult.id,
+    orderId: input.orderId,
+    paymentMethod: input.paymentMethod,
+    receiptImagePath: input.receiptImagePath,
+    submittedAt,
+  })
+
+  if (submissionInsertResult.error) {
+    return { ok: false, error: submissionInsertResult.error.message }
   }
 
   const orderUpdateResult = await supabase
@@ -640,6 +790,20 @@ type AdminOrderDetailItemRow = {
   unit_price_snapshot: number
   line_total: number
   notes: string | null
+}
+
+type AdminOrderPaymentReceiptSubmissionRow = {
+  id: string
+  payment_method: ManualPaymentMethod
+  receipt_image_path: string
+  review_status: "pending" | "rejected" | "accepted"
+  rejection_reason: string | null
+  submitted_at: string
+  reviewed_at: string | null
+  reviewed_by_profile_id: string | null
+  profiles: {
+    full_name: string | null
+  } | null
 }
 
 export type AdminOverviewMetrics = {
@@ -1228,6 +1392,18 @@ export async function updateAdminOrderStatus(
     return { ok: false, error: "La orden cambió mientras intentábamos actualizarla. Vuelve a intentarlo." }
   }
 
+  if (currentStatus === "pending_payment" && nextStatus === "confirmed") {
+    const submissionReviewResult = await updateLatestPaymentReceiptSubmissionReview(supabase, {
+      orderId,
+      reviewStatus: "accepted",
+      reviewedByProfileId: changedByProfileId ?? null,
+    })
+
+    if (!submissionReviewResult.ok) {
+      return submissionReviewResult
+    }
+  }
+
   return { ok: true }
 }
 
@@ -1368,7 +1544,15 @@ export async function getAdminOrderDetail(
     .eq("order_id", orderId)
     .returns<AdminOrderDetailItemRow[]>()
 
-  if (itemsResult.error) {
+  const receiptSubmissionsResult = await supabase
+    .from("payment_receipt_submissions")
+    .select("id, payment_method, receipt_image_path, review_status, rejection_reason, submitted_at, reviewed_at, reviewed_by_profile_id, profiles(full_name)")
+    .eq("order_id", orderId)
+    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
+
+  if (itemsResult.error || receiptSubmissionsResult.error) {
     return null
   }
 
@@ -1402,6 +1586,7 @@ export async function getAdminOrderDetail(
     totalAmount: Number(orderResult.data.total_amount),
     placedAt: orderResult.data.placed_at,
     notes: orderResult.data.notes,
+    paymentReceiptSubmissions: (receiptSubmissionsResult.data ?? []).map(mapPaymentReceiptSubmission),
     items: (itemsResult.data ?? []).map((item) => ({
       id: item.id,
       productName: formatOrderItemProductName(item.product_name_snapshot, item.variant_name_snapshot),
