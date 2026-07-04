@@ -121,13 +121,13 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-3 2xl:grid-cols-4">
         {visibleItems.map((item) => (
           <article
             key={item.id}
-            className="group flex h-full flex-col rounded-[1.9rem] border border-stone-200 bg-white p-6 shadow-[0_18px_50px_rgba(28,25,23,0.06)] transition hover:-translate-y-1.5 hover:shadow-[0_28px_70px_rgba(28,25,23,0.12)]"
+            className="group flex h-full flex-col rounded-[1.35rem] border border-stone-200 bg-white p-3 shadow-[0_12px_32px_rgba(28,25,23,0.06)] transition hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(28,25,23,0.1)] sm:rounded-[1.7rem] sm:p-5"
           >
-            <div className="mb-5 flex aspect-[5/4] items-center justify-center overflow-hidden rounded-[1.5rem] border border-stone-200 bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.18),_transparent_38%),linear-gradient(180deg,_#f5f5f4_0%,_#fafaf9_100%)] p-4">
+            <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-[1rem] border border-stone-200 bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.18),_transparent_38%),linear-gradient(180deg,_#f5f5f4_0%,_#fafaf9_100%)] p-2.5 sm:mb-4 sm:aspect-[5/4] sm:rounded-[1.35rem] sm:p-4">
               {item.imageUrl ? (
                 <Image
                   alt={item.name}
@@ -140,28 +140,30 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
               ) : null}
             </div>
             <div className="flex flex-1 flex-col">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 break-words text-xl font-semibold tracking-tight text-stone-950">{item.name}</p>
+                  <p className="line-clamp-2 break-words text-sm font-semibold tracking-tight text-stone-950 sm:text-lg xl:text-xl">{item.name}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-orange-100 px-3.5 py-1.5 text-sm font-semibold text-orange-700">{item.hasVariants ? `Desde ${item.basePrice}` : item.basePrice}</span>
+                <span className="w-fit shrink-0 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700 sm:px-3.5 sm:py-1.5 sm:text-sm">
+                  {item.hasVariants ? `Desde ${item.basePrice}` : item.basePrice}
+                </span>
               </div>
               <div className="min-w-0">
-                <p className="mt-2 line-clamp-3 text-sm leading-7 text-stone-600">{item.description}</p>
+                <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-stone-600 sm:mt-2 sm:text-sm sm:leading-6">{item.description}</p>
               </div>
-              <div className="mt-6 flex flex-col gap-3">
-                <p className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{item.category}</p>
+              <div className="mt-4 flex flex-1 flex-col justify-end gap-2.5 sm:mt-5 sm:gap-3">
+                <p className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-400 sm:text-xs sm:tracking-[0.24em]">{item.category}</p>
                 {customerSession ? (
                   <Button
-                    size="lg"
-                    className="w-full rounded-full border-orange-600 bg-orange-600 px-5 text-white hover:bg-orange-500 hover:text-white"
+                    size="sm"
+                    className="h-9 w-full rounded-full border-orange-600 bg-orange-600 px-3 text-xs text-white hover:bg-orange-500 hover:text-white sm:h-11 sm:px-5 sm:text-sm"
                     onClick={() => setSheetProductId(item.id)}
                   >
                     <ShoppingBag />
                     Agregar
                   </Button>
                 ) : (
-                  <Button asChild size="lg" className="w-full rounded-full border-stone-950 bg-stone-950 px-5 text-white hover:bg-orange-600 hover:text-white">
+                  <Button asChild size="sm" className="h-9 w-full rounded-full border-stone-950 bg-stone-950 px-3 text-xs text-white hover:bg-orange-600 hover:text-white sm:h-11 sm:px-5 sm:text-sm">
                     <Link href={loginHref}>
                       <ShoppingBag />
                       Agregar
