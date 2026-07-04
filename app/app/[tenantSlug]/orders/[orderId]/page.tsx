@@ -83,7 +83,7 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
   }
 
   const order = adminClient
-    ? await getCustomerOrderDetail(adminClient, tenantSlug, customerContext.customer.id, orderId)
+    ? await getCustomerOrderDetail(adminClient, tenantSlug, customerContext.customer.id, orderId, customerContext.customer.email)
     : null
   const paymentSettings = adminClient ? await getTenantManualPaymentSettingsBySlug(adminClient, tenantSlug) : null
   const paymentReceiptUrl =

@@ -698,14 +698,19 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   }
 }
 
-export async function getCustomerOrders(supabase: SupabaseClient, tenantSlug: string, customerId: string): Promise<readonly CustomerOrderSummary[]> {
+export async function getCustomerOrders(
+  supabase: SupabaseClient,
+  tenantSlug: string,
+  customerId: string,
+  customerEmail?: string | null
+): Promise<readonly CustomerOrderSummary[]> {
   const tenantResult = await supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>()
 
   if (tenantResult.error || !tenantResult.data) {
     return []
   }
 
-  const ordersResult = await supabase
+  const ordersByCustomerIdResult = await supabase
     .from("orders")
     .select("id, order_number, status, fulfillment_type, total_amount, placed_at")
     .eq("tenant_id", tenantResult.data.id)
@@ -713,11 +718,35 @@ export async function getCustomerOrders(supabase: SupabaseClient, tenantSlug: st
     .order("placed_at", { ascending: false })
     .returns<CustomerOrderRow[]>()
 
-  if (ordersResult.error) {
+  const normalizedCustomerEmail = customerEmail?.trim().toLowerCase() ?? ""
+  const ordersByEmailResult = normalizedCustomerEmail
+    ? await supabase
+        .from("orders")
+        .select("id, order_number, status, fulfillment_type, total_amount, placed_at")
+        .eq("tenant_id", tenantResult.data.id)
+        .is("customer_id", null)
+        .eq("customer_email", normalizedCustomerEmail)
+        .order("placed_at", { ascending: false })
+        .returns<CustomerOrderRow[]>()
+    : { data: [], error: null }
+
+  if (ordersByCustomerIdResult.error || ordersByEmailResult.error) {
     return []
   }
 
-  const orders = ordersResult.data ?? []
+  const orderMap = new Map<string, CustomerOrderRow>()
+
+  for (const order of ordersByCustomerIdResult.data ?? []) {
+    orderMap.set(order.id, order)
+  }
+
+  for (const order of ordersByEmailResult.data ?? []) {
+    orderMap.set(order.id, order)
+  }
+
+  const orders = [...orderMap.values()].sort(
+    (left, right) => new Date(right.placed_at).getTime() - new Date(left.placed_at).getTime()
+  )
   const orderIds = orders.map((order) => order.id)
 
   const orderItemsResult = orderIds.length
@@ -1638,7 +1667,8 @@ export async function getCustomerOrderDetail(
   supabase: SupabaseClient,
   tenantSlug: string,
   customerId: string,
-  orderId: string
+  orderId: string,
+  customerEmail?: string | null
 ): Promise<CustomerOrderDetail | null> {
   const tenantResult = await supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>()
 
@@ -1646,7 +1676,7 @@ export async function getCustomerOrderDetail(
     return null
   }
 
-  const orderResult = await supabase
+  const orderByCustomerIdResult = await supabase
     .from("orders")
     .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
     .eq("tenant_id", tenantResult.data.id)
@@ -1654,6 +1684,21 @@ export async function getCustomerOrderDetail(
     .eq("id", orderId)
     .limit(1)
     .maybeSingle<CustomerOrderDetailRow>()
+
+  const normalizedCustomerEmail = customerEmail?.trim().toLowerCase() ?? ""
+  const orderResult = orderByCustomerIdResult.data
+    ? orderByCustomerIdResult
+    : normalizedCustomerEmail
+      ? await supabase
+          .from("orders")
+          .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
+          .eq("tenant_id", tenantResult.data.id)
+          .is("customer_id", null)
+          .eq("customer_email", normalizedCustomerEmail)
+          .eq("id", orderId)
+          .limit(1)
+          .maybeSingle<CustomerOrderDetailRow>()
+      : orderByCustomerIdResult
 
   if (orderResult.error || !orderResult.data) {
     return null

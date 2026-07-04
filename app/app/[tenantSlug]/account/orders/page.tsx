@@ -17,7 +17,9 @@ export default async function StorefrontOrdersPage({ params }: StorefrontOrdersP
   const { tenantSlug } = await params
   const customerContext = await getCustomerAccountContext()
   const adminClient = createSupabaseAdminClient()
-  const customerOrders = customerContext && adminClient ? await getCustomerOrders(adminClient, tenantSlug, customerContext.customer.id) : []
+  const customerOrders = customerContext && adminClient
+    ? await getCustomerOrders(adminClient, tenantSlug, customerContext.customer.id, customerContext.customer.email)
+    : []
 
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)">

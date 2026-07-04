@@ -25,7 +25,7 @@ export async function GET(_request: Request, context: OrderDetailRouteContext) {
     return NextResponse.json({ error: "Supabase admin client is not configured." }, { status: 500 })
   }
 
-  const order = await getCustomerOrderDetail(adminClient, tenantSlug, customerContext.customer.id, orderId)
+  const order = await getCustomerOrderDetail(adminClient, tenantSlug, customerContext.customer.id, orderId, customerContext.customer.email)
 
   if (!order) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 })
