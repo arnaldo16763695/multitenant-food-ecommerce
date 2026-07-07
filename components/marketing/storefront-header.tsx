@@ -2,11 +2,12 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ChevronDown, House, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { ArrowLeft, ChevronDown, House, LogIn, LogOut, MapPinned, ReceiptText, ShoppingBag, UserRound } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
 
 import { TenantBrandMark } from "@/components/branding/tenant-brand-mark"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { useShoppingBagCount } from "@/lib/storefront/bag-store"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
+import { cn } from "@/lib/utils"
 
 type StorefrontHeaderProps = {
   readonly tenantSlug: string
@@ -30,15 +32,29 @@ type StorefrontHeaderProps = {
 }
 
 export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, branchId, branchLabel, customerSession, initialBagCount = 0 }: StorefrontHeaderProps) {
+  const pathname = usePathname()
   const router = useRouter()
   const liveCartItemsCount = useShoppingBagCount(tenantSlug, branchId ?? "", initialBagCount)
   const [isBagAnimating, setIsBagAnimating] = React.useState(false)
   const [isSigningOut, setIsSigningOut] = React.useState(false)
+  const [isExitDialogOpen, setIsExitDialogOpen] = React.useState(false)
   const previousCountRef = React.useRef(liveCartItemsCount)
   const homeHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const bagHref = branchId ? `/app/${tenantSlug}/bag?branch=${branchId}` : `/app/${tenantSlug}/bag`
   const ordersHref = `/app/${tenantSlug}/account/orders`
   const accountHref = `/app/${tenantSlug}/account`
+  const isHomeActive = pathname === `/app/${tenantSlug}`
+  const isBagActive = pathname === `/app/${tenantSlug}/bag`
+  const isOrdersActive = pathname === ordersHref
+  const isAccountActive = pathname.startsWith(accountHref) && !isOrdersActive
+
+  function getMobileNavLinkClassName(isActive: boolean, extraClassName?: string) {
+    return cn(
+      "flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950",
+      isActive && "bg-orange-50 text-orange-600",
+      extraClassName
+    )
+  }
 
   React.useEffect(() => {
     if (liveCartItemsCount > previousCountRef.current) {
@@ -145,32 +161,44 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
       </header>
 
       <nav className="fixed right-0 bottom-0 left-0 z-40 md:hidden" aria-label="Navegacion principal movil">
-        <div className="grid grid-cols-4 border-t border-stone-950/10 bg-white/92 px-4 py-2 shadow-[0_-12px_30px_rgba(120,53,15,0.12)] backdrop-blur">
-          <Link
+        <div className="grid grid-cols-5 border-t border-stone-950/10 bg-white/92 px-4 py-2 shadow-[0_-12px_30px_rgba(120,53,15,0.12)] backdrop-blur">
+          <button
+            type="button"
             className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            aria-label="Salir al sitio principal"
+            onClick={() => setIsExitDialogOpen(true)}
+          >
+            <ArrowLeft className="size-4.5" />
+          </button>
+          <Link
+            className={getMobileNavLinkClassName(isAccountActive)}
             href={accountHref}
             aria-label="Mi perfil"
+            aria-current={isAccountActive ? "page" : undefined}
           >
             <UserRound className="size-4.5" />
           </Link>
           <Link
-            className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            className={getMobileNavLinkClassName(isHomeActive)}
             href={homeHref}
             aria-label="Inicio"
+            aria-current={isHomeActive ? "page" : undefined}
           >
             <House className="size-4.5" />
           </Link>
           <Link
-            className="flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950"
+            className={getMobileNavLinkClassName(isOrdersActive)}
             href={ordersHref}
             aria-label="Mis pedidos"
+            aria-current={isOrdersActive ? "page" : undefined}
           >
             <ReceiptText className="size-4.5" />
           </Link>
           <Link
-            className={`relative flex h-11 items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-950/5 hover:text-stone-950 ${isBagAnimating ? "animate-bag-attention text-orange-600" : ""}`}
+            className={getMobileNavLinkClassName(isBagActive, `relative ${isBagAnimating ? "animate-bag-attention text-orange-600" : ""}`)}
             href={bagHref}
             aria-label="Bolsa"
+            aria-current={isBagActive ? "page" : undefined}
           >
             <ShoppingBag className="size-4.5" />
             <span className={`absolute top-1.5 right-1.5 min-w-4 rounded-full px-1 text-center text-[10px] font-semibold text-white ${isBagAnimating ? "bg-orange-600" : "bg-stone-950"}`}>
@@ -179,6 +207,28 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
           </Link>
         </div>
       </nav>
+
+      <Dialog open={isExitDialogOpen} onOpenChange={setIsExitDialogOpen}>
+        <DialogContent className="w-[min(92vw,460px)]">
+          <DialogHeader>
+            <DialogTitle>¿Salir de esta tienda?</DialogTitle>
+            <DialogDescription>Vas a salir de {brandName} y volver al directorio de marcas de VZ Food.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsExitDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setIsExitDialogOpen(false)
+                router.push("/brands")
+              }}
+            >
+              Salir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
