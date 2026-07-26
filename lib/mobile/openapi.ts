@@ -133,6 +133,53 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
           },
         },
+        MobileHomeHeroBanner: {
+          type: "object",
+          required: ["id", "title", "subtitle", "imageUrl", "tenantSlug", "branchId", "ctaLabel", "ctaHref"],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            subtitle: { type: "string" },
+            imageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            tenantSlug: { type: "string" },
+            branchId: buildNullableSchema({ type: "string", format: "uuid" }),
+            ctaLabel: { type: "string" },
+            ctaHref: { type: "string" },
+          },
+        },
+        MobileHomeBrand: {
+          type: "object",
+          required: ["id", "name", "slug", "cuisine", "headline", "etaMinutes", "heroImageUrl", "logoImageUrl", "storefrontHref"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            slug: { type: "string" },
+            cuisine: { type: "string" },
+            headline: { type: "string" },
+            etaMinutes: { type: "integer" },
+            heroImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            logoImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            storefrontHref: { type: "string" },
+          },
+        },
+        MobileHomeResponse: {
+          type: "object",
+          required: ["heroBanners", "nearbyBranches", "featuredBrands"],
+          properties: {
+            heroBanners: {
+              type: "array",
+              items: buildSchemaRef("MobileHomeHeroBanner"),
+            },
+            nearbyBranches: {
+              type: "array",
+              items: buildSchemaRef("NearbyBranch"),
+            },
+            featuredBrands: {
+              type: "array",
+              items: buildSchemaRef("MobileHomeBrand"),
+            },
+          },
+        },
         NearbyBranchTenant: {
           type: "object",
           required: ["id", "name", "slug", "logoImageUrl", "heroImageUrl", "cuisine"],
@@ -609,6 +656,47 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
               content: {
                 "application/json": {
                   schema: buildSchemaRef("BrandsResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/home": {
+        get: {
+          tags: ["Marketplace"],
+          operationId: "getMobileHome",
+          summary: "Return the mobile home payload with featured brands and nearby branches",
+          parameters: [
+            {
+              name: "lat",
+              in: "query",
+              required: false,
+              schema: { type: "number", format: "double" },
+              description: "Customer latitude. Must be sent together with lng.",
+            },
+            {
+              name: "lng",
+              in: "query",
+              required: false,
+              schema: { type: "number", format: "double" },
+              description: "Customer longitude. Must be sent together with lat.",
+            },
+          ],
+          responses: {
+            200: {
+              description: "Mobile home payload.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("MobileHomeResponse"),
+                },
+              },
+            },
+            400: {
+              description: "Invalid GPS coordinates request.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
                 },
               },
             },
