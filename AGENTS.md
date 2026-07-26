@@ -33,11 +33,11 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 
 ## Tests
 
-- There is currently no dedicated test runner configured in `package.json`.
-- Do not claim tests passed unless you actually added and ran a real test setup.
-- If you add a test framework later, update this file immediately.
-- Single-test command: not available yet because no test runner is configured.
-- If Vitest is added later, prefer `npx vitest run path/to/test-file.test.ts`.
+- Primary test runner: `Vitest`.
+- Run the full suite once: `npm run test`
+- Run tests in watch mode: `npm run test:watch`
+- Run a single test file: `npm run test:file -- path/to/test-file.test.ts`
+- Do not claim tests passed unless you actually ran them.
 - If Jest is added later, prefer `npx jest path/to/test-file.test.ts`.
 - If Playwright is added later, prefer `npx playwright test path/to/spec.ts`.
 
