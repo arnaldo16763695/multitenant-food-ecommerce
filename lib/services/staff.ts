@@ -18,6 +18,78 @@ type BranchRow = {
   name: string
   is_active: boolean
   hero_image_url: string | null
+  address_line_1: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country_code: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+type LegacyBranchRow = {
+  id: string
+  name: string
+  is_active: boolean
+  hero_image_url: string | null
+}
+
+type BranchMembershipBranchRow = {
+  id: string
+  name: string
+  hero_image_url: string | null
+  address_line_1: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country_code: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+type LegacyBranchMembershipBranchRow = {
+  id: string
+  name: string
+  hero_image_url: string | null
+}
+
+function isMissingBranchLocationColumnError(errorMessage: string) {
+  return errorMessage.includes("branches.address_line_1")
+}
+
+function mapBranchOption(branch: BranchRow | LegacyBranchRow): StaffBranchOption {
+  return {
+    id: branch.id,
+    name: branch.name,
+    isActive: branch.is_active,
+    heroImageUrl: branch.hero_image_url,
+    addressLine1: "address_line_1" in branch ? branch.address_line_1 : null,
+    city: "city" in branch ? branch.city : null,
+    state: "state" in branch ? branch.state : null,
+    postalCode: "postal_code" in branch ? branch.postal_code : null,
+    countryCode: "country_code" in branch ? branch.country_code : null,
+    latitude: "latitude" in branch ? branch.latitude : null,
+    longitude: "longitude" in branch ? branch.longitude : null,
+  }
+}
+
+function mapMembershipBranchOption(assignment: {
+  branch_id: string
+  branches: BranchMembershipBranchRow | LegacyBranchMembershipBranchRow | null
+}): StaffBranchOption {
+  return {
+    id: assignment.branch_id,
+    name: assignment.branches?.name ?? "Sucursal",
+    isActive: true,
+    heroImageUrl: assignment.branches?.hero_image_url ?? null,
+    addressLine1: assignment.branches && "address_line_1" in assignment.branches ? assignment.branches.address_line_1 : null,
+    city: assignment.branches && "city" in assignment.branches ? assignment.branches.city : null,
+    state: assignment.branches && "state" in assignment.branches ? assignment.branches.state : null,
+    postalCode: assignment.branches && "postal_code" in assignment.branches ? assignment.branches.postal_code : null,
+    countryCode: assignment.branches && "country_code" in assignment.branches ? assignment.branches.country_code : null,
+    latitude: assignment.branches && "latitude" in assignment.branches ? assignment.branches.latitude : null,
+    longitude: assignment.branches && "longitude" in assignment.branches ? assignment.branches.longitude : null,
+  }
 }
 
 type MembershipRow = {
@@ -71,21 +143,31 @@ export function canManageStaff(role: string) {
 export async function getStaffBranches(supabase: SupabaseClient, tenantId: string): Promise<readonly StaffBranchOption[]> {
   const branchesResult = await supabase
     .from("branches")
-    .select("id, name, is_active, hero_image_url")
+    .select("id, name, is_active, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
     .eq("tenant_id", tenantId)
     .order("name", { ascending: true })
     .returns<BranchRow[]>()
 
   if (branchesResult.error) {
+    if (isMissingBranchLocationColumnError(branchesResult.error.message)) {
+      const legacyBranchesResult = await supabase
+        .from("branches")
+        .select("id, name, is_active, hero_image_url")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true })
+        .returns<LegacyBranchRow[]>()
+
+      if (legacyBranchesResult.error) {
+        throw new Error(legacyBranchesResult.error.message)
+      }
+
+      return (legacyBranchesResult.data ?? []).map(mapBranchOption)
+    }
+
     throw new Error(branchesResult.error.message)
   }
 
-  return (branchesResult.data ?? []).map((branch) => ({
-    id: branch.id,
-    name: branch.name,
-    isActive: branch.is_active,
-    heroImageUrl: branch.hero_image_url,
-  }))
+  return (branchesResult.data ?? []).map(mapBranchOption)
 }
 
 export async function getActiveBranchIdsForMembership(
@@ -112,22 +194,51 @@ export async function getActiveBranchesForMembership(
 ): Promise<readonly StaffBranchOption[]> {
   const branchMembershipsResult = await supabase
     .from("branch_memberships")
-    .select("branch_id, branches!inner(id, name, hero_image_url)")
+    .select("branch_id, branches!inner(id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude)")
     .eq("tenant_membership_id", membershipId)
     .eq("is_active", true)
-    .returns<{ branch_id: string; branches: { id: string; name: string; hero_image_url: string | null } | null }[]>()
+    .returns<{
+      branch_id: string
+      branches: {
+        id: string
+        name: string
+        hero_image_url: string | null
+        address_line_1: string | null
+        city: string | null
+        state: string | null
+        postal_code: string | null
+        country_code: string | null
+        latitude: number | null
+        longitude: number | null
+      } | null
+    }[]>()
 
   if (branchMembershipsResult.error) {
+    if (isMissingBranchLocationColumnError(branchMembershipsResult.error.message)) {
+      const legacyBranchMembershipsResult = await supabase
+        .from("branch_memberships")
+        .select("branch_id, branches!inner(id, name, hero_image_url)")
+        .eq("tenant_membership_id", membershipId)
+        .eq("is_active", true)
+        .returns<{
+          branch_id: string
+          branches: LegacyBranchMembershipBranchRow | null
+        }[]>()
+
+      if (legacyBranchMembershipsResult.error) {
+        throw new Error(legacyBranchMembershipsResult.error.message)
+      }
+
+      return (legacyBranchMembershipsResult.data ?? [])
+        .map(mapMembershipBranchOption)
+        .sort((left, right) => left.name.localeCompare(right.name))
+    }
+
     throw new Error(branchMembershipsResult.error.message)
   }
 
   return (branchMembershipsResult.data ?? [])
-    .map((assignment) => ({
-      id: assignment.branch_id,
-      name: assignment.branches?.name ?? "Sucursal",
-      isActive: true,
-      heroImageUrl: assignment.branches?.hero_image_url ?? null,
-    }))
+    .map(mapMembershipBranchOption)
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 

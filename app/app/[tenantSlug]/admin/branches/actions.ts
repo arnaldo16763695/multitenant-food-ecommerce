@@ -11,6 +11,38 @@ type UpdateBranchStorefrontHeroResult = {
   readonly error?: string
 }
 
+function parseOptionalCoordinate(value: FormDataEntryValue | null, label: string) {
+  const normalizedValue = String(value ?? "").trim()
+
+  if (!normalizedValue) {
+    return { ok: true as const, value: null }
+  }
+
+  const parsedValue = Number(normalizedValue)
+
+  if (!Number.isFinite(parsedValue)) {
+    return { ok: false as const, error: `${label} debe ser un numero valido.` }
+  }
+
+  return { ok: true as const, value: parsedValue }
+}
+
+function getBranchLocationConstraintMessage(errorMessage: string) {
+  if (errorMessage.includes("branches_coordinates_presence_check")) {
+    return "La sucursal debe guardar latitud y longitud juntas."
+  }
+
+  if (errorMessage.includes("branches_latitude_range_check")) {
+    return "La latitud debe estar entre -90 y 90."
+  }
+
+  if (errorMessage.includes("branches_longitude_range_check")) {
+    return "La longitud debe estar entre -180 y 180."
+  }
+
+  return null
+}
+
 function canManageBranchStorefront(role: string) {
   return role === "owner" || role === "manager" || role === "branch_manager"
 }
@@ -69,6 +101,33 @@ export async function updateBranchStorefrontHeroAction(
   }
 
   const heroImageUrl = String(formData.get("heroImageUrl") ?? "").trim()
+  const addressLine1 = String(formData.get("addressLine1") ?? "").trim()
+  const city = String(formData.get("city") ?? "").trim()
+  const state = String(formData.get("state") ?? "").trim()
+  const postalCode = String(formData.get("postalCode") ?? "").trim()
+  const countryCode = String(formData.get("countryCode") ?? "").trim().toUpperCase()
+  const latitudeResult = parseOptionalCoordinate(formData.get("latitude"), "La latitud")
+  const longitudeResult = parseOptionalCoordinate(formData.get("longitude"), "La longitud")
+
+  if (!latitudeResult.ok) {
+    return { ok: false, error: latitudeResult.error }
+  }
+
+  if (!longitudeResult.ok) {
+    return { ok: false, error: longitudeResult.error }
+  }
+
+  if ((latitudeResult.value == null) !== (longitudeResult.value == null)) {
+    return { ok: false, error: "La sucursal debe guardar latitud y longitud juntas." }
+  }
+
+  if (latitudeResult.value != null && (latitudeResult.value < -90 || latitudeResult.value > 90)) {
+    return { ok: false, error: "La latitud debe estar entre -90 y 90." }
+  }
+
+  if (longitudeResult.value != null && (longitudeResult.value < -180 || longitudeResult.value > 180)) {
+    return { ok: false, error: "La longitud debe estar entre -180 y 180." }
+  }
 
   if (heroImageUrl) {
     try {
@@ -86,6 +145,13 @@ export async function updateBranchStorefrontHeroAction(
     .from("branches")
     .update({
       hero_image_url: heroImageUrl || null,
+      address_line_1: addressLine1 || null,
+      city: city || null,
+      state: state || null,
+      postal_code: postalCode || null,
+      country_code: countryCode || null,
+      latitude: latitudeResult.value,
+      longitude: longitudeResult.value,
     })
     .eq("id", branchId)
     .eq("tenant_id", access.membership.tenantId)
@@ -94,7 +160,13 @@ export async function updateBranchStorefrontHeroAction(
     .maybeSingle<{ id: string }>()
 
   if (updateResult.error || !updateResult.data) {
-    return { ok: false, error: updateResult.error?.message ?? "No pudimos guardar el hero de la sucursal." }
+    return {
+      ok: false,
+      error:
+        (updateResult.error?.message ? getBranchLocationConstraintMessage(updateResult.error.message) : null) ??
+        updateResult.error?.message ??
+        "No pudimos guardar la configuracion de la sucursal.",
+    }
   }
 
   const currentHeroPath = getCatalogMediaPathFromUrl(branchResult.data.hero_image_url)

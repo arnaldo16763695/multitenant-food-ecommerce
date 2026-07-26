@@ -27,6 +27,13 @@ export type StaffBranchOption = {
   readonly name: string
   readonly isActive: boolean
   readonly heroImageUrl: string | null
+  readonly addressLine1: string | null
+  readonly city: string | null
+  readonly state: string | null
+  readonly postalCode: string | null
+  readonly countryCode: string | null
+  readonly latitude: number | null
+  readonly longitude: number | null
 }
 
 export type StaffMutationResult = {

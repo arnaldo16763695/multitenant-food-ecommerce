@@ -200,6 +200,20 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Before proposing database changes, inspect the latest Supabase migrations and the remote schema snapshot instead of inferring the schema from application code alone.
 - When adding a new Supabase migration, keep the CLI-generated filename prefix intact. A filename like `20260413_000014_name.sql` is invalid for version tracking because Supabase will parse only the segment before the first underscore.
 
+## Mobile API Boundary
+
+- Native mobile (`Android`/`iOS`) is `customer-only`. Do not build mobile API scope for `admin`, `kitchen`, `platform`, or `staff` unless the product requirement explicitly changes.
+- `Admin`, `kitchen`, `platform`, and staff workflows remain `web-only` surfaces even if they share lower-level services with the mobile API.
+- Mobile API scope includes `marketplace`, `storefront`, `customer auth`, `bag`, `checkout`, and `customer orders`.
+- The mobile marketplace must support a home/discovery experience and nearby branch discovery. Nearby discovery is `GPS-first` and should return `branches`, not only brands, because branch selection determines operational fulfillment.
+- Do not fake proximity by picking the first active branch. If nearby behavior is requested, specify the real location source, fallback behavior, and distance calculation strategy.
+- Mobile clients must authenticate with `Supabase` access tokens sent as `Authorization: Bearer <token>`. Do not rely on SSR cookies, browser redirects, `window.location`, or Server Actions as the contract for native apps.
+- Customer-facing mobile capabilities should be exposed through stable `/api/...` endpoints with JSON responses and explicit tenant/branch scope. Do not leave mobile-only behavior trapped behind Server Actions.
+- When adding mobile endpoints, keep admin-only permissions and data out of customer payloads even if the underlying service function is shared.
+- Swagger is installed for the native mobile contract. The OpenAPI JSON lives at `/api/mobile/openapi` and the Swagger UI lives at `/mobile-api-docs`.
+- When adding, removing, or changing any `/api/mobile/...` endpoint, update `lib/mobile/openapi.ts` in the same change so Flutter always has an accurate contract.
+- Keep the Swagger contract limited to the customer mobile surface. Do not document admin, kitchen, platform, or staff-only endpoints in the mobile spec.
+
 ## Editing Rules
 
 - Match the existing formatting style in nearby files.

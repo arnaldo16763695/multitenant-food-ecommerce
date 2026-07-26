@@ -27,6 +27,13 @@ type BranchStorefrontItem = {
   readonly name: string
   readonly isActive: boolean
   readonly heroImageUrl: string | null
+  readonly addressLine1: string | null
+  readonly city: string | null
+  readonly state: string | null
+  readonly postalCode: string | null
+  readonly countryCode: string | null
+  readonly latitude: number | null
+  readonly longitude: number | null
 }
 
 type AdminBranchStorefrontSettingsProps = {
@@ -39,6 +46,13 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   const router = useRouter()
   const [selectedBranch, setSelectedBranch] = React.useState<BranchStorefrontItem | null>(null)
   const [heroImageUrl, setHeroImageUrl] = React.useState("")
+  const [addressLine1, setAddressLine1] = React.useState("")
+  const [city, setCity] = React.useState("")
+  const [state, setState] = React.useState("")
+  const [postalCode, setPostalCode] = React.useState("")
+  const [countryCode, setCountryCode] = React.useState("")
+  const [latitude, setLatitude] = React.useState("")
+  const [longitude, setLongitude] = React.useState("")
   const [heroPreviewUrl, setHeroPreviewUrl] = React.useState<string | null>(null)
   const [selectedHeroFile, setSelectedHeroFile] = React.useState<File | null>(null)
   const [errorMessage, setErrorMessage] = React.useState("")
@@ -48,6 +62,13 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   function openDialog(branch: BranchStorefrontItem) {
     setSelectedBranch(branch)
     setHeroImageUrl(branch.heroImageUrl ?? "")
+    setAddressLine1(branch.addressLine1 ?? "")
+    setCity(branch.city ?? "")
+    setState(branch.state ?? "")
+    setPostalCode(branch.postalCode ?? "")
+    setCountryCode(branch.countryCode ?? "")
+    setLatitude(branch.latitude?.toString() ?? "")
+    setLongitude(branch.longitude?.toString() ?? "")
     setHeroPreviewUrl(branch.heroImageUrl ?? null)
     setSelectedHeroFile(null)
     setErrorMessage("")
@@ -57,6 +78,13 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   function closeDialog() {
     setSelectedBranch(null)
     setHeroImageUrl("")
+    setAddressLine1("")
+    setCity("")
+    setState("")
+    setPostalCode("")
+    setCountryCode("")
+    setLatitude("")
+    setLongitude("")
     setHeroPreviewUrl(null)
     setSelectedHeroFile(null)
     setErrorMessage("")
@@ -115,6 +143,13 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       }
 
       formData.set("heroImageUrl", nextHeroImageUrl)
+      formData.set("addressLine1", addressLine1.trim())
+      formData.set("city", city.trim())
+      formData.set("state", state.trim())
+      formData.set("postalCode", postalCode.trim())
+      formData.set("countryCode", countryCode.trim().toUpperCase())
+      formData.set("latitude", latitude.trim())
+      formData.set("longitude", longitude.trim())
 
       const result = await updateBranchStorefrontHeroAction(tenantSlug, selectedBranch.id, formData)
 
@@ -124,11 +159,28 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       }
 
       setHeroImageUrl(nextHeroImageUrl)
+      setAddressLine1(addressLine1.trim())
+      setCity(city.trim())
+      setState(state.trim())
+      setPostalCode(postalCode.trim())
+      setCountryCode(countryCode.trim().toUpperCase())
+      setLatitude(latitude.trim())
+      setLongitude(longitude.trim())
       setHeroPreviewUrl(nextHeroImageUrl || null)
       setSelectedHeroFile(null)
-      setSuccessMessage("Hero de sucursal actualizado.")
+      setSuccessMessage("Configuracion de sucursal actualizada.")
       router.refresh()
     })
+  }
+
+  function formatBranchLocation(branch: BranchStorefrontItem) {
+    const parts = [branch.addressLine1, branch.city, branch.state].filter(Boolean)
+
+    if (!parts.length) {
+      return "Ubicacion pendiente de configurar"
+    }
+
+    return parts.join(" · ")
   }
 
   return (
@@ -181,6 +233,15 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                       {branch.heroImageUrl ? "Esta sucursal usa un hero propio." : "Esta sucursal usa el hero general del tenant como fallback."}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Ubicacion</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{formatBranchLocation(branch)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {branch.latitude != null && branch.longitude != null
+                        ? `${branch.latitude.toFixed(6)}, ${branch.longitude.toFixed(6)}`
+                        : "Sin coordenadas GPS"}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex flex-col justify-between gap-3">
@@ -197,7 +258,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       </Card>
 
       <Dialog open={Boolean(selectedBranch)} onOpenChange={(nextOpen) => (!nextOpen ? closeDialog() : undefined)}>
-        <DialogContent className="max-w-3xl rounded-[1.25rem]">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-[1.25rem] p-6 sm:p-7">
           <DialogHeader>
             <DialogTitle>Hero por sucursal</DialogTitle>
             <DialogDescription>
@@ -230,6 +291,48 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                 <span className="font-medium text-card-foreground">Subir nueva imagen</span>
                 <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
               </label>
+
+              <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
+                <p className="text-sm font-semibold text-foreground">Ubicacion para mobile</p>
+
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Direccion</span>
+                  <Input value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} placeholder="Av. Principal 123" />
+                </label>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Ciudad</span>
+                    <Input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Monterrey" />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Estado</span>
+                    <Input value={state} onChange={(event) => setState(event.target.value)} placeholder="Nuevo Leon" />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Codigo postal</span>
+                    <Input value={postalCode} onChange={(event) => setPostalCode(event.target.value)} placeholder="64000" />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Pais</span>
+                    <Input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} placeholder="MX" maxLength={2} />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Latitud</span>
+                    <Input value={latitude} onChange={(event) => setLatitude(event.target.value)} placeholder="25.686614" inputMode="decimal" />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Longitud</span>
+                    <Input value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="-100.316113" inputMode="decimal" />
+                  </label>
+                </div>
+              </div>
 
               {errorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
               {successMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
