@@ -6,12 +6,13 @@ export type AdminSection =
   | "orders"
   | "branches"
   | "staff"
+  | "audit"
   | "settings"
   | "kitchen"
 
 const ROLE_SECTION_ACCESS: Record<TenantRole, readonly AdminSection[]> = {
-  owner: ["overview", "catalog", "orders", "branches", "staff", "settings", "kitchen"],
-  manager: ["overview", "catalog", "orders", "branches", "staff", "settings", "kitchen"],
+  owner: ["overview", "catalog", "orders", "branches", "staff", "audit", "settings", "kitchen"],
+  manager: ["overview", "catalog", "orders", "branches", "staff", "audit", "settings", "kitchen"],
   branch_manager: ["overview", "catalog", "orders", "branches", "staff", "kitchen"],
   cashier: ["overview", "orders"],
   preparer: ["kitchen"],

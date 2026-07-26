@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -216,6 +217,11 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
       description="Gestiona reglas de seleccion y opciones disponibles para el storefront configurable."
       badge={`${filteredModifierGroups.length} grupos`}
       density="compact"
+      actions={
+        <Button asChild variant="outline" className="h-9 rounded-lg px-3 text-sm">
+          <Link href={`/app/${tenantSlug}/admin/audit?entity=catalog_modifier_group`}>Auditoria de modificadores</Link>
+        </Button>
+      }
     >
       <Card>
         <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-center lg:justify-between">

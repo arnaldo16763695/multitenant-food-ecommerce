@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput } from "@/lib/domain/catalog"
+import { buildAuditActor } from "@/lib/services/audit"
 import {
   createCatalogProduct,
   createCatalogProductWithOptions,
@@ -120,7 +121,15 @@ export async function createProductAction(tenantSlug: string, payload: CatalogPr
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await createCatalogProduct(supabase, access.membership.tenantId, payload)
+  const auditActor = buildAuditActor({
+    surface: "admin",
+    profileId: access.profile.id,
+    membershipId: access.membership.id,
+    name: access.profile.fullName,
+    role: access.membership.role,
+  })
+
+  const result = await createCatalogProduct(supabase, access.membership.tenantId, payload, auditActor)
 
   if (result.ok) {
     revalidateCatalogPaths(tenantSlug)
@@ -164,7 +173,14 @@ export async function createProductWithImageAction(tenantSlug: string, formData:
       ...payload,
       primaryImagePath,
     },
-    productId ? { productId } : undefined
+    productId ? { productId } : undefined,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
   )
 
   if (result.ok) {
@@ -183,13 +199,32 @@ export async function updateProductAction(productId: string, tenantSlug: string,
   }
 
   const result = canManageCatalogMaster(access.membership.role)
-    ? await updateCatalogProduct(supabase, access.membership.tenantId, productId, payload)
+    ? await updateCatalogProduct(
+        supabase,
+        access.membership.tenantId,
+        productId,
+        payload,
+        buildAuditActor({
+          surface: "admin",
+          profileId: access.profile.id,
+          membershipId: access.membership.id,
+          name: access.profile.fullName,
+          role: access.membership.role,
+        })
+      )
     : await updateCatalogProductBranchOverrides(
         supabase,
         access.membership.tenantId,
         productId,
         payload.branchOverrides ?? [],
-        await getActiveBranchIdsForMembership(supabase, access.membership.id)
+        await getActiveBranchIdsForMembership(supabase, access.membership.id),
+        buildAuditActor({
+          surface: "admin",
+          profileId: access.profile.id,
+          membershipId: access.membership.id,
+          name: access.profile.fullName,
+          role: access.membership.role,
+        })
       )
 
   if (result.ok) {
@@ -225,13 +260,27 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     ? await updateCatalogProduct(supabase, access.membership.tenantId, productId, {
         ...payload,
         primaryImagePath,
-      })
+      },
+      buildAuditActor({
+        surface: "admin",
+        profileId: access.profile.id,
+        membershipId: access.membership.id,
+        name: access.profile.fullName,
+        role: access.membership.role,
+      }))
     : await updateCatalogProductBranchOverrides(
         supabase,
         access.membership.tenantId,
         productId,
         payload.branchOverrides ?? [],
-        await getActiveBranchIdsForMembership(supabase, access.membership.id)
+        await getActiveBranchIdsForMembership(supabase, access.membership.id),
+        buildAuditActor({
+          surface: "admin",
+          profileId: access.profile.id,
+          membershipId: access.membership.id,
+          name: access.profile.fullName,
+          role: access.membership.role,
+        })
       )
 
   if (result.ok) {
@@ -254,7 +303,19 @@ export async function toggleProductStatusAction(productId: string, tenantSlug: s
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await toggleCatalogProductStatus(supabase, access.membership.tenantId, productId, currentStatus)
+  const result = await toggleCatalogProductStatus(
+    supabase,
+    access.membership.tenantId,
+    productId,
+    currentStatus,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidateCatalogPaths(tenantSlug)
@@ -276,7 +337,18 @@ export async function duplicateProductAction(productId: string, tenantSlug: stri
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await duplicateCatalogProduct(supabase, access.membership.tenantId, productId)
+  const result = await duplicateCatalogProduct(
+    supabase,
+    access.membership.tenantId,
+    productId,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidateCatalogPaths(tenantSlug)

@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { AdminBranchStorefrontSettings } from "@/components/admin/admin-branch-storefront-settings"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,6 +58,14 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
       title="Storefronts por sucursal"
       description="Desde aqui puedes abrir y compartir el link publico de cada sucursal. Cada URL entra al storefront del tenant con la sucursal ya seleccionada para que el cliente vea disponibilidad y precio reales por branch."
       badge={`${branches.length} sucursales visibles`}
+      actions={
+        <Link
+          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+          href={`/app/${tenantSlug}/admin/audit?entity=branch`}
+        >
+          Ver auditoria de sucursales
+        </Link>
+      }
     >
       <section className="grid gap-4 md:grid-cols-3">
         <Card>

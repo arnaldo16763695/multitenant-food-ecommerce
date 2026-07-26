@@ -448,6 +448,11 @@ export function AdminCatalogProducts({
       description="Vista principal compacta para operar el CRUD de productos, revisar estado, precio base y overrides por sucursal sin perder densidad util."
       badge={`${filteredProducts.length} productos visibles`}
       density="compact"
+      actions={
+        <Button asChild variant="outline" className="h-9 rounded-lg px-3 text-sm">
+          <Link href={`/app/${tenantSlug}/admin/audit?entity=catalog_product`}>Auditoria de productos</Link>
+        </Button>
+      }
     >
       <section>
         <Card>

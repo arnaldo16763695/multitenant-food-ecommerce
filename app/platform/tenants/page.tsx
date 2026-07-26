@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Building2, Store } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -51,10 +52,15 @@ export default async function PlatformTenantsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-2">
-            <Building2 className="size-5 text-orange-700" />
-            Tenants del SaaS
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="inline-flex items-center gap-2">
+              <Building2 className="size-5 text-orange-700" />
+              Tenants del SaaS
+            </CardTitle>
+            <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href="/platform/audit?entity=platform_tenant">
+              Ver auditoria de tenants
+            </Link>
+          </div>
           <CardDescription>Vista global de las empresas registradas y su estado operativo base.</CardDescription>
         </CardHeader>
         <CardContent>

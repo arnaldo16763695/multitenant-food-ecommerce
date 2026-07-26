@@ -1,6 +1,7 @@
 import { mobileError, mobileJson } from "@/lib/mobile/api"
 import { authenticateMobileCustomerRequest } from "@/lib/mobile/customer"
 import type { CheckoutBagItemInput, ManualPaymentMethod } from "@/lib/domain/order"
+import { buildAuditActor } from "@/lib/services/audit"
 import { attachManualPaymentReceipt, createStorefrontOrder } from "@/lib/services/orders"
 import { clearCustomerBranchBag } from "@/lib/services/customer-bag"
 import { buildPaymentProofImagePath, getFileExtension, getPaymentProofsBucket } from "@/lib/supabase/storage"
@@ -85,6 +86,11 @@ export async function POST(request: Request, context: MobileCheckoutRouteContext
       email,
       notes,
     },
+    auditActor: buildAuditActor({
+      surface: "mobile_api",
+      profileId: authResult.customerContext.profile.id,
+      name: authResult.customerContext.customer.fullName ?? authResult.customerContext.profile.fullName,
+    }),
   })
 
   if (!result.ok || !result.orderId) {
@@ -125,6 +131,11 @@ export async function POST(request: Request, context: MobileCheckoutRouteContext
   const attachResult = await attachManualPaymentReceipt(authResult.adminClient, result.orderId, {
     paymentMethod,
     receiptImagePath: paymentProofPath,
+    auditActor: buildAuditActor({
+      surface: "mobile_api",
+      profileId: authResult.customerContext.profile.id,
+      name: authResult.customerContext.customer.fullName ?? authResult.customerContext.profile.fullName,
+    }),
   })
 
   if (!attachResult.ok) {

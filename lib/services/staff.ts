@@ -12,6 +12,8 @@ import type {
 } from "@/lib/domain/staff"
 import { isManageableStaffRole } from "@/lib/domain/staff"
 import { sendStaffInvitationEmail } from "@/lib/email/staff-invitations"
+import type { AuditActor } from "@/lib/services/audit"
+import { writeAuditEvent } from "@/lib/services/audit"
 
 type BranchRow = {
   id: string
@@ -138,6 +140,22 @@ function buildTemporaryPassword() {
 
 export function canManageStaff(role: string) {
   return role === "owner" || role === "manager"
+}
+
+async function getBranchNamesByIds(supabase: SupabaseClient, branchIds: readonly string[]) {
+  if (!branchIds.length) {
+    return [] as string[]
+  }
+
+  const branchesResult = await supabase.from("branches").select("id, name").in("id", [...branchIds]).returns<{ id: string; name: string }[]>()
+
+  if (branchesResult.error) {
+    return [] as string[]
+  }
+
+  const branchNameMap = new Map((branchesResult.data ?? []).map((branch) => [branch.id, branch.name]))
+
+  return branchIds.map((branchId) => branchNameMap.get(branchId) ?? branchId)
 }
 
 export async function getStaffBranches(supabase: SupabaseClient, tenantId: string): Promise<readonly StaffBranchOption[]> {
@@ -371,6 +389,7 @@ export async function createStaffMember(
     readonly email: string
     readonly role: ManageableStaffRole
     readonly branchIds: readonly string[]
+    readonly auditActor?: AuditActor
   }
 ): Promise<StaffMutationResult> {
   const normalizedEmail = normalizeEmail(input.email)
@@ -475,6 +494,31 @@ export async function createStaffMember(
     return { ok: false, error: branchMembershipsResult.error.message }
   }
 
+  const branchNames = await getBranchNamesByIds(adminClient, branchIds)
+
+  await writeAuditEvent(adminClient, {
+    tenantId,
+    branchId: branchIds[0] ?? null,
+    actor: input.auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "staff_member",
+    entityId: membershipResult.data.id,
+    action: "staff.created",
+    summary: `Se creó el staff ${normalizedName} con rol ${input.role}.`,
+    afterData: {
+      membershipId: membershipResult.data.id,
+      fullName: normalizedName,
+      email: normalizedEmail,
+      role: input.role,
+      isActive: true,
+      branchIds,
+      branchNames,
+    },
+    metadata: {
+      membershipId: membershipResult.data.id,
+      branchCount: branchIds.length,
+    },
+  })
+
   const emailResult = await sendStaffInvitationEmail({
     email: normalizedEmail,
     fullName: normalizedName,
@@ -497,6 +541,7 @@ export async function updateStaffMember(
     readonly role: ManageableStaffRole
     readonly branchIds: readonly string[]
     readonly isActive: boolean
+    readonly auditActor?: AuditActor
   }
 ): Promise<StaffMutationResult> {
   const normalizedName = input.fullName.trim()
@@ -512,11 +557,11 @@ export async function updateStaffMember(
 
   const membershipResult = await adminClient
     .from("tenant_memberships")
-    .select("id, profile_id, role, is_active")
+    .select("id, profile_id, role, is_active, profiles(full_name, email)")
     .eq("id", membershipId)
     .eq("tenant_id", tenantId)
     .limit(1)
-    .maybeSingle<MembershipIdentityRow & { profile_id: string }>()
+    .maybeSingle<MembershipIdentityRow & { profile_id: string; profiles: { full_name: string | null; email: string | null } | null }>()
 
   if (membershipResult.error || !membershipResult.data) {
     return { ok: false, error: membershipResult.error?.message ?? "No encontramos el miembro del staff." }
@@ -561,6 +606,8 @@ export async function updateStaffMember(
 
   const existingBranchIds = new Set((existingAssignmentsResult.data ?? []).map((assignment) => assignment.branch_id))
   const selectedBranchIds = new Set(branchIds)
+  const selectedBranchNames = await getBranchNamesByIds(adminClient, branchIds)
+  const existingBranchNames = await getBranchNamesByIds(adminClient, [...existingBranchIds])
 
   const branchesToUpsert = branchIds.map((branchId) => ({
     branch_id: branchId,
@@ -593,6 +640,36 @@ export async function updateStaffMember(
     }
   }
 
+  await writeAuditEvent(adminClient, {
+    tenantId,
+    branchId: branchIds[0] ?? null,
+    actor: input.auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "staff_member",
+    entityId: membershipId,
+    action: "staff.updated",
+    summary: `Se actualizó el staff ${normalizedName}.`,
+    beforeData: {
+      fullName: membershipResult.data.profiles?.full_name ?? null,
+      email: membershipResult.data.profiles?.email ?? null,
+      role: membershipResult.data.role,
+      isActive: membershipResult.data.is_active,
+      branchIds: [...existingBranchIds],
+      branchNames: existingBranchNames,
+    },
+    afterData: {
+      fullName: normalizedName,
+      email: membershipResult.data.profiles?.email ?? null,
+      role: input.role,
+      isActive: input.isActive,
+      branchIds,
+      branchNames: selectedBranchNames,
+    },
+    metadata: {
+      membershipId,
+      deactivatedBranchIds: branchIdsToDeactivate,
+    },
+  })
+
   return {
     ok: true,
     delivery: "none",
@@ -603,15 +680,16 @@ export async function setStaffMemberActiveState(
   adminClient: SupabaseClient,
   tenantId: string,
   membershipId: string,
-  nextIsActive: boolean
+  nextIsActive: boolean,
+  auditActor?: AuditActor
 ): Promise<StaffMutationResult> {
   const membershipResult = await adminClient
     .from("tenant_memberships")
-    .select("id, role")
+    .select("id, role, is_active, profile_id, profiles(full_name, email)")
     .eq("id", membershipId)
     .eq("tenant_id", tenantId)
     .limit(1)
-    .maybeSingle<MembershipIdentityRow>()
+    .maybeSingle<MembershipIdentityRow & { profile_id: string; profiles: { full_name: string | null; email: string | null } | null }>()
 
   if (membershipResult.error || !membershipResult.data) {
     return { ok: false, error: membershipResult.error?.message ?? "No encontramos el miembro del staff." }
@@ -642,6 +720,28 @@ export async function setStaffMemberActiveState(
   if (branchMembershipUpdateResult.error) {
     return { ok: false, error: branchMembershipUpdateResult.error.message }
   }
+
+  await writeAuditEvent(adminClient, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "staff_member",
+    entityId: membershipId,
+    action: "staff.active_state_updated",
+    summary: `Se ${nextIsActive ? "activó" : "desactivó"} el acceso de ${membershipResult.data.profiles?.full_name?.trim() || "staff"}.`,
+    beforeData: {
+      isActive: membershipResult.data.is_active,
+      role: membershipResult.data.role,
+    },
+    afterData: {
+      isActive: nextIsActive,
+      role: membershipResult.data.role,
+    },
+    metadata: {
+      membershipId,
+      profileId: membershipResult.data.profile_id,
+      email: membershipResult.data.profiles?.email ?? null,
+    },
+  })
 
   return { ok: true, delivery: "none" }
 }

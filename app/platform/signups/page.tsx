@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { ClipboardList } from "lucide-react"
 
 import { PlatformSignupRowActions } from "@/components/platform/platform-signup-row-actions"
@@ -54,10 +55,15 @@ export default async function PlatformSignupsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-2">
-            <ClipboardList className="size-5 text-orange-700" />
-            Solicitudes de negocio
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="inline-flex items-center gap-2">
+              <ClipboardList className="size-5 text-orange-700" />
+              Solicitudes de negocio
+            </CardTitle>
+            <Link className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950" href="/platform/audit?entity=platform_signup">
+              Ver auditoria de signups
+            </Link>
+          </div>
           <CardDescription>
             Entrada comercial para nuevos tenants. Desde aqui luego puedes conectar el provisioning automatico.
           </CardDescription>

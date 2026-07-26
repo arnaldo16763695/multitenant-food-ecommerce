@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { AdminOrderPaymentReview } from "@/components/admin/admin-order-payment-review"
+import { getAdminAuditEvents } from "@/lib/services/audit"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus } from "@/lib/domain/order"
 import { getAdminOrderDetail } from "@/lib/services/orders"
 import { formatModifierSelectionLabel } from "@/lib/storefront/modifier-display"
@@ -14,6 +15,7 @@ import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 function getOrderBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
@@ -106,6 +108,25 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           })
         )
       : []
+  const orderAuditEvents = order
+    ? await getAdminAuditEvents(supabase, access.membership.tenantId, {
+        entityType: "order",
+        entityId: orderId,
+        limit: 25,
+      })
+    : null
+
+  const paymentAuditEvents = order
+    ? await getAdminAuditEvents(supabase, access.membership.tenantId, {
+        entityType: "order_payment",
+        entityId: orderId,
+        limit: 25,
+      })
+    : null
+
+  const auditEvents = [...(orderAuditEvents?.items ?? []), ...(paymentAuditEvents?.items ?? [])].sort(
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+  )
 
   return (
     <AdminPageShell
@@ -168,6 +189,40 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
 
               <div className="rounded-[1rem] border border-stone-200 bg-stone-50/80 p-3.5 text-sm leading-6 text-stone-600">
                 En este MVP, la confirmación de la orden también valida manualmente el pago. Una vez confirmada, la orden puede avanzar al flujo de cocina.
+              </div>
+
+              <div className="rounded-[1rem] border border-border p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-card-foreground">Auditoría de esta orden</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Historial operativo de estado, asignación y revisión de pago.</p>
+                  </div>
+                  <Link
+                    className="rounded-full border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+                    href={`/app/${tenantSlug}/admin/audit?entityId=${encodeURIComponent(orderId)}`}
+                  >
+                    Ver auditoría completa
+                  </Link>
+                </div>
+
+                {auditEvents.length ? (
+                  <div className="mt-4 grid gap-3">
+                    {auditEvents.slice(0, 8).map((event) => (
+                      <div key={event.id} className="rounded-[0.95rem] border border-border bg-secondary/20 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{event.entityType === "order_payment" ? "Pago" : "Orden"}</Badge>
+                          <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{event.action}</span>
+                        </div>
+                        <p className="mt-2 text-sm font-medium text-card-foreground">{event.summary}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {event.actorName ?? "Sistema"} · <LocalizedDateTime value={event.createdAt} />
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-muted-foreground">Todavía no hay eventos auditados para esta orden.</p>
+                )}
               </div>
 
               {order.paymentRejectionReason ? (

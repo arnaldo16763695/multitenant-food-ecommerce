@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import type { AuditActor } from "@/lib/services/audit"
 import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import { writeAuditEvent } from "@/lib/services/audit"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -216,8 +218,41 @@ type TenantManualPaymentSettingsRow = {
   bank_transfer_instructions: string | null
 }
 
+type OrderAuditRow = {
+  id: string
+  tenant_id: string
+  branch_id: string
+  order_number: number
+  status: OrderStatus
+  payment_status: PaymentStatus
+  assigned_tenant_membership_id: string | null
+}
+
 function formatOrderItemProductName(productName: string, variantName?: string | null) {
   return variantName ? `${productName} · ${variantName}` : productName
+}
+
+function getOrderAuditLabel(orderNumber: number) {
+  return `orden #${orderNumber}`
+}
+
+function getOrderHistorySource(actor?: AuditActor | null) {
+  return actor?.surface === "kitchen" ? "kitchen" : "admin"
+}
+
+async function getOrderAuditRow(supabase: SupabaseClient, orderId: string): Promise<OrderAuditRow | null> {
+  const orderResult = await supabase
+    .from("orders")
+    .select("id, tenant_id, branch_id, order_number, status, payment_status, assigned_tenant_membership_id")
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<OrderAuditRow>()
+
+  if (orderResult.error || !orderResult.data) {
+    return null
+  }
+
+  return orderResult.data
 }
 
 async function getPaymentRecordForOrder(supabase: SupabaseClient, orderId: string): Promise<PaymentRecordRow | null> {
@@ -339,11 +374,13 @@ export async function attachManualPaymentReceipt(
   input: {
     readonly paymentMethod: ManualPaymentMethod
     readonly receiptImagePath: string
+    readonly auditActor?: AuditActor
   }
 ): Promise<{ ok: boolean; error?: string }> {
   const payment = await getPaymentRecordForOrder(supabase, orderId)
+  const order = await getOrderAuditRow(supabase, orderId)
 
-  if (!payment) {
+  if (!payment || !order) {
     return { ok: false, error: "No encontramos el pago asociado a la orden." }
   }
 
@@ -376,6 +413,32 @@ export async function attachManualPaymentReceipt(
     return { ok: false, error: submissionInsertResult.error.message }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId: order.tenant_id,
+    branchId: order.branch_id,
+    actor: input.auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "system" },
+    entityType: "order_payment",
+    entityId: order.id,
+    action: "payment.receipt_submitted",
+    summary: `Se adjuntó comprobante para la ${getOrderAuditLabel(order.order_number)}.`,
+    beforeData: {
+      paymentStatus: payment.status,
+      paymentMethod: payment.payment_method,
+      receiptImagePath: payment.receipt_image_path,
+      receiptSubmittedAt: payment.receipt_submitted_at,
+    },
+    afterData: {
+      paymentStatus: order.payment_status,
+      paymentMethod: input.paymentMethod,
+      receiptImagePath: input.receiptImagePath,
+      receiptSubmittedAt: submittedAt,
+    },
+    metadata: {
+      orderId: order.id,
+      orderNumber: order.order_number,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -384,7 +447,8 @@ export async function rejectManualPayment(
   tenantId: string,
   orderId: string,
   rejectionReason: string,
-  reviewedByProfileId?: string | null
+  reviewedByProfileId?: string | null,
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   const normalizedReason = rejectionReason.trim()
 
@@ -394,11 +458,11 @@ export async function rejectManualPayment(
 
   const orderResult = await supabase
     .from("orders")
-    .select("id, status")
+    .select("id, branch_id, order_number, status, payment_status")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ id: string; status: OrderStatus }>()
+    .maybeSingle<{ id: string; branch_id: string; order_number: number; status: OrderStatus; payment_status: PaymentStatus }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden." }
@@ -442,6 +506,29 @@ export async function rejectManualPayment(
     return { ok: false, error: orderUpdateResult.error.message }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: orderResult.data.branch_id,
+    actor: auditActor ?? { profileId: reviewedByProfileId ?? null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "order_payment",
+    entityId: orderId,
+    action: "payment.rejected",
+    summary: `Se rechazó el comprobante de la ${getOrderAuditLabel(orderResult.data.order_number)}.`,
+    beforeData: {
+      orderStatus: orderResult.data.status,
+      paymentStatus: orderResult.data.payment_status,
+    },
+    afterData: {
+      orderStatus: orderResult.data.status,
+      paymentStatus: "failed",
+      rejectionReason: normalizedReason,
+    },
+    metadata: {
+      orderId,
+      orderNumber: orderResult.data.order_number,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -453,6 +540,7 @@ export async function replaceCustomerManualPaymentReceipt(
     readonly orderId: string
     readonly paymentMethod: ManualPaymentMethod
     readonly receiptImagePath: string
+    readonly auditActor?: AuditActor
   }
 ): Promise<{ ok: boolean; error?: string }> {
   const tenantResult = await supabase.from("tenants").select("id").eq("slug", input.tenantSlug).limit(1).maybeSingle<TenantRow>()
@@ -463,12 +551,12 @@ export async function replaceCustomerManualPaymentReceipt(
 
   const orderResult = await supabase
     .from("orders")
-    .select("id, status")
+    .select("id, branch_id, order_number, status, payment_status")
     .eq("tenant_id", tenantResult.data.id)
     .eq("customer_id", input.customerId)
     .eq("id", input.orderId)
     .limit(1)
-    .maybeSingle<{ id: string; status: OrderStatus }>()
+    .maybeSingle<{ id: string; branch_id: string; order_number: number; status: OrderStatus; payment_status: PaymentStatus }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden dentro de tu cuenta." }
@@ -523,10 +611,40 @@ export async function replaceCustomerManualPaymentReceipt(
     return { ok: false, error: orderUpdateResult.error.message }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId: tenantResult.data.id,
+    branchId: orderResult.data.branch_id,
+    actor: input.auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "storefront" },
+    entityType: "order_payment",
+    entityId: input.orderId,
+    action: "payment.receipt_resubmitted",
+    summary: `Se reenvio el comprobante de la ${getOrderAuditLabel(orderResult.data.order_number)}.`,
+    beforeData: {
+      paymentStatus: currentPaymentResult.status,
+      paymentMethod: currentPaymentResult.payment_method,
+      receiptImagePath: currentPaymentResult.receipt_image_path,
+    },
+    afterData: {
+      paymentStatus: "pending",
+      paymentMethod: input.paymentMethod,
+      receiptImagePath: input.receiptImagePath,
+      receiptSubmittedAt: submittedAt,
+    },
+    metadata: {
+      orderId: input.orderId,
+      orderNumber: orderResult.data.order_number,
+    },
+  })
+
   return { ok: true }
 }
 
-export async function createStorefrontOrder(supabase: SupabaseClient, input: CreateOrderInput): Promise<CreateOrderResult> {
+export async function createStorefrontOrder(
+  supabase: SupabaseClient,
+  input: CreateOrderInput & {
+    readonly auditActor?: AuditActor
+  }
+): Promise<CreateOrderResult> {
   if (!input.items.length) {
     return { ok: false, error: "La bolsa está vacía." }
   }
@@ -690,6 +808,32 @@ export async function createStorefrontOrder(supabase: SupabaseClient, input: Cre
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: orderResult.error?.message ?? "No pudimos crear la orden." }
   }
+
+  await writeAuditEvent(supabase, {
+    tenantId: tenantResult.data.id,
+    branchId: branchResult.data.id,
+    actor: input.auditActor ?? { profileId: null, membershipId: null, name: input.customer.fullName.trim() || null, role: null, surface: "storefront" },
+    entityType: "order",
+    entityId: orderResult.data.order_id,
+    action: "order.created",
+    summary: `Se creó la ${getOrderAuditLabel(orderResult.data.order_number)} desde ${input.auditActor?.surface === "mobile_api" ? "mobile" : "storefront"}.`,
+    afterData: {
+      orderNumber: orderResult.data.order_number,
+      branchId: branchResult.data.id,
+      branchName: branchResult.data.name,
+      status: "pending_payment",
+      fulfillmentType: input.fulfillmentType,
+      totalAmount: Number(subtotal.toFixed(2)),
+      itemCount: input.items.length,
+      customerId: input.customerId ?? null,
+    },
+    metadata: {
+      orderId: orderResult.data.order_id,
+      orderNumber: orderResult.data.order_number,
+      branchName: branchResult.data.name,
+      channel: input.auditActor?.surface === "mobile_api" ? "mobile_api" : "storefront",
+    },
+  })
 
   return {
     ok: true,
@@ -1182,14 +1326,14 @@ async function getKitchenOrderAssignment(
   supabase: SupabaseClient,
   tenantId: string,
   orderId: string
-): Promise<{ assignedMembershipId: string | null; status: OrderStatus; branchId: string } | null> {
+): Promise<{ assignedMembershipId: string | null; status: OrderStatus; branchId: string; orderNumber: number } | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("assigned_tenant_membership_id, status, branch_id")
+    .select("assigned_tenant_membership_id, status, branch_id, order_number")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ assigned_tenant_membership_id: string | null; status: OrderStatus; branch_id: string }>()
+    .maybeSingle<{ assigned_tenant_membership_id: string | null; status: OrderStatus; branch_id: string; order_number: number }>()
 
   if (orderResult.error || !orderResult.data) {
     return null
@@ -1199,6 +1343,7 @@ async function getKitchenOrderAssignment(
     assignedMembershipId: orderResult.data.assigned_tenant_membership_id,
     status: orderResult.data.status,
     branchId: orderResult.data.branch_id,
+    orderNumber: orderResult.data.order_number,
   }
 }
 
@@ -1207,7 +1352,8 @@ export async function assignKitchenOrder(
   tenantId: string,
   orderId: string,
   membershipId: string,
-  branchIds: readonly string[]
+  branchIds: readonly string[],
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   const currentAssignment = await getKitchenOrderAssignment(supabase, tenantId, orderId)
 
@@ -1249,6 +1395,28 @@ export async function assignKitchenOrder(
     return { ok: false, error: "Esta orden ya fue tomada por otro miembro del staff." }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: currentAssignment.branchId,
+    actor: auditActor ?? { profileId: null, membershipId, name: null, role: null, surface: "kitchen" },
+    entityType: "order",
+    entityId: orderId,
+    action: "order.assignment_claimed",
+    summary: `Se tomó la ${getOrderAuditLabel(currentAssignment.orderNumber)} en kitchen.`,
+    beforeData: {
+      assignedMembershipId: currentAssignment.assignedMembershipId,
+      status: currentAssignment.status,
+    },
+    afterData: {
+      assignedMembershipId: membershipId,
+      status: currentAssignment.status === "confirmed" ? "in_preparation" : currentAssignment.status,
+    },
+    metadata: {
+      orderId,
+      orderNumber: currentAssignment.orderNumber,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -1259,6 +1427,8 @@ async function releaseOrderAssignment(
   options?: {
     readonly membershipId?: string
     readonly branchIds?: readonly string[]
+    readonly auditActor?: AuditActor
+    readonly actorSurface?: "admin" | "kitchen"
   }
 ): Promise<{ ok: boolean; error?: string }> {
   const currentAssignment = await getKitchenOrderAssignment(supabase, tenantId, orderId)
@@ -1305,6 +1475,34 @@ async function releaseOrderAssignment(
     return { ok: false, error: "La asignacion cambió mientras intentábamos liberar la orden." }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: currentAssignment.branchId,
+    actor: options?.auditActor ?? {
+      profileId: null,
+      membershipId: options?.membershipId ?? null,
+      name: null,
+      role: null,
+      surface: options?.actorSurface === "admin" ? "admin" : "kitchen",
+    },
+    entityType: "order",
+    entityId: orderId,
+    action: "order.assignment_released",
+    summary: `Se liberó la asignación de la ${getOrderAuditLabel(currentAssignment.orderNumber)}.`,
+    beforeData: {
+      assignedMembershipId: currentAssignment.assignedMembershipId,
+      status: currentAssignment.status,
+    },
+    afterData: {
+      assignedMembershipId: null,
+      status: nextStatus,
+    },
+    metadata: {
+      orderId,
+      orderNumber: currentAssignment.orderNumber,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -1313,20 +1511,27 @@ export async function releaseKitchenOrder(
   tenantId: string,
   orderId: string,
   membershipId: string,
-  branchIds: readonly string[]
+  branchIds: readonly string[],
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   return releaseOrderAssignment(supabase, tenantId, orderId, {
     membershipId,
     branchIds,
+    auditActor,
+    actorSurface: "kitchen",
   })
 }
 
 export async function releaseAdminOrderAssignment(
   supabase: SupabaseClient,
   tenantId: string,
-  orderId: string
+  orderId: string,
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
-  return releaseOrderAssignment(supabase, tenantId, orderId)
+  return releaseOrderAssignment(supabase, tenantId, orderId, {
+    auditActor,
+    actorSurface: "admin",
+  })
 }
 
 export async function ensureKitchenAssignmentAccess(
@@ -1367,15 +1572,16 @@ export async function updateAdminOrderStatus(
   tenantId: string,
   orderId: string,
   nextStatus: OrderStatus,
-  changedByProfileId?: string | null
+  changedByProfileId?: string | null,
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   const orderResult = await supabase
     .from("orders")
-    .select("status")
+    .select("status, branch_id, order_number, payment_status")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ status: OrderStatus }>()
+    .maybeSingle<{ status: OrderStatus; branch_id: string; order_number: number; payment_status: PaymentStatus }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden." }
@@ -1423,6 +1629,7 @@ export async function updateAdminOrderStatus(
     p_from_status: currentStatus,
     p_to_status: nextStatus,
     p_changed_by_profile_id: changedByProfileId ?? null,
+    p_source: getOrderHistorySource(auditActor),
   })
 
   if (updateResult.error) {
@@ -1445,6 +1652,28 @@ export async function updateAdminOrderStatus(
     }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: orderResult.data.branch_id,
+    actor: auditActor ?? { profileId: changedByProfileId ?? null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "order",
+    entityId: orderId,
+    action: "order.status_updated",
+    summary: `Se cambió el estado de la ${getOrderAuditLabel(orderResult.data.order_number)} a ${nextStatus}.`,
+    beforeData: {
+      status: currentStatus,
+      paymentStatus: orderResult.data.payment_status,
+    },
+    afterData: {
+      status: nextStatus,
+      paymentStatus: currentStatus === "pending_payment" && nextStatus === "confirmed" ? "paid" : orderResult.data.payment_status,
+    },
+    metadata: {
+      orderId,
+      orderNumber: orderResult.data.order_number,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -1452,15 +1681,16 @@ export async function updateAdminOrderPaymentStatus(
   supabase: SupabaseClient,
   tenantId: string,
   orderId: string,
-  nextPaymentStatus: PaymentStatus
+  nextPaymentStatus: PaymentStatus,
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   const orderResult = await supabase
     .from("orders")
-    .select("payment_status")
+    .select("payment_status, branch_id, order_number")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ payment_status: PaymentStatus }>()
+    .maybeSingle<{ payment_status: PaymentStatus; branch_id: string; order_number: number }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden." }
@@ -1493,6 +1723,26 @@ export async function updateAdminOrderPaymentStatus(
     return { ok: false, error: updateResult.error.message }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: orderResult.data.branch_id,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "order_payment",
+    entityId: orderId,
+    action: "payment.status_updated",
+    summary: `Se cambió el estado de pago de la ${getOrderAuditLabel(orderResult.data.order_number)} a ${nextPaymentStatus}.`,
+    beforeData: {
+      paymentStatus: currentPaymentStatus,
+    },
+    afterData: {
+      paymentStatus: nextPaymentStatus,
+    },
+    metadata: {
+      orderId,
+      orderNumber: orderResult.data.order_number,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -1500,14 +1750,15 @@ export async function updateKitchenOrderItemPrepStatus(
   supabase: SupabaseClient,
   tenantId: string,
   orderItemId: string,
-  nextPrepStatus: "pending" | "ready"
+  nextPrepStatus: "pending" | "ready",
+  auditActor?: AuditActor
 ): Promise<{ ok: boolean; error?: string }> {
   const orderItemResult = await supabase
     .from("order_items")
-    .select("id, order_id")
+    .select("id, order_id, prep_status")
     .eq("id", orderItemId)
     .limit(1)
-    .maybeSingle<{ id: string; order_id: string }>()
+    .maybeSingle<{ id: string; order_id: string; prep_status: "pending" | "ready" }>()
 
   if (orderItemResult.error || !orderItemResult.data) {
     return { ok: false, error: "No encontramos el item de la orden." }
@@ -1515,11 +1766,11 @@ export async function updateKitchenOrderItemPrepStatus(
 
   const belongsToTenant = await supabase
     .from("orders")
-    .select("id")
+    .select("id, branch_id, order_number")
     .eq("tenant_id", tenantId)
     .eq("id", orderItemResult.data.order_id)
     .limit(1)
-    .maybeSingle<{ id: string }>()
+    .maybeSingle<{ id: string; branch_id: string; order_number: number }>()
 
   if (belongsToTenant.error || !belongsToTenant.data) {
     return { ok: false, error: "El item no pertenece a una orden de este tenant." }
@@ -1534,6 +1785,27 @@ export async function updateKitchenOrderItemPrepStatus(
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
   }
+
+  await writeAuditEvent(supabase, {
+    tenantId,
+    branchId: belongsToTenant.data.branch_id,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "kitchen" },
+    entityType: "order_item",
+    entityId: orderItemId,
+    action: "order_item.prep_status_updated",
+    summary: `Se marcó un item de la ${getOrderAuditLabel(belongsToTenant.data.order_number)} como ${nextPrepStatus}.`,
+    beforeData: {
+      prepStatus: orderItemResult.data.prep_status,
+    },
+    afterData: {
+      prepStatus: nextPrepStatus,
+    },
+    metadata: {
+      orderId: orderItemResult.data.order_id,
+      orderNumber: belongsToTenant.data.order_number,
+      orderItemId,
+    },
+  })
 
   return { ok: true }
 }

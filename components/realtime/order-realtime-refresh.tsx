@@ -31,6 +31,7 @@ export function OrderRealtimeRefresh({
     let authSubscription: { unsubscribe: () => void } | null = null
     let currentAccessToken: string | null = null
     const channels: RealtimeChannel[] = []
+    let subscriptionVersion = 0
 
     const scheduleRefresh = () => {
       if (refreshTimeout) {
@@ -42,10 +43,8 @@ export function OrderRealtimeRefresh({
       }, 180)
     }
 
-    const teardownChannels = () => {
-      channels.forEach((channel) => {
-        void supabase.removeChannel(channel)
-      })
+    const teardownChannels = async () => {
+      await Promise.all(channels.map((channel) => supabase.removeChannel(channel)))
 
       channels.length = 0
     }
@@ -56,10 +55,12 @@ export function OrderRealtimeRefresh({
     }
 
     const buildChannels = () => {
+      subscriptionVersion += 1
+
       if (tenantId) {
         subscribeChannel(
           supabase
-            .channel(`orders-tenant-${tenantId}`)
+            .channel(`orders-tenant-${tenantId}-${subscriptionVersion}`)
             .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `tenant_id=eq.${tenantId}` }, scheduleRefresh)
         )
       }
@@ -67,7 +68,7 @@ export function OrderRealtimeRefresh({
       if (customerId) {
         subscribeChannel(
           supabase
-            .channel(`orders-customer-${customerId}`)
+            .channel(`orders-customer-${customerId}-${subscriptionVersion}`)
             .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${customerId}` }, scheduleRefresh)
         )
       }
@@ -75,7 +76,7 @@ export function OrderRealtimeRefresh({
       if (orderId) {
         subscribeChannel(
           supabase
-            .channel(`order-detail-${orderId}`)
+            .channel(`order-detail-${orderId}-${subscriptionVersion}`)
             .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `id=eq.${orderId}` }, scheduleRefresh)
             .on("postgres_changes", { event: "*", schema: "public", table: "order_items", filter: `order_id=eq.${orderId}` }, scheduleRefresh)
             .on("postgres_changes", { event: "*", schema: "public", table: "order_status_history", filter: `order_id=eq.${orderId}` }, scheduleRefresh)
@@ -97,8 +98,8 @@ export function OrderRealtimeRefresh({
         return
       }
 
-      supabase.realtime.setAuth(nextToken)
-      teardownChannels()
+      await supabase.realtime.setAuth(nextToken)
+      await teardownChannels()
       buildChannels()
     }
 
@@ -132,7 +133,7 @@ export function OrderRealtimeRefresh({
       }
 
       authSubscription?.unsubscribe()
-      teardownChannels()
+      void teardownChannels()
     }
   }, [customerId, orderId, router, tenantId])
 

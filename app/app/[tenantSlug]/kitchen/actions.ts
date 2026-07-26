@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireKitchenAccess } from "@/lib/auth/admin"
 import type { OrderStatus } from "@/lib/domain/order"
+import { buildAuditActor } from "@/lib/services/audit"
 import {
   assignKitchenOrder,
   canKitchenMarkOrderReady,
@@ -27,7 +28,20 @@ export async function assignKitchenOrderAction(tenantSlug: string, orderId: stri
   }
 
   const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
-  const result = await assignKitchenOrder(supabase, access.membership.tenantId, orderId, access.membership.id, branchIds)
+  const result = await assignKitchenOrder(
+    supabase,
+    access.membership.tenantId,
+    orderId,
+    access.membership.id,
+    branchIds,
+    buildAuditActor({
+      surface: "kitchen",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/kitchen`)
@@ -72,7 +86,20 @@ export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId
     }
   }
 
-  const result = await updateAdminOrderStatus(supabase, access.membership.tenantId, orderId, nextStatus, access.profile.id)
+  const result = await updateAdminOrderStatus(
+    supabase,
+    access.membership.tenantId,
+    orderId,
+    nextStatus,
+    access.profile.id,
+    buildAuditActor({
+      surface: "kitchen",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/kitchen`)
@@ -98,7 +125,14 @@ export async function releaseKitchenOrderAction(tenantSlug: string, orderId: str
     access.membership.tenantId,
     orderId,
     access.membership.id,
-    branchIds
+    branchIds,
+    buildAuditActor({
+      surface: "kitchen",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
   )
 
   if (result.ok) {
@@ -137,7 +171,19 @@ export async function updateKitchenOrderItemPrepStatusAction(
     return accessCheck
   }
 
-  const result = await updateKitchenOrderItemPrepStatus(supabase, access.membership.tenantId, orderItemId, nextPrepStatus)
+  const result = await updateKitchenOrderItemPrepStatus(
+    supabase,
+    access.membership.tenantId,
+    orderItemId,
+    nextPrepStatus,
+    buildAuditActor({
+      surface: "kitchen",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/kitchen`)

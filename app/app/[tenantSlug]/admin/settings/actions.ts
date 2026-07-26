@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
+import { buildAuditActor, writeAuditEvent } from "@/lib/services/audit"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getCatalogMediaBucket, getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
@@ -35,12 +36,15 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
 
   const currentTenantResult = await supabase
     .from("tenants")
-    .select("hero_image_url, logo_image_url")
+    .select("hero_image_url, logo_image_url, storefront_enabled, mobile_payment_instructions, bank_transfer_instructions")
     .eq("id", access.membership.tenantId)
     .limit(1)
     .maybeSingle<{
       hero_image_url: string | null
       logo_image_url: string | null
+      storefront_enabled: boolean
+      mobile_payment_instructions: string | null
+      bank_transfer_instructions: string | null
     }>()
 
   if (currentTenantResult.error || !currentTenantResult.data) {
@@ -86,6 +90,38 @@ export async function updateStorefrontBrandingAction(tenantSlug: string, formDat
       await adminClient.storage.from(getCatalogMediaBucket()).remove(stalePaths)
     }
   }
+
+  await writeAuditEvent(supabase, {
+    tenantId: access.membership.tenantId,
+    actor: buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
+    entityType: "tenant_settings",
+    entityId: access.membership.tenantId,
+    action: "tenant.storefront_settings_updated",
+    summary: "Se actualizó la configuración storefront del tenant.",
+    beforeData: {
+      storefrontEnabled: currentTenantResult.data.storefront_enabled,
+      heroImageUrl: currentTenantResult.data.hero_image_url,
+      logoImageUrl: currentTenantResult.data.logo_image_url,
+      mobilePaymentInstructions: currentTenantResult.data.mobile_payment_instructions,
+      bankTransferInstructions: currentTenantResult.data.bank_transfer_instructions,
+    },
+    afterData: {
+      storefrontEnabled,
+      heroImageUrl: heroImageUrl || null,
+      logoImageUrl: logoImageUrl || null,
+      mobilePaymentInstructions: mobilePaymentInstructions || null,
+      bankTransferInstructions: bankTransferInstructions || null,
+    },
+    metadata: {
+      tenantSlug,
+    },
+  })
 
   revalidateSettingsPaths(tenantSlug)
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { MANAGEABLE_STAFF_ROLES, type ManageableStaffRole } from "@/lib/domain/staff"
+import { buildAuditActor } from "@/lib/services/audit"
 import { canManageStaff, createStaffMember, setStaffMemberActiveState, updateStaffMember } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
@@ -53,6 +54,13 @@ export async function createStaffMemberAction(tenantSlug: string, formData: Form
     email: String(formData.get("email") ?? ""),
     role,
     branchIds: parseBranchIds(formData),
+    auditActor: buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
   })
 
   if (result.ok) {
@@ -83,6 +91,13 @@ export async function updateStaffMemberAction(tenantSlug: string, membershipId: 
     role,
     branchIds: parseBranchIds(formData),
     isActive: String(formData.get("isActive") ?? "true") === "true",
+    auditActor: buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
   })
 
   if (result.ok) {
@@ -102,7 +117,19 @@ export async function setStaffMemberActiveStateAction(tenantSlug: string, member
     throw new Error("Supabase admin client is not configured.")
   }
 
-  const result = await setStaffMemberActiveState(adminClient, access.membership.tenantId, membershipId, nextIsActive)
+  const result = await setStaffMemberActiveState(
+    adminClient,
+    access.membership.tenantId,
+    membershipId,
+    nextIsActive,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidateStaffPaths(tenantSlug)

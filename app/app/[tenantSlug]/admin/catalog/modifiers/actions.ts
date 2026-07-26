@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache"
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
 import { type CatalogModifierGroupMutationInput, type CatalogMutationResult } from "@/lib/domain/catalog"
+import { buildAuditActor } from "@/lib/services/audit"
 import { createCatalogModifierGroup, updateCatalogModifierGroup } from "@/lib/services/catalog"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -67,7 +68,19 @@ export async function createModifierGroupAction(tenantSlug: string, formData: Fo
   }
 
   const modifierGroupId = String(formData.get("modifierGroupId") ?? "").trim()
-  const result = await createCatalogModifierGroup(supabase, access.membership.tenantId, parseModifierGroupPayload(formData), modifierGroupId ? { modifierGroupId } : undefined)
+  const result = await createCatalogModifierGroup(
+    supabase,
+    access.membership.tenantId,
+    parseModifierGroupPayload(formData),
+    modifierGroupId ? { modifierGroupId } : undefined,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidateModifierPaths(tenantSlug)
@@ -89,7 +102,19 @@ export async function updateModifierGroupAction(modifierGroupId: string, tenantS
     throw new Error("Supabase environment variables are missing.")
   }
 
-  const result = await updateCatalogModifierGroup(supabase, access.membership.tenantId, modifierGroupId, parseModifierGroupPayload(formData))
+  const result = await updateCatalogModifierGroup(
+    supabase,
+    access.membership.tenantId,
+    modifierGroupId,
+    parseModifierGroupPayload(formData),
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 
   if (result.ok) {
     revalidateModifierPaths(tenantSlug)

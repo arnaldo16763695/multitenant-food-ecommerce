@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { type CatalogCategoryMutationInput, type CatalogMutationResult } from "@/lib/domain/catalog"
+import { buildAuditActor } from "@/lib/services/audit"
 import { createCatalogCategory, updateCatalogCategory } from "@/lib/services/catalog"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -37,7 +38,14 @@ export async function createCategoryWithImageAction(tenantSlug: string, formData
       ...payload,
       imagePath,
     },
-    categoryId ? { categoryId } : undefined
+    categoryId ? { categoryId } : undefined,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
   )
 
   if (result.ok) {
@@ -67,7 +75,14 @@ export async function updateCategoryWithImageAction(categoryId: string, tenantSl
   const result = await updateCatalogCategory(supabase, access.membership.tenantId, categoryId, {
     ...payload,
     imagePath,
-  })
+  },
+  buildAuditActor({
+    surface: "admin",
+    profileId: access.profile.id,
+    membershipId: access.membership.id,
+    name: access.profile.fullName,
+    role: access.membership.role,
+  }))
 
   if (result.ok) {
     revalidateCategoryPaths(tenantSlug)

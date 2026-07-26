@@ -5,6 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { buildAdminAuthCallbackUrl, buildAdminSetupPasswordUrl } from "@/lib/auth/admin-access"
 import { sendBusinessOwnerProvisioningEmail } from "@/lib/email/business-owner-provisioning"
 import { slugifyCatalogValue } from "@/lib/domain/catalog"
+import type { AuditActor } from "@/lib/services/audit"
+import { writeAuditEvent } from "@/lib/services/audit"
 
 import type {
   BusinessSignupDecision,
@@ -269,7 +271,9 @@ export async function createBusinessSignup(
 
 export async function updateBusinessSignupDecision(
   supabase: SupabaseClient,
-  input: UpdateBusinessSignupDecisionInput
+  input: UpdateBusinessSignupDecisionInput & {
+    readonly auditActor?: AuditActor
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   const currentSignupResult = await supabase
     .from("business_signups")
@@ -313,12 +317,32 @@ export async function updateBusinessSignupDecision(
     return { ok: false, error: updateResult.error.message }
   }
 
+  await writeAuditEvent(supabase, {
+    actor: input.auditActor ?? { profileId: input.reviewedByProfileId, membershipId: null, name: null, role: null, surface: "platform" },
+    entityType: "platform_signup",
+    entityId: input.signupId,
+    action: "platform.signup_decision_updated",
+    summary: `Se marcó la solicitud como ${nextStatus}.`,
+    beforeData: {
+      status: currentSignupResult.data.status,
+      provisionedTenantId: currentSignupResult.data.provisioned_tenant_id,
+    },
+    afterData: {
+      status: nextStatus,
+    },
+    metadata: {
+      signupId: input.signupId,
+    },
+  })
+
   return { ok: true }
 }
 
 export async function provisionBusinessSignup(
   supabase: SupabaseClient,
-  input: ProvisionBusinessSignupInput
+  input: ProvisionBusinessSignupInput & {
+    readonly auditActor?: AuditActor
+  }
 ): Promise<ProvisionBusinessSignupResult> {
   let createdTenantId: string | null = null
 
@@ -502,6 +526,50 @@ export async function provisionBusinessSignup(
     adminUrl: accessLinkResult.invitationUrl,
   })
 
+  await writeAuditEvent(supabase, {
+    actor: input.auditActor ?? { profileId: input.provisionedByProfileId, membershipId: null, name: null, role: null, surface: "platform" },
+    entityType: "platform_signup",
+    entityId: input.signupId,
+    action: "platform.signup_provisioned",
+    summary: `Se provisionó el tenant ${tenantSlug} desde la solicitud aprobada.`,
+    beforeData: {
+      signupId: input.signupId,
+      tenantId: null,
+    },
+    afterData: {
+      tenantId: tenantInsertResult.data.id,
+      tenantSlug,
+      ownerEmail,
+      companyName,
+    },
+    metadata: {
+      signupId: input.signupId,
+      tenantId: tenantInsertResult.data.id,
+      tenantSlug,
+      delivery: emailResult.deliveredBy,
+    },
+  })
+
+  await writeAuditEvent(supabase, {
+    actor: input.auditActor ?? { profileId: input.provisionedByProfileId, membershipId: null, name: null, role: null, surface: "platform" },
+    entityType: "platform_tenant",
+    entityId: tenantInsertResult.data.id,
+    action: "platform.tenant_created",
+    summary: `Se creó el tenant ${tenantSlug} desde platform.`,
+    afterData: {
+      tenantId: tenantInsertResult.data.id,
+      tenantSlug,
+      companyName,
+      ownerEmail,
+      primaryBranchId: branchInsertResult.data.id,
+      ownerMembershipId: membershipInsertResult.data.id,
+    },
+    metadata: {
+      signupId: input.signupId,
+      delivery: emailResult.deliveredBy,
+    },
+  })
+
   return {
     ok: true,
     tenantId: tenantInsertResult.data.id,
@@ -513,7 +581,8 @@ export async function provisionBusinessSignup(
 
 export async function regenerateBusinessSignupAccess(
   supabase: SupabaseClient,
-  signupId: string
+  signupId: string,
+  auditActor?: AuditActor
 ): Promise<RegenerateBusinessSignupAccessResult> {
   const signupResult = await supabase
     .from("business_signups")
@@ -565,6 +634,21 @@ export async function regenerateBusinessSignupAccess(
   if (!accessLinkResult.ok) {
     return { ok: false, error: accessLinkResult.error }
   }
+
+  await writeAuditEvent(supabase, {
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "platform" },
+    entityType: "platform_signup",
+    entityId: signupId,
+    action: "platform.signup_access_regenerated",
+    summary: `Se regeneró el acceso del owner para ${signupResult.data.tenants.slug}.`,
+    afterData: {
+      tenantSlug: signupResult.data.tenants.slug,
+    },
+    metadata: {
+      signupId,
+      provisionedTenantId: signupResult.data.provisioned_tenant_id,
+    },
+  })
 
   return {
     ok: true,

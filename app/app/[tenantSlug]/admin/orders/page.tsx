@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { getAdminOrders } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -50,6 +52,14 @@ export default async function AdminOrdersPage({ params }: AdminOrdersPageProps) 
       description="Las órdenes nuevas entran como pago pendiente. Desde aquí el negocio las confirma manualmente antes de pasarlas al flujo operativo y a cocina."
       badge={`${orders.length} órdenes`}
       density="compact"
+      actions={
+        <Link
+          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+          href={`/app/${tenantSlug}/admin/audit?entity=order`}
+        >
+          Ver auditoría de órdenes
+        </Link>
+      }
     >
       <OrderRealtimeRefresh tenantId={access.membership.tenantId} />
       <Card>

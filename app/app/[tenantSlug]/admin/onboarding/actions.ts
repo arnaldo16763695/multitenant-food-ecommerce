@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { buildAuditActor, writeAuditEvent } from "@/lib/services/audit"
 import { completeTenantOnboarding, getTenantOnboardingStateBySlug } from "@/lib/services/tenant-onboarding"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
@@ -32,6 +33,37 @@ export async function completeTenantOnboardingAction(tenantSlug: string, formDat
     primaryBranchId: state.primaryBranchId,
     primaryBranchName: String(formData.get("primaryBranchName") ?? ""),
   })
+
+  if (result.ok) {
+    await writeAuditEvent(adminClient, {
+      tenantId: state.tenantId,
+      branchId: state.primaryBranchId,
+      actor: buildAuditActor({
+        surface: "admin",
+        profileId: access.profile.id,
+        membershipId: access.membership.id,
+        name: access.profile.fullName,
+        role: access.membership.role,
+      }),
+      entityType: "tenant_onboarding",
+      entityId: state.tenantId,
+      action: "tenant.onboarding_completed",
+      summary: `Se completó el onboarding inicial del tenant ${state.tenantName}.`,
+      beforeData: {
+        businessName: state.tenantName,
+        primaryBranchName: state.primaryBranchName,
+        onboardingCompletedAt: state.onboardingCompletedAt,
+      },
+      afterData: {
+        businessName: String(formData.get("businessName") ?? "").trim(),
+        primaryBranchName: String(formData.get("primaryBranchName") ?? "").trim(),
+      },
+      metadata: {
+        tenantSlug,
+        primaryBranchId: state.primaryBranchId,
+      },
+    })
+  }
 
   if (result.ok) {
     revalidatePath(`/app/${tenantSlug}/admin/onboarding`)

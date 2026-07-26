@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Mail, PencilLine, Search, Shield, UserPlus } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -17,6 +18,7 @@ import {
   type ManageableStaffRole,
   type StaffBranchOption,
 } from "@/lib/domain/staff"
+import type { AdminAuditEvent } from "@/lib/services/audit"
 
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
@@ -47,6 +49,7 @@ type StaffFormValues = {
 type AdminStaffManagementProps = {
   readonly tenantSlug: string
   readonly initialStaff: readonly AdminStaffMember[]
+  readonly initialAuditEvents: readonly AdminAuditEvent[]
   readonly branches: readonly StaffBranchOption[]
   readonly canManage: boolean
 }
@@ -100,6 +103,7 @@ function SaveStaffButton({
 export function AdminStaffManagement({
   tenantSlug,
   initialStaff,
+  initialAuditEvents,
   branches,
   canManage,
 }: AdminStaffManagementProps) {
@@ -129,6 +133,16 @@ export function AdminStaffManagement({
       )
     })
   }, [initialStaff, searchQuery])
+
+  const auditEventsByMembership = React.useMemo(() => {
+    return initialAuditEvents.reduce<Map<string, AdminAuditEvent[]>>((map, event) => {
+      const currentEvents = map.get(event.entityId) ?? []
+      map.set(event.entityId, [...currentEvents, event])
+      return map
+    }, new Map())
+  }, [initialAuditEvents])
+
+  const recentAuditEvents = React.useMemo(() => initialAuditEvents.slice(0, 12), [initialAuditEvents])
 
   function resetDialogState() {
     setSelectedMember(null)
@@ -280,15 +294,18 @@ export function AdminStaffManagement({
 
                   return (
                     <TableRow key={member.membershipId}>
-                      <TableCell className="px-3 py-2">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-card-foreground">{member.fullName}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Mail className="size-3.5" />
-                            <span>{member.email}</span>
+                       <TableCell className="px-3 py-2">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-card-foreground">{member.fullName}</p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Mail className="size-3.5" />
+                              <span>{member.email}</span>
+                            </div>
+                            {auditEventsByMembership.get(member.membershipId)?.[0] ? (
+                              <p className="text-xs text-muted-foreground">Ultimo cambio: {auditEventsByMembership.get(member.membershipId)?.[0]?.summary}</p>
+                            ) : null}
                           </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
                       <TableCell className="px-3 py-2">
                         <Badge variant={member.role === "preparer" ? "warning" : member.role === "cashier" ? "secondary" : "outline"}>
                           {formatStaffRole(member.role)}
@@ -315,11 +332,23 @@ export function AdminStaffManagement({
                               >
                                 {member.isActive ? "Desactivar" : "Reactivar"}
                               </Button>
+                              <Button asChild variant="ghost" size="sm" className="h-8 rounded-lg px-3 text-xs">
+                                <Link href={`/app/${tenantSlug}/admin/audit?entity=staff_member&entityId=${encodeURIComponent(member.membershipId)}`}>
+                                  Auditoria
+                                </Link>
+                              </Button>
                             </>
                           ) : (
-                            <div className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                              <Shield className="size-3.5" />
-                              Protegido
+                            <div className="flex items-center gap-2">
+                              <div className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                <Shield className="size-3.5" />
+                                Protegido
+                              </div>
+                              <Button asChild variant="ghost" size="sm" className="h-8 rounded-lg px-3 text-xs">
+                                <Link href={`/app/${tenantSlug}/admin/audit?entity=staff_member&entityId=${encodeURIComponent(member.membershipId)}`}>
+                                  Auditoria
+                                </Link>
+                              </Button>
                             </div>
                           )}
                         </div>
@@ -337,6 +366,38 @@ export function AdminStaffManagement({
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle>Actividad reciente del staff</CardTitle>
+          <CardDescription>Resumen de altas, cambios de rol, activaciones y ajustes de sucursal del equipo.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {recentAuditEvents.length ? (
+            recentAuditEvents.map((event) => (
+              <div key={event.id} className="rounded-[0.95rem] border border-border bg-secondary/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-card-foreground">{event.summary}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {event.actorName ?? "Sistema"} · {event.actorRole ?? "Sin rol"}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="h-8 rounded-lg px-3 text-xs">
+                    <Link href={`/app/${tenantSlug}/admin/audit?entity=staff_member&entityId=${encodeURIComponent(event.entityId)}`}>
+                      Ver historial
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[1rem] border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
+              Todavia no hay eventos auditados de staff.
+            </div>
+          )}
         </CardContent>
       </Card>
 

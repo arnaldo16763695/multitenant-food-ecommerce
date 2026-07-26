@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import type { CheckoutBagItemInput, ManualPaymentMethod } from "@/lib/domain/order"
+import { buildAuditActor } from "@/lib/services/audit"
 import { attachManualPaymentReceipt, createStorefrontOrder } from "@/lib/services/orders"
 import { clearCustomerBranchBag } from "@/lib/services/customer-bag"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -85,6 +86,11 @@ export async function POST(request: Request, context: CheckoutRouteContext) {
       email,
       notes,
     },
+    auditActor: buildAuditActor({
+      surface: "storefront",
+      profileId: customerContext.profile.id,
+      name: customerContext.customer.fullName ?? customerContext.profile.fullName,
+    }),
   })
 
   if (!result.ok || !result.orderId) {
@@ -125,6 +131,11 @@ export async function POST(request: Request, context: CheckoutRouteContext) {
   const attachResult = await attachManualPaymentReceipt(adminClient, result.orderId, {
     paymentMethod,
     receiptImagePath: paymentProofPath,
+    auditActor: buildAuditActor({
+      surface: "storefront",
+      profileId: customerContext.profile.id,
+      name: customerContext.customer.fullName ?? customerContext.profile.fullName,
+    }),
   })
 
   if (!attachResult.ok) {

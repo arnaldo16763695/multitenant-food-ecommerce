@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import type { AuditActor } from "@/lib/services/audit"
 import {
   type CatalogBranchOption,
   type CatalogCategory,
   type CatalogModifierGroup,
   type CatalogProduct,
 } from "@/lib/config/admin-catalog"
+import { writeAuditEvent } from "@/lib/services/audit"
 import { getCatalogMediaPublicUrl } from "@/lib/supabase/storage"
 import {
   fromCatalogDbVisibility,
@@ -57,12 +59,130 @@ type BranchProductOverrideRow = {
   prep_time_minutes: number | null
 }
 
+type ProductAuditRow = {
+  id: string
+  tenant_id: string
+  category_id: string | null
+  name: string
+  description: string
+  base_price: number | string
+  status: "active" | "draft"
+  primary_image_path: string | null
+  primary_image_alt: string | null
+}
+
+type CategoryAuditRow = {
+  id: string
+  tenant_id: string
+  name: string
+  is_visible: boolean
+  sort_order: number
+  image_path: string | null
+  image_alt: string | null
+}
+
+type ModifierGroupAuditRow = {
+  id: string
+  tenant_id: string
+  name: string
+  selection_type: "single" | "multiple"
+  min_select: number
+  max_select: number
+}
+
 export const EMPTY_CATALOG_MODULE: CatalogModuleData = {
   branches: [],
   products: [],
   categories: [],
   modifierGroups: [],
   source: "supabase",
+}
+
+function mapCatalogPayloadForAudit(payload: CatalogProductMutationInput) {
+  return {
+    name: payload.name.trim(),
+    category: payload.category.trim(),
+    description: payload.description.trim(),
+    basePrice: normalizeCatalogPrice(payload.basePrice),
+    status: payload.status,
+    primaryImagePath: payload.primaryImagePath?.trim() || null,
+    primaryImageAlt: payload.primaryImageAlt?.trim() || null,
+    variants: (payload.variants ?? []).map((variant) => ({
+      id: variant.id ?? null,
+      name: variant.name.trim(),
+      basePrice: normalizeCatalogPrice(variant.basePrice),
+      isDefault: variant.isDefault,
+      sortOrder: variant.sortOrder,
+    })),
+    modifierGroupIds: payload.modifierGroupIds ?? [],
+    branchOverrides: (payload.branchOverrides ?? []).map((override) => ({
+      branchId: override.branchId,
+      availabilityStatus: override.availabilityStatus,
+      priceOverride: normalizeCatalogPrice(override.priceOverride),
+      prepTimeMinutes: normalizePrepTimeMinutes(override.prepTimeMinutes),
+    })),
+  }
+}
+
+function mapCategoryPayloadForAudit(payload: CatalogCategoryMutationInput) {
+  return {
+    name: payload.name.trim(),
+    visibility: payload.visibility,
+    sortOrder: payload.sortOrder,
+    imagePath: payload.imagePath?.trim() || null,
+    imageAlt: payload.imageAlt?.trim() || null,
+  }
+}
+
+function mapModifierGroupPayloadForAudit(payload: CatalogModifierGroupMutationInput) {
+  return {
+    name: payload.name.trim(),
+    type: payload.type,
+    minSelect: payload.minSelect,
+    maxSelect: payload.maxSelect,
+    options: payload.options.map((option) => ({
+      id: option.id ?? null,
+      name: option.name.trim(),
+      priceDelta: normalizeCatalogPrice(option.priceDelta) ?? 0,
+      sortOrder: option.sortOrder,
+    })),
+  }
+}
+
+async function getProductAuditRow(supabase: SupabaseClient, productId: string, tenantId: string) {
+  const result = await supabase
+    .from("products")
+    .select("id, tenant_id, category_id, name, description, base_price, status, primary_image_path, primary_image_alt")
+    .eq("id", productId)
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .maybeSingle<ProductAuditRow>()
+
+  return result.data ?? null
+}
+
+async function getCategoryAuditRow(supabase: SupabaseClient, categoryId: string, tenantId: string) {
+  const result = await supabase
+    .from("categories")
+    .select("id, tenant_id, name, is_visible, sort_order, image_path, image_alt")
+    .eq("id", categoryId)
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .maybeSingle<CategoryAuditRow>()
+
+  return result.data ?? null
+}
+
+async function getModifierGroupAuditRow(supabase: SupabaseClient, modifierGroupId: string, tenantId: string) {
+  const result = await supabase
+    .from("modifier_groups")
+    .select("id, tenant_id, name, selection_type, min_select, max_select")
+    .eq("id", modifierGroupId)
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .maybeSingle<ModifierGroupAuditRow>()
+
+  return result.data ?? null
 }
 
 function normalizeVariantInputs(variants?: readonly CatalogProductVariantInput[]) {
@@ -187,7 +307,8 @@ export async function updateCatalogProductBranchOverrides(
   tenantId: string,
   productId: string,
   branchOverrides: readonly CatalogBranchOverrideInput[],
-  allowedBranchIds: readonly string[]
+  allowedBranchIds: readonly string[],
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
   if (!allowedBranchIds.length) {
     return { ok: false, error: "No tienes sucursales activas asignadas para operar productos." }
@@ -213,6 +334,26 @@ export async function updateCatalogProductBranchOverrides(
 
   if (upsertResult.error) {
     return { ok: false, error: upsertResult.error.message }
+  }
+
+  const product = await getProductAuditRow(supabase, productId, tenantId)
+
+  if (product) {
+    await writeAuditEvent(supabase, {
+      tenantId,
+      actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+      entityType: "catalog_product",
+      entityId: productId,
+      action: "catalog.product_branch_overrides_updated",
+      summary: `Se actualizaron overrides por sucursal para ${product.name}.`,
+      afterData: {
+        branchOverrides: rows,
+      },
+      metadata: {
+        productId,
+        allowedBranchIds,
+      },
+    })
   }
 
   return { ok: true }
@@ -615,8 +756,13 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   }
 }
 
-export async function createCatalogProduct(supabase: SupabaseClient, tenantId: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
-  return createCatalogProductWithOptions(supabase, tenantId, payload)
+export async function createCatalogProduct(
+  supabase: SupabaseClient,
+  tenantId: string,
+  payload: CatalogProductMutationInput,
+  auditActor?: AuditActor
+): Promise<CatalogMutationResult> {
+  return createCatalogProductWithOptions(supabase, tenantId, payload, undefined, auditActor)
 }
 
 export async function createCatalogProductWithOptions(
@@ -625,7 +771,8 @@ export async function createCatalogProductWithOptions(
   payload: CatalogProductMutationInput,
   options?: {
     readonly productId?: string
-  }
+  },
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
   const normalizedPrice = normalizeCatalogPrice(payload.basePrice)
 
@@ -682,6 +829,19 @@ export async function createCatalogProductWithOptions(
     return modifierGroupsResult
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_product",
+    entityId: insertResult.data.id,
+    action: "catalog.product_created",
+    summary: `Se creó el producto ${payload.name.trim()}.`,
+    afterData: mapCatalogPayloadForAudit(payload),
+    metadata: {
+      productId: insertResult.data.id,
+    },
+  })
+
   return { ok: true, entityId: insertResult.data.id }
 }
 
@@ -689,8 +849,10 @@ export async function updateCatalogProduct(
   supabase: SupabaseClient,
   tenantId: string,
   productId: string,
-  payload: CatalogProductMutationInput
+  payload: CatalogProductMutationInput,
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
+  const currentProduct = await getProductAuditRow(supabase, productId, tenantId)
   const normalizedPrice = normalizeCatalogPrice(payload.basePrice)
 
   if (!payload.name.trim() || !payload.category.trim() || !normalizedPrice) {
@@ -743,6 +905,29 @@ export async function updateCatalogProduct(
     return modifierGroupsResult
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_product",
+    entityId: productId,
+    action: "catalog.product_updated",
+    summary: `Se actualizó el producto ${payload.name.trim()}.`,
+    beforeData: currentProduct
+      ? {
+          name: currentProduct.name,
+          description: currentProduct.description,
+          basePrice: Number(currentProduct.base_price),
+          status: fromCatalogDbStatus(currentProduct.status),
+          primaryImagePath: currentProduct.primary_image_path,
+          primaryImageAlt: currentProduct.primary_image_alt,
+        }
+      : null,
+    afterData: mapCatalogPayloadForAudit(payload),
+    metadata: {
+      productId,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -750,11 +935,14 @@ export async function toggleCatalogProductStatus(
   supabase: SupabaseClient,
   tenantId: string,
   productId: string,
-  currentStatus: CatalogProductStatus
+  currentStatus: CatalogProductStatus,
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
+  const currentProduct = await getProductAuditRow(supabase, productId, tenantId)
+  const nextStatus = currentStatus === "Activo" ? "draft" : "active"
   const updateResult = await supabase
     .from("products")
-    .update({ status: currentStatus === "Activo" ? "draft" : "active" })
+    .update({ status: nextStatus })
     .eq("id", productId)
     .eq("tenant_id", tenantId)
 
@@ -762,10 +950,29 @@ export async function toggleCatalogProductStatus(
     return { ok: false, error: updateResult.error.message }
   }
 
+  if (currentProduct) {
+    await writeAuditEvent(supabase, {
+      tenantId,
+      actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+      entityType: "catalog_product",
+      entityId: productId,
+      action: "catalog.product_status_toggled",
+      summary: `Se cambió el estado de ${currentProduct.name} a ${fromCatalogDbStatus(nextStatus)}.`,
+      beforeData: { status: currentStatus },
+      afterData: { status: fromCatalogDbStatus(nextStatus) },
+      metadata: { productId },
+    })
+  }
+
   return { ok: true }
 }
 
-export async function duplicateCatalogProduct(supabase: SupabaseClient, tenantId: string, productId: string): Promise<CatalogMutationResult> {
+export async function duplicateCatalogProduct(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  auditActor?: AuditActor
+): Promise<CatalogMutationResult> {
   const productResult = await supabase
     .from("products")
     .select("name, description, base_price, category_id")
@@ -852,7 +1059,26 @@ export async function duplicateCatalogProduct(supabase: SupabaseClient, tenantId
     return variantsResult
   }
 
-  return { ok: true }
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_product",
+    entityId: insertResult.data.id,
+    action: "catalog.product_duplicated",
+    summary: `Se duplicó el producto ${productResult.data.name}.`,
+    afterData: {
+      sourceProductId: productId,
+      duplicatedProductId: insertResult.data.id,
+      name: duplicateName,
+      status: "Draft",
+    },
+    metadata: {
+      sourceProductId: productId,
+      duplicatedProductId: insertResult.data.id,
+    },
+  })
+
+  return { ok: true, entityId: insertResult.data.id }
 }
 
 export async function createCatalogCategory(
@@ -861,7 +1087,8 @@ export async function createCatalogCategory(
   payload: CatalogCategoryMutationInput,
   options?: {
     readonly categoryId?: string
-  }
+  },
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
   if (!payload.name.trim()) {
     return { ok: false, error: "Completa el nombre de la categoria." }
@@ -869,30 +1096,49 @@ export async function createCatalogCategory(
 
   const categorySlug = await resolveUniqueCategorySlug(supabase, tenantId, payload.name)
 
-  const insertResult = await supabase.from("categories").insert({
-    id: options?.categoryId,
-    tenant_id: tenantId,
-    name: payload.name.trim(),
-    slug: categorySlug,
-    is_visible: toCatalogDbVisibility(payload.visibility),
-    sort_order: payload.sortOrder,
-    image_path: payload.imagePath?.trim() || null,
-    image_alt: payload.imageAlt?.trim() || null,
-  })
+  const insertResult = await supabase
+    .from("categories")
+    .insert({
+      id: options?.categoryId,
+      tenant_id: tenantId,
+      name: payload.name.trim(),
+      slug: categorySlug,
+      is_visible: toCatalogDbVisibility(payload.visibility),
+      sort_order: payload.sortOrder,
+      image_path: payload.imagePath?.trim() || null,
+      image_alt: payload.imageAlt?.trim() || null,
+    })
+    .select("id")
+    .single<{ id: string }>()
 
   if (insertResult.error) {
     return { ok: false, error: insertResult.error.message }
   }
 
-  return { ok: true, entityId: options?.categoryId }
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_category",
+    entityId: insertResult.data.id,
+    action: "catalog.category_created",
+    summary: `Se creó la categoría ${payload.name.trim()}.`,
+    afterData: mapCategoryPayloadForAudit(payload),
+    metadata: {
+      categoryId: insertResult.data.id,
+    },
+  })
+
+  return { ok: true, entityId: insertResult.data.id }
 }
 
 export async function updateCatalogCategory(
   supabase: SupabaseClient,
   tenantId: string,
   categoryId: string,
-  payload: CatalogCategoryMutationInput
+  payload: CatalogCategoryMutationInput,
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
+  const currentCategory = await getCategoryAuditRow(supabase, categoryId, tenantId)
   if (!payload.name.trim()) {
     return { ok: false, error: "Completa el nombre de la categoria." }
   }
@@ -915,6 +1161,26 @@ export async function updateCatalogCategory(
   if (updateResult.error) {
     return { ok: false, error: updateResult.error.message }
   }
+
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_category",
+    entityId: categoryId,
+    action: "catalog.category_updated",
+    summary: `Se actualizó la categoría ${payload.name.trim()}.`,
+    beforeData: currentCategory
+      ? {
+          name: currentCategory.name,
+          visibility: fromCatalogDbVisibility(currentCategory.is_visible),
+          sortOrder: currentCategory.sort_order,
+          imagePath: currentCategory.image_path,
+          imageAlt: currentCategory.image_alt,
+        }
+      : null,
+    afterData: mapCategoryPayloadForAudit(payload),
+    metadata: { categoryId },
+  })
 
   return { ok: true }
 }
@@ -942,7 +1208,8 @@ export async function createCatalogModifierGroup(
   payload: CatalogModifierGroupMutationInput,
   options?: {
     readonly modifierGroupId?: string
-  }
+  },
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
   const normalizedName = payload.name.trim()
 
@@ -991,6 +1258,19 @@ export async function createCatalogModifierGroup(
     }
   }
 
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_modifier_group",
+    entityId: insertResult.data.id,
+    action: "catalog.modifier_group_created",
+    summary: `Se creó el modificador ${normalizedName}.`,
+    afterData: mapModifierGroupPayloadForAudit(payload),
+    metadata: {
+      modifierGroupId: insertResult.data.id,
+    },
+  })
+
   return { ok: true, entityId: insertResult.data.id }
 }
 
@@ -998,8 +1278,10 @@ export async function updateCatalogModifierGroup(
   supabase: SupabaseClient,
   tenantId: string,
   modifierGroupId: string,
-  payload: CatalogModifierGroupMutationInput
+  payload: CatalogModifierGroupMutationInput,
+  auditActor?: AuditActor
 ): Promise<CatalogMutationResult> {
+  const currentModifierGroup = await getModifierGroupAuditRow(supabase, modifierGroupId, tenantId)
   const normalizedName = payload.name.trim()
 
   if (!normalizedName) {
@@ -1089,6 +1371,27 @@ export async function updateCatalogModifierGroup(
       }
     }
   }
+
+  await writeAuditEvent(supabase, {
+    tenantId,
+    actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+    entityType: "catalog_modifier_group",
+    entityId: modifierGroupId,
+    action: "catalog.modifier_group_updated",
+    summary: `Se actualizó el modificador ${normalizedName}.`,
+    beforeData: currentModifierGroup
+      ? {
+          name: currentModifierGroup.name,
+          type: currentModifierGroup.selection_type === "single" ? "Single" : "Multiple",
+          minSelect: currentModifierGroup.min_select,
+          maxSelect: currentModifierGroup.max_select,
+        }
+      : null,
+    afterData: mapModifierGroupPayloadForAudit(payload),
+    metadata: {
+      modifierGroupId,
+    },
+  })
 
   return { ok: true }
 }

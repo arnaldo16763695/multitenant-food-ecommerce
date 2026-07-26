@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import type { ManualPaymentMethod } from "@/lib/domain/order"
+import { buildAuditActor } from "@/lib/services/audit"
 import { replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { buildPaymentProofImagePath, getFileExtension, getPaymentProofsBucket } from "@/lib/supabase/storage"
@@ -88,6 +89,11 @@ export async function POST(request: Request, context: PaymentProofRouteContext) 
     orderId,
     paymentMethod,
     receiptImagePath: paymentProofPath,
+    auditActor: buildAuditActor({
+      surface: "storefront",
+      profileId: customerContext.profile.id,
+      name: customerContext.customer.fullName ?? customerContext.profile.fullName,
+    }),
   })
 
   if (!result.ok) {

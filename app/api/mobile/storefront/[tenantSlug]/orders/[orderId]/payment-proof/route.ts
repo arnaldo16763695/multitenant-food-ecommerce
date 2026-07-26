@@ -1,4 +1,5 @@
 import type { ManualPaymentMethod } from "@/lib/domain/order"
+import { buildAuditActor } from "@/lib/services/audit"
 import { mobileError, mobileJson } from "@/lib/mobile/api"
 import { authenticateMobileCustomerRequest } from "@/lib/mobile/customer"
 import { replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
@@ -85,6 +86,11 @@ export async function POST(request: Request, context: MobilePaymentProofRouteCon
     orderId,
     paymentMethod,
     receiptImagePath: paymentProofPath,
+    auditActor: buildAuditActor({
+      surface: "mobile_api",
+      profileId: authResult.customerContext.profile.id,
+      name: authResult.customerContext.customer.fullName ?? authResult.customerContext.profile.fullName,
+    }),
   })
 
   if (!result.ok) {

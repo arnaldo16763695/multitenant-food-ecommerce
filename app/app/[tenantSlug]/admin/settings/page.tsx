@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { AdminStorefrontSettings } from "@/components/admin/admin-storefront-settings"
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
@@ -42,6 +44,14 @@ export default async function AdminSettingsPage({ params }: AdminSettingsPagePro
       eyebrow="Configuracion"
       title="Preferencias y governance del tenant"
       description="Aquí viven el branding público, los datos de cobro manual, permisos, integraciones y reglas operativas globales del tenant."
+      actions={
+        <Link
+          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+          href={`/app/${tenantSlug}/admin/audit?entity=tenant_settings`}
+        >
+          Ver auditoria de configuracion
+        </Link>
+      }
     >
       <AdminStorefrontSettings
         tenantSlug={tenantSlug}

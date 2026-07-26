@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronDown,
   ClipboardList,
+  ScrollText,
   ShieldCheck,
   Store,
   Users,
@@ -51,6 +52,11 @@ const platformNavigation: readonly PlatformNavigationItem[] = [
     title: "Signups",
     href: "/platform/signups",
     icon: ClipboardList,
+  },
+  {
+    title: "Auditoria",
+    href: "/platform/audit",
+    icon: ScrollText,
   },
 ] as const
 
@@ -142,6 +148,14 @@ export function PlatformSidebar({ user }: PlatformSidebarProps) {
                   <Link href="/platform/tenants">
                     <ShieldCheck />
                     <span>Control SaaS</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isPathActive(pathname, "/platform/audit")}>
+                  <Link href="/platform/audit">
+                    <ScrollText />
+                    <span>Auditoria</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

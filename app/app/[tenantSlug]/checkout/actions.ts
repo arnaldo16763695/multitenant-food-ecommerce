@@ -1,6 +1,7 @@
 "use server"
 
 import { createStorefrontOrder } from "@/lib/services/orders"
+import { buildAuditActor } from "@/lib/services/audit"
 import { clearCustomerBranchBag } from "@/lib/services/customer-bag"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
@@ -36,13 +37,18 @@ export async function createStorefrontOrderAction(payload: CheckoutPayload): Pro
     customerId: customerContext.customer.id,
     fulfillmentType: payload.fulfillmentType,
     items: payload.items,
-    customer: {
-      fullName: payload.fullName,
-      phone: payload.phone,
-      email: payload.email,
-      notes: payload.notes,
-    },
-  })
+      customer: {
+        fullName: payload.fullName,
+        phone: payload.phone,
+        email: payload.email,
+        notes: payload.notes,
+      },
+      auditActor: buildAuditActor({
+        surface: "storefront",
+        profileId: customerContext.profile.id,
+        name: customerContext.customer.fullName ?? customerContext.profile.fullName,
+      }),
+    })
 
   if (result.ok) {
     await clearCustomerBranchBag(adminClient, {

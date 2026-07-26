@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requirePlatformAccess } from "@/lib/auth/platform"
+import { buildAuditActor } from "@/lib/services/audit"
 import {
   provisionBusinessSignup,
   regenerateBusinessSignupAccess,
@@ -24,6 +25,13 @@ export async function updateBusinessSignupDecisionAction(signupId: string, decis
     signupId,
     decision,
     reviewedByProfileId: access.profile.id,
+    auditActor: buildAuditActor({
+      surface: "platform",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
   })
 
   if (result.ok) {
@@ -44,6 +52,13 @@ export async function provisionBusinessSignupAction(signupId: string) {
   const result = await provisionBusinessSignup(adminClient, {
     signupId,
     provisionedByProfileId: access.profile.id,
+    auditActor: buildAuditActor({
+      surface: "platform",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
   })
 
   if (result.ok) {
@@ -55,12 +70,22 @@ export async function provisionBusinessSignupAction(signupId: string) {
 }
 
 export async function regenerateBusinessSignupAccessAction(signupId: string) {
-  await requirePlatformAccess("/platform/signups")
+  const access = await requirePlatformAccess("/platform/signups")
   const adminClient = createSupabaseAdminClient()
 
   if (!adminClient) {
     throw new Error("Supabase admin client is not configured.")
   }
 
-  return regenerateBusinessSignupAccess(adminClient, signupId)
+  return regenerateBusinessSignupAccess(
+    adminClient,
+    signupId,
+    buildAuditActor({
+      surface: "platform",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
 }

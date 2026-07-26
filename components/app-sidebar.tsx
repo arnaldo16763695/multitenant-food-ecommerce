@@ -11,6 +11,7 @@ import {
   ListOrdered,
   MapPinned,
   Package2,
+  ScrollText,
   Settings2,
   Store,
   Tag,
@@ -157,6 +158,11 @@ const adminNavigation: readonly AdminNavigationItem[] = [
     icon: Users,
   },
   {
+    title: "Auditoría",
+    href: "/audit",
+    icon: ScrollText,
+  },
+  {
     title: "Configuracion",
     href: "/settings",
     icon: Settings2,
@@ -189,6 +195,7 @@ export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
     if (item.href === "/orders") return canAccessAdminSection(role, "orders")
     if (item.href === "/branches") return canAccessAdminSection(role, "branches")
     if (item.href === "/staff") return canAccessAdminSection(role, "staff")
+    if (item.href === "/audit") return canAccessAdminSection(role, "audit")
     if (item.href === "/settings") return canAccessAdminSection(role, "settings")
 
     return false

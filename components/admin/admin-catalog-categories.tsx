@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { MoreHorizontal, Plus, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 
@@ -219,6 +220,11 @@ export function AdminCatalogCategories({ tenantSlug, initialCategories = [] }: A
       description="CRUD compacto para ordenar la taxonomia del storefront y controlar visibilidad sin mezclar categorias con productos o modificadores."
       badge={`${filteredCategories.length} categorias`}
       density="compact"
+      actions={
+        <Button asChild variant="outline" className="h-9 rounded-lg px-3 text-sm">
+          <Link href={`/app/${tenantSlug}/admin/audit?entity=catalog_category`}>Auditoria de categorias</Link>
+        </Button>
+      }
     >
       <Card>
         <CardHeader className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-center lg:justify-between">

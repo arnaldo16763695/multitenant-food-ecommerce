@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { buildAuditActor, writeAuditEvent } from "@/lib/services/audit"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getCatalogMediaBucket, getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
@@ -72,13 +73,21 @@ export async function updateBranchStorefrontHeroAction(
 
   const branchResult = await adminClient
     .from("branches")
-    .select("id, tenant_id, hero_image_url")
+    .select("id, tenant_id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
     .eq("id", branchId)
     .limit(1)
     .maybeSingle<{
       id: string
       tenant_id: string
+      name: string
       hero_image_url: string | null
+      address_line_1: string | null
+      city: string | null
+      state: string | null
+      postal_code: string | null
+      country_code: string | null
+      latitude: number | null
+      longitude: number | null
     }>()
 
   if (branchResult.error || !branchResult.data || branchResult.data.tenant_id !== access.membership.tenantId) {
@@ -175,6 +184,46 @@ export async function updateBranchStorefrontHeroAction(
   if (currentHeroPath && currentHeroPath !== nextHeroPath) {
     await adminClient.storage.from(getCatalogMediaBucket()).remove([currentHeroPath])
   }
+
+  await writeAuditEvent(adminClient, {
+    tenantId: access.membership.tenantId,
+    branchId,
+    actor: buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    }),
+    entityType: "branch",
+    entityId: branchId,
+    action: "branch.storefront_updated",
+    summary: `Se actualizó la configuración storefront de la sucursal ${branchResult.data.name}.`,
+    beforeData: {
+      heroImageUrl: branchResult.data.hero_image_url,
+      addressLine1: branchResult.data.address_line_1,
+      city: branchResult.data.city,
+      state: branchResult.data.state,
+      postalCode: branchResult.data.postal_code,
+      countryCode: branchResult.data.country_code,
+      latitude: branchResult.data.latitude,
+      longitude: branchResult.data.longitude,
+    },
+    afterData: {
+      heroImageUrl: heroImageUrl || null,
+      addressLine1: addressLine1 || null,
+      city: city || null,
+      state: state || null,
+      postalCode: postalCode || null,
+      countryCode: countryCode || null,
+      latitude: latitudeResult.value,
+      longitude: longitudeResult.value,
+    },
+    metadata: {
+      branchId,
+      branchName: branchResult.data.name,
+    },
+  })
 
   revalidateBranchStorefrontPaths(tenantSlug)
 

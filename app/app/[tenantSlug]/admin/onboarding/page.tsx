@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { AdminOnboardingForm } from "@/components/admin/admin-onboarding-form"
@@ -43,6 +44,14 @@ export default async function AdminOnboardingPage({ params }: AdminOnboardingPag
       title="Activa tu negocio"
       description="Este es el primer paso para entrar al panel operativo. Confirma la identidad comercial del tenant y la sucursal principal para arrancar con una base consistente."
       badge="Paso inicial"
+      actions={
+        <Link
+          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+          href={`/app/${tenantSlug}/admin/audit?entity=tenant_onboarding`}
+        >
+          Ver auditoria de onboarding
+        </Link>
+      }
     >
       <AdminOnboardingForm
         tenantSlug={tenantSlug}
