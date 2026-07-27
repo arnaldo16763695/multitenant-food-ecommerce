@@ -104,7 +104,7 @@ export default async function PlatformAuditPage({ searchParams }: PlatformAuditP
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>Auditoria de plataforma</CardTitle>
             <Link
-              className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+              className="w-full rounded-full border border-stone-300 px-4 py-2 text-center text-sm font-semibold text-stone-900 transition hover:border-stone-950 sm:w-auto"
               href={`/platform/audit/export${exportParams.toString() ? `?${exportParams.toString()}` : ""}`}
             >
               Exportar CSV
@@ -113,24 +113,24 @@ export default async function PlatformAuditPage({ searchParams }: PlatformAuditP
           <CardDescription>Historial de decisiones sobre signups, provisioning y altas de tenants desde el panel SaaS.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3 lg:grid-cols-[1.05fr_0.6fr_0.6fr_0.5fr_0.55fr_0.45fr_0.45fr_auto]" method="get">
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={q ?? ""} name="q" placeholder="Buscar por actor, resumen o accion" />
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={actor ?? ""} name="actor" placeholder="Actor" />
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={action ?? ""} name="action" placeholder="Accion" />
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={entityId ?? ""} name="entityId" placeholder="UUID" />
-            <select className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedEntityType} name="entity">
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" method="get">
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={q ?? ""} name="q" placeholder="Buscar por actor, resumen o accion" />
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={actor ?? ""} name="actor" placeholder="Actor" />
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={action ?? ""} name="action" placeholder="Accion" />
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={entityId ?? ""} name="entityId" placeholder="UUID" />
+            <select className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedEntityType} name="entity">
               <option value="all">Todas</option>
               <option value="platform_signup">Signup</option>
               <option value="platform_tenant">Tenant</option>
             </select>
-            <select className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedSurface} name="surface">
+            <select className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedSurface} name="surface">
               <option value="all">Todas</option>
               <option value="platform">Platform</option>
               <option value="system">System</option>
             </select>
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={startDate ?? ""} name="startDate" type="date" />
-            <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={endDate ?? ""} name="endDate" type="date" />
-            <button className="h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-orange-600" type="submit">
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={startDate ?? ""} name="startDate" type="date" />
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={endDate ?? ""} name="endDate" type="date" />
+            <button className="h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 md:col-span-2 xl:col-span-3 2xl:col-span-4" type="submit">
               Filtrar
             </button>
           </form>
@@ -145,13 +145,13 @@ export default async function PlatformAuditPage({ searchParams }: PlatformAuditP
         <CardContent className="grid gap-3">
           {events.length ? (
             events.map((event) => (
-              <div key={event.id} className="rounded-[1rem] border border-border bg-secondary/20 p-4">
+              <div key={event.id} className="min-w-0 rounded-[1rem] border border-border bg-secondary/20 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={getSurfaceBadgeVariant(event.actorSurface)}>{formatSurfaceLabel(event.actorSurface)}</Badge>
                   <Badge variant="outline">{formatEntityLabel(event.entityType)}</Badge>
-                  <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{event.action}</span>
+                  <span className="break-all text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{event.action}</span>
                 </div>
-                <p className="mt-3 text-sm font-medium text-card-foreground">{event.summary}</p>
+                <p className="mt-3 break-words text-sm font-medium text-card-foreground">{event.summary}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{event.actorName ?? "Sistema"} · {new Date(event.createdAt).toLocaleString("es-MX")}</p>
               </div>
             ))

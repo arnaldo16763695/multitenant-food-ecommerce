@@ -175,7 +175,7 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
       badge={`${auditPage.total} eventos`}
       actions={
         <Link
-          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+          className="w-full rounded-full border border-stone-300 px-4 py-2 text-center text-sm font-semibold text-stone-900 transition hover:border-stone-950 sm:w-auto"
           href={`/app/${tenantSlug}/admin/audit/export${exportParams.toString() ? `?${exportParams.toString()}` : ""}`}
         >
           Exportar CSV
@@ -188,50 +188,50 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
           <CardDescription>Busca por resumen, actor, rol o acción. Este primer corte muestra los últimos 200 eventos.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-3 lg:grid-cols-[1.1fr_0.65fr_0.65fr_0.55fr_0.5fr_0.45fr_0.45fr_0.45fr_auto]" method="get">
-            <label className="grid gap-2 text-sm">
+          <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" method="get">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Buscar</span>
               <input
-                className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none"
+                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
                 defaultValue={q ?? ""}
                 name="q"
                 placeholder="Ej. confirmación, caja, comprobante, staff..."
               />
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Actor</span>
               <input
-                className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none"
+                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
                 defaultValue={actor ?? ""}
                 name="actor"
                 placeholder="Nombre del actor"
               />
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Acción</span>
               <input
-                className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none"
+                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
                 defaultValue={action ?? ""}
                 name="action"
                 placeholder="order.updated, staff.created..."
               />
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">ID de entidad</span>
               <input
-                className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none"
+                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
                 defaultValue={entityId ?? ""}
                 name="entityId"
                 placeholder="UUID de orden, pago o staff"
               />
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Superficie</span>
-              <select className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedSurface} name="surface">
+              <select className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedSurface} name="surface">
                 <option value="all">Todas</option>
                 <option value="admin">Admin</option>
                 <option value="kitchen">Kitchen</option>
@@ -241,9 +241,9 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
               </select>
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Entidad</span>
-              <select className="h-11 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedEntityType} name="entity">
+              <select className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedEntityType} name="entity">
                 <option value="all">Todas</option>
                 <option value="order">Orden</option>
                 <option value="order_payment">Pago</option>
@@ -258,17 +258,17 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
               </select>
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Desde</span>
-              <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none" defaultValue={startDate ?? ""} name="startDate" type="date" />
+              <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none" defaultValue={startDate ?? ""} name="startDate" type="date" />
             </label>
 
-            <label className="grid gap-2 text-sm">
+            <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Hasta</span>
-              <input className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none" defaultValue={endDate ?? ""} name="endDate" type="date" />
+              <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none" defaultValue={endDate ?? ""} name="endDate" type="date" />
             </label>
 
-            <button className="h-11 self-end rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-orange-600" type="submit">
+            <button className="h-11 rounded-xl bg-stone-950 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 md:col-span-2 xl:col-span-3 2xl:col-span-5" type="submit">
               Filtrar
             </button>
           </form>
@@ -283,7 +283,7 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
         <CardContent className="grid gap-4">
           {events.length ? (
             <>
-              <div className="overflow-hidden rounded-[1rem] border border-border">
+              <div className="overflow-x-auto rounded-[1rem] border border-border">
                 <Table>
                   <TableHeader className="bg-secondary/50">
                     <TableRow>
@@ -322,14 +322,14 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
               <div className="grid gap-3">
                 {events.map((event) => (
                   <Card key={`${event.id}-detail`}>
-                    <CardContent className="grid gap-3 p-4">
+                    <CardContent className="grid min-w-0 gap-3 p-4">
                       <div className="flex flex-wrap items-center gap-2 text-sm">
                         <Badge variant={getSurfaceBadgeVariant(event.actorSurface)}>{formatSurfaceLabel(event.actorSurface)}</Badge>
                         <Badge variant="outline">{formatEntityLabel(event.entityType)}</Badge>
-                        <span className="text-muted-foreground">{event.action}</span>
+                        <span className="break-all text-muted-foreground">{event.action}</span>
                       </div>
-                      <div>
-                        <p className="font-medium text-card-foreground">{event.summary}</p>
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-card-foreground">{event.summary}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           {event.actorName ?? "Sistema"} · <LocalizedDateTime value={event.createdAt} />
                         </p>
