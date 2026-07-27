@@ -37,9 +37,11 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Run the full suite once: `npm run test`
 - Run tests in watch mode: `npm run test:watch`
 - Run a single test file: `npm run test:file -- path/to/test-file.test.ts`
+- Run E2E tests: `npm run test:e2e`
+- Run E2E tests headed: `npm run test:e2e:headed`
 - Do not claim tests passed unless you actually ran them.
 - If Jest is added later, prefer `npx jest path/to/test-file.test.ts`.
-- If Playwright is added later, prefer `npx playwright test path/to/spec.ts`.
+- Run a single Playwright spec: `npx playwright test path/to/spec.ts`.
 
 ## Working Style
 

@@ -185,7 +185,7 @@ async function getModifierGroupAuditRow(supabase: SupabaseClient, modifierGroupI
   return result.data ?? null
 }
 
-function normalizeVariantInputs(variants?: readonly CatalogProductVariantInput[]) {
+export function normalizeVariantInputs(variants?: readonly CatalogProductVariantInput[]) {
   const normalizedVariants = (variants ?? [])
     .map((variant, index) => ({
       id: variant.id,
@@ -224,7 +224,7 @@ function mapAvailabilityStatus(status: BranchProductOverrideRow["availability_st
   return "Sin stock" as const
 }
 
-function normalizePrepTimeMinutes(value: string) {
+export function normalizePrepTimeMinutes(value: string) {
   const trimmedValue = value.trim()
 
   if (!trimmedValue) {
@@ -1185,7 +1185,7 @@ export async function updateCatalogCategory(
   return { ok: true }
 }
 
-function normalizeModifierGroupOptions(options: readonly CatalogModifierOptionMutationInput[]) {
+export function normalizeModifierGroupOptions(options: readonly CatalogModifierOptionMutationInput[]) {
   const normalizedOptions = options
     .map((option, index) => ({
       id: option.id,

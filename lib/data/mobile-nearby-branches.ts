@@ -51,7 +51,7 @@ function toRadians(value: number) {
   return (value * Math.PI) / 180
 }
 
-function haversineDistanceMeters(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) {
+export function haversineDistanceMeters(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }) {
   const earthRadiusMeters = 6371000
   const latitudeDelta = toRadians(to.latitude - from.latitude)
   const longitudeDelta = toRadians(to.longitude - from.longitude)

@@ -100,7 +100,7 @@ function formatMoney(value: number | string) {
   return `$ ${Number(value).toFixed(2)}`
 }
 
-function buildConfigurationHash(modifierSelections: readonly ShoppingBagModifierSelection[]) {
+export function buildConfigurationHash(modifierSelections: readonly ShoppingBagModifierSelection[]) {
   return modifierSelections
     .map((selection) => `${selection.modifierGroupId}:${selection.modifierOptionId}`)
     .sort()
@@ -226,7 +226,7 @@ async function loadProductModifierConfiguration(supabase: SupabaseClient, tenant
   return { modifierGroupMap, modifierGroupOptionsMap }
 }
 
-function validateModifierSelections(
+export function validateModifierSelections(
   modifierSelections: readonly ShoppingBagModifierSelection[],
   modifierGroupMap: ReadonlyMap<string, ModifierGroupRow>,
   modifierGroupOptionsMap: ReadonlyMap<string, readonly ModifierGroupOptionRow[]>

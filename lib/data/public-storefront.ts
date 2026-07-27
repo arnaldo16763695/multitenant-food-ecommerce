@@ -1,5 +1,7 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
+const DEMO_STOREFRONT_SLUG = "demo-brand"
+
 type StorefrontTenant = {
   readonly id: string
   readonly name: string
@@ -150,6 +152,90 @@ function buildShareUrl(tenant: StorefrontTenant) {
   return tenant.customDomain ? `https://${tenant.customDomain}` : `https://vzfood.com/app/${tenant.slug}`
 }
 
+function getDemoStorefrontData(): PublicStorefrontData {
+  const tenant: StorefrontTenant = {
+    id: DEMO_STOREFRONT_SLUG,
+    name: "Demo Brand",
+    slug: DEMO_STOREFRONT_SLUG,
+    customDomain: null,
+    storefrontEnabled: true,
+    heroImageUrl: null,
+    logoImageUrl: null,
+  }
+  const activeBranch: StorefrontBranch = {
+    id: "demo-branch-centro",
+    name: "Centro",
+    heroImageUrl: null,
+  }
+
+  return {
+    tenant,
+    branches: [activeBranch],
+    activeBranch,
+    etaMinutes: 18,
+    menu: [
+      {
+        id: "demo-burger",
+        name: "Classic Burger",
+        description: "Pan brioche, carne a la plancha, queso y salsa de la casa.",
+        basePrice: "$ 8.50",
+        hasVariants: true,
+        variants: [
+          {
+            id: "demo-burger-single",
+            name: "Simple",
+            basePrice: "$ 8.50",
+            isDefault: true,
+          },
+          {
+            id: "demo-burger-double",
+            name: "Doble",
+            basePrice: "$ 10.50",
+            isDefault: false,
+          },
+        ],
+        modifierGroups: [
+          {
+            id: "demo-sauces",
+            name: "Salsas",
+            selectionType: "single",
+            minSelect: 1,
+            maxSelect: 1,
+            options: [
+              {
+                id: "demo-mayo",
+                name: "Mayonesa de ajo",
+                priceDelta: 0,
+                priceDeltaLabel: "$ 0.00",
+              },
+              {
+                id: "demo-spicy",
+                name: "Picante",
+                priceDelta: 0.5,
+                priceDeltaLabel: "$ 0.50",
+              },
+            ],
+          },
+        ],
+        category: "Burgers",
+        imageUrl: null,
+      },
+      {
+        id: "demo-fries",
+        name: "Papas crujientes",
+        description: "Papas doradas con sal marina y toque especiado.",
+        basePrice: "$ 3.50",
+        hasVariants: false,
+        variants: [],
+        modifierGroups: [],
+        category: "Acompanantes",
+        imageUrl: null,
+      },
+    ],
+    shareUrl: buildShareUrl(tenant),
+  }
+}
+
 function resolveActiveBranch(branches: readonly StorefrontBranch[], preferredBranchId?: string | null) {
   if (!branches.length) {
     return null
@@ -163,6 +249,10 @@ function resolveActiveBranch(branches: readonly StorefrontBranch[], preferredBra
 }
 
 export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBranchId?: string | null): Promise<PublicStorefrontData | null> {
+  if (tenantSlug === DEMO_STOREFRONT_SLUG) {
+    return getDemoStorefrontData()
+  }
+
   const supabase = createSupabaseAdminClient()
 
   if (!supabase) {
