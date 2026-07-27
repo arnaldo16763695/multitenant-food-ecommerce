@@ -69,6 +69,7 @@ export async function GET(request: Request) {
     entityId: url.searchParams.get("entityId") ?? undefined,
     startDate: url.searchParams.get("startDate") ?? undefined,
     endDate: url.searchParams.get("endDate") ?? undefined,
+    timeZone: url.searchParams.get("timeZone") ?? undefined,
     limit: 1000,
   })
 

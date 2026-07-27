@@ -3,6 +3,7 @@ import type { ComponentProps } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { TimezoneHiddenInput } from "@/components/ui/timezone-hidden-input"
 import { requirePlatformAccess } from "@/lib/auth/platform"
 import { getPlatformAuditEvents, type AuditActorSurface } from "@/lib/services/audit"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -10,13 +11,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 type PlatformAuditPageProps = {
   readonly searchParams: Promise<{
     q?: string
-    actor?: string
-    action?: string
     surface?: string
     entity?: string
-    entityId?: string
     startDate?: string
     endDate?: string
+    timeZone?: string
     page?: string
   }>
 }
@@ -59,7 +58,7 @@ function parsePage(value?: string) {
 
 export default async function PlatformAuditPage({ searchParams }: PlatformAuditPageProps) {
   await requirePlatformAccess("/platform/audit")
-  const { q, actor, action, surface, entity, entityId, startDate, endDate, page } = await searchParams
+  const { q, surface, entity, startDate, endDate, timeZone, page } = await searchParams
   const supabase = await createSupabaseServerClient()
 
   if (!supabase) {
@@ -72,23 +71,19 @@ export default async function PlatformAuditPage({ searchParams }: PlatformAuditP
   const exportParams = new URLSearchParams()
 
   if (q?.trim()) exportParams.set("q", q.trim())
-  if (actor?.trim()) exportParams.set("actor", actor.trim())
-  if (action?.trim()) exportParams.set("action", action.trim())
-  if (entityId?.trim()) exportParams.set("entityId", entityId.trim())
   if (selectedSurface !== "all") exportParams.set("surface", selectedSurface)
   if (selectedEntityType !== "all") exportParams.set("entity", selectedEntityType)
   if (startDate?.trim()) exportParams.set("startDate", startDate.trim())
   if (endDate?.trim()) exportParams.set("endDate", endDate.trim())
+  if (timeZone?.trim()) exportParams.set("timeZone", timeZone.trim())
 
   const auditPage = await getPlatformAuditEvents(supabase, {
     query: q,
-    actor,
-    action,
     surface: selectedSurface,
     entityType: selectedEntityType,
-    entityId,
     startDate,
     endDate,
+    timeZone,
     page: currentPage,
     pageSize: DEFAULT_PAGE_SIZE,
   })
@@ -110,14 +105,12 @@ export default async function PlatformAuditPage({ searchParams }: PlatformAuditP
               Exportar CSV
             </Link>
           </div>
-          <CardDescription>Historial de decisiones sobre signups, provisioning y altas de tenants desde el panel SaaS.</CardDescription>
+          <CardDescription>Un solo buscador para actor, acción, resumen o UUID de entidad, combinado con fechas.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" method="get">
-            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={q ?? ""} name="q" placeholder="Buscar por actor, resumen o accion" />
-            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={actor ?? ""} name="actor" placeholder="Actor" />
-            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={action ?? ""} name="action" placeholder="Accion" />
-            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={entityId ?? ""} name="entityId" placeholder="UUID" />
+            <TimezoneHiddenInput />
+            <input className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={q ?? ""} name="q" placeholder="Actor, acción, resumen o UUID" />
             <select className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm" defaultValue={selectedEntityType} name="entity">
               <option value="all">Todas</option>
               <option value="platform_signup">Signup</option>

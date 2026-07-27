@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TimezoneHiddenInput } from "@/components/ui/timezone-hidden-input"
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { getAdminAuditEvents, type AdminAuditEvent, type AuditActorSurface } from "@/lib/services/audit"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -16,13 +17,11 @@ type AdminAuditPageProps = {
   }>
   readonly searchParams: Promise<{
     q?: string
-    actor?: string
-    action?: string
     surface?: string
     entity?: string
-    entityId?: string
     startDate?: string
     endDate?: string
+    timeZone?: string
     page?: string
   }>
 }
@@ -127,7 +126,7 @@ function parsePage(value?: string) {
 
 export default async function AdminAuditPage({ params, searchParams }: AdminAuditPageProps) {
   const { tenantSlug } = await params
-  const { q, actor, action, surface, entity, entityId, startDate, endDate, page } = await searchParams
+  const { q, surface, entity, startDate, endDate, timeZone, page } = await searchParams
   const access = await requireAdminSectionAccess(tenantSlug, "audit")
   const supabase = await createSupabaseServerClient()
 
@@ -141,23 +140,19 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
   const exportParams = new URLSearchParams()
 
   if (q?.trim()) exportParams.set("q", q.trim())
-  if (actor?.trim()) exportParams.set("actor", actor.trim())
-  if (action?.trim()) exportParams.set("action", action.trim())
-  if (entityId?.trim()) exportParams.set("entityId", entityId.trim())
   if (selectedSurface !== "all") exportParams.set("surface", selectedSurface)
   if (selectedEntityType !== "all") exportParams.set("entity", selectedEntityType)
   if (startDate?.trim()) exportParams.set("startDate", startDate.trim())
   if (endDate?.trim()) exportParams.set("endDate", endDate.trim())
+  if (timeZone?.trim()) exportParams.set("timeZone", timeZone.trim())
 
   const auditPage = await getAdminAuditEvents(supabase, access.membership.tenantId, {
     query: q,
-    actor,
-    action,
     surface: selectedSurface,
     entityType: selectedEntityType,
-    entityId,
     startDate,
     endDate,
+    timeZone,
     page: currentPage,
     pageSize: DEFAULT_PAGE_SIZE,
   })
@@ -185,47 +180,18 @@ export default async function AdminAuditPage({ params, searchParams }: AdminAudi
       <Card>
         <CardHeader className="pb-4">
           <CardTitle>Filtros</CardTitle>
-          <CardDescription>Busca por resumen, actor, rol o acción. Este primer corte muestra los últimos 200 eventos.</CardDescription>
+          <CardDescription>Usa un solo buscador para actor, acción, resumen o UUID de entidad, y combínalo con rango de fechas.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5" method="get">
+            <TimezoneHiddenInput />
             <label className="grid min-w-0 gap-2 text-sm">
               <span className="font-medium text-card-foreground">Buscar</span>
               <input
                 className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
                 defaultValue={q ?? ""}
                 name="q"
-                placeholder="Ej. confirmación, caja, comprobante, staff..."
-              />
-            </label>
-
-            <label className="grid min-w-0 gap-2 text-sm">
-              <span className="font-medium text-card-foreground">Actor</span>
-              <input
-                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
-                defaultValue={actor ?? ""}
-                name="actor"
-                placeholder="Nombre del actor"
-              />
-            </label>
-
-            <label className="grid min-w-0 gap-2 text-sm">
-              <span className="font-medium text-card-foreground">Acción</span>
-              <input
-                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
-                defaultValue={action ?? ""}
-                name="action"
-                placeholder="order.updated, staff.created..."
-              />
-            </label>
-
-            <label className="grid min-w-0 gap-2 text-sm">
-              <span className="font-medium text-card-foreground">ID de entidad</span>
-              <input
-                className="h-11 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none"
-                defaultValue={entityId ?? ""}
-                name="entityId"
-                placeholder="UUID de orden, pago o staff"
+                placeholder="Actor, acción, resumen o UUID"
               />
             </label>
 

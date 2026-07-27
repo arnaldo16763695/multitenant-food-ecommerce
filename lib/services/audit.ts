@@ -89,6 +89,79 @@ function normalizePayload(payload?: AuditPayload | null) {
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined))
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function getFormatterParts(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  })
+
+  const parts = formatter.formatToParts(date)
+  const getValue = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "00"
+
+  return {
+    year: Number(getValue("year")),
+    month: Number(getValue("month")),
+    day: Number(getValue("day")),
+    hour: Number(getValue("hour")),
+    minute: Number(getValue("minute")),
+    second: Number(getValue("second")),
+  }
+}
+
+function getTimeZoneOffsetMilliseconds(date: Date, timeZone: string) {
+  const parts = getFormatterParts(date, timeZone)
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+  return asUtc - date.getTime()
+}
+
+function getUtcStartOfLocalDay(dateValue: string, timeZone: string) {
+  const [year, month, day] = dateValue.split("-").map(Number)
+  const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0, 0)
+  const firstOffset = getTimeZoneOffsetMilliseconds(new Date(utcGuess), timeZone)
+  let result = utcGuess - firstOffset
+  const secondOffset = getTimeZoneOffsetMilliseconds(new Date(result), timeZone)
+
+  if (secondOffset !== firstOffset) {
+    result = utcGuess - secondOffset
+  }
+
+  return new Date(result)
+}
+
+function buildDateRange(filters?: { startDate?: string; endDate?: string; timeZone?: string }) {
+  const timeZone = filters?.timeZone?.trim() || "UTC"
+  const startDate = filters?.startDate?.trim()
+  const endDate = filters?.endDate?.trim()
+
+  if (!startDate && !endDate) {
+    return null
+  }
+
+  const start = startDate ? getUtcStartOfLocalDay(startDate, timeZone) : null
+  const endExclusive = endDate
+    ? (() => {
+        const end = new Date(getUtcStartOfLocalDay(endDate, timeZone))
+        end.setUTCDate(end.getUTCDate() + 1)
+        return end
+      })()
+    : null
+
+  return {
+    startIso: start?.toISOString() ?? null,
+    endExclusiveIso: endExclusive?.toISOString() ?? null,
+  }
+}
+
 export async function writeAuditEvent(supabase: SupabaseClient, input: AuditEventInput) {
   const auditClient = createSupabaseAdminClient() ?? supabase
 
@@ -133,12 +206,14 @@ export async function getAdminAuditEvents(
     readonly pageSize?: number
     readonly startDate?: string
     readonly endDate?: string
+    readonly timeZone?: string
   }
 ): Promise<AuditEventPage> {
   const page = Math.max(1, filters?.page ?? 1)
   const pageSize = Math.max(1, Math.min(filters?.pageSize ?? filters?.limit ?? 50, 100))
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
+  const dateRange = buildDateRange(filters)
   let query = supabase
     .from("audit_events")
     .select("id, created_at, actor_name, actor_role, actor_surface, entity_type, entity_id, action, summary, before_data, after_data, metadata", { count: "exact" })
@@ -168,17 +243,27 @@ export async function getAdminAuditEvents(
 
   if (filters?.query?.trim()) {
     const normalizedQuery = filters.query.trim().replace(/,/g, " ")
-    query = query.or(
-      `summary.ilike.%${normalizedQuery}%,action.ilike.%${normalizedQuery}%,entity_type.ilike.%${normalizedQuery}%,actor_name.ilike.%${normalizedQuery}%,actor_role.ilike.%${normalizedQuery}%`
-    )
+    const queryFilters = [
+      `summary.ilike.%${normalizedQuery}%`,
+      `action.ilike.%${normalizedQuery}%`,
+      `entity_type.ilike.%${normalizedQuery}%`,
+      `actor_name.ilike.%${normalizedQuery}%`,
+      `actor_role.ilike.%${normalizedQuery}%`,
+    ]
+
+    if (isUuidLike(normalizedQuery)) {
+      queryFilters.push(`entity_id.eq.${normalizedQuery}`)
+    }
+
+    query = query.or(queryFilters.join(","))
   }
 
-  if (filters?.startDate?.trim()) {
-    query = query.gte("created_at", `${filters.startDate.trim()}T00:00:00.000Z`)
+  if (dateRange?.startIso) {
+    query = query.gte("created_at", dateRange.startIso)
   }
 
-  if (filters?.endDate?.trim()) {
-    query = query.lte("created_at", `${filters.endDate.trim()}T23:59:59.999Z`)
+  if (dateRange?.endExclusiveIso) {
+    query = query.lt("created_at", dateRange.endExclusiveIso)
   }
 
   const eventsResult = await query.returns<AuditEventRow[]>()
@@ -227,12 +312,14 @@ export async function getPlatformAuditEvents(
     readonly pageSize?: number
     readonly startDate?: string
     readonly endDate?: string
+    readonly timeZone?: string
   }
 ): Promise<AuditEventPage> {
   const page = Math.max(1, filters?.page ?? 1)
   const pageSize = Math.max(1, Math.min(filters?.pageSize ?? filters?.limit ?? 50, 100))
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
+  const dateRange = buildDateRange(filters)
   let query = supabase
     .from("audit_events")
     .select("id, created_at, actor_name, actor_role, actor_surface, entity_type, entity_id, action, summary, before_data, after_data, metadata", { count: "exact" })
@@ -262,17 +349,27 @@ export async function getPlatformAuditEvents(
 
   if (filters?.query?.trim()) {
     const normalizedQuery = filters.query.trim().replace(/,/g, " ")
-    query = query.or(
-      `summary.ilike.%${normalizedQuery}%,action.ilike.%${normalizedQuery}%,entity_type.ilike.%${normalizedQuery}%,actor_name.ilike.%${normalizedQuery}%,actor_role.ilike.%${normalizedQuery}%`
-    )
+    const queryFilters = [
+      `summary.ilike.%${normalizedQuery}%`,
+      `action.ilike.%${normalizedQuery}%`,
+      `entity_type.ilike.%${normalizedQuery}%`,
+      `actor_name.ilike.%${normalizedQuery}%`,
+      `actor_role.ilike.%${normalizedQuery}%`,
+    ]
+
+    if (isUuidLike(normalizedQuery)) {
+      queryFilters.push(`entity_id.eq.${normalizedQuery}`)
+    }
+
+    query = query.or(queryFilters.join(","))
   }
 
-  if (filters?.startDate?.trim()) {
-    query = query.gte("created_at", `${filters.startDate.trim()}T00:00:00.000Z`)
+  if (dateRange?.startIso) {
+    query = query.gte("created_at", dateRange.startIso)
   }
 
-  if (filters?.endDate?.trim()) {
-    query = query.lte("created_at", `${filters.endDate.trim()}T23:59:59.999Z`)
+  if (dateRange?.endExclusiveIso) {
+    query = query.lt("created_at", dateRange.endExclusiveIso)
   }
 
   const eventsResult = await query.returns<AuditEventRow[]>()
