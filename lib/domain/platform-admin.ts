@@ -15,6 +15,47 @@ export type PlatformTenantSummary = {
   readonly activeMembershipCount: number
 }
 
+export type PlatformMobileHomeBannerSummary = {
+  readonly id: string
+  readonly tenantId: string
+  readonly tenantName: string
+  readonly tenantSlug: string
+  readonly branchId: string | null
+  readonly branchName: string | null
+  readonly title: string
+  readonly subtitle: string
+  readonly imageUrl: string | null
+  readonly ctaLabel: string
+  readonly sortOrder: number
+  readonly isActive: boolean
+  readonly startsAt: string | null
+  readonly endsAt: string | null
+}
+
+export type PlatformMobileHomeBannerOption = {
+  readonly tenantId: string
+  readonly tenantName: string
+  readonly tenantSlug: string
+  readonly branches: readonly {
+    readonly id: string
+    readonly name: string
+  }[]
+}
+
+export type SavePlatformMobileHomeBannerInput = {
+  readonly bannerId?: string
+  readonly tenantId: string
+  readonly branchId?: string | null
+  readonly title: string
+  readonly subtitle: string
+  readonly imageUrl?: string | null
+  readonly ctaLabel: string
+  readonly sortOrder: number
+  readonly isActive: boolean
+  readonly startsAt?: string | null
+  readonly endsAt?: string | null
+}
+
 export type BusinessSignupSummary = {
   readonly id: string
   readonly companyName: string

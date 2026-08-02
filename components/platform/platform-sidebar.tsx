@@ -7,6 +7,7 @@ import {
   Building2,
   ChevronDown,
   ClipboardList,
+  ImageIcon,
   ScrollText,
   ShieldCheck,
   Store,
@@ -52,6 +53,11 @@ const platformNavigation: readonly PlatformNavigationItem[] = [
     title: "Signups",
     href: "/platform/signups",
     icon: ClipboardList,
+  },
+  {
+    title: "Home banners",
+    href: "/platform/home-banners",
+    icon: ImageIcon,
   },
   {
     title: "Auditoria",

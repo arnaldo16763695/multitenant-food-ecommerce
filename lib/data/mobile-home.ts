@@ -1,6 +1,7 @@
 import { featuredBrands } from "@/lib/config/platform"
 import { getNearbyBranches, type NearbyBranch } from "@/lib/data/mobile-nearby-branches"
 import { getPublicBrandsDirectory } from "@/lib/data/public-brands"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 
 export type MobileHomeHeroBanner = {
   readonly id: string
@@ -29,6 +30,62 @@ export type MobileHomePayload = {
   readonly heroBanners: readonly MobileHomeHeroBanner[]
   readonly nearbyBranches: readonly NearbyBranch[]
   readonly featuredBrands: readonly MobileHomeBrand[]
+}
+
+async function getManualHeroBanners(): Promise<readonly MobileHomeHeroBanner[]> {
+  const supabase = createSupabaseAdminClient()
+
+  if (!supabase) {
+    return []
+  }
+
+  const nowIso = new Date().toISOString()
+  const bannersResult = await supabase
+    .from("mobile_home_banners")
+    .select("id, title, subtitle, image_url, cta_label, tenant_id, branch_id, tenants!inner(slug, storefront_enabled)")
+    .eq("is_active", true)
+    .or(`starts_at.is.null,starts_at.lte.${nowIso}`)
+    .or(`ends_at.is.null,ends_at.gte.${nowIso}`)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .returns<{
+      id: string
+      title: string
+      subtitle: string
+      image_url: string | null
+      cta_label: string
+      tenant_id: string
+      branch_id: string | null
+      tenants: {
+        slug: string
+        storefront_enabled: boolean
+      } | null
+    }[]>()
+
+  if (bannersResult.error) {
+    return []
+  }
+
+  return (bannersResult.data ?? []).flatMap((banner) => {
+    if (!banner.tenants?.storefront_enabled) {
+      return []
+    }
+
+    const ctaHref = banner.branch_id ? `/app/${banner.tenants.slug}?branch=${banner.branch_id}` : `/app/${banner.tenants.slug}`
+
+    return [
+      {
+        id: banner.id,
+        title: banner.title,
+        subtitle: banner.subtitle,
+        imageUrl: banner.image_url,
+        tenantSlug: banner.tenants.slug,
+        branchId: banner.branch_id,
+        ctaLabel: banner.cta_label,
+        ctaHref,
+      } satisfies MobileHomeHeroBanner,
+    ]
+  })
 }
 
 function buildHeroBanners(input: {
@@ -88,12 +145,16 @@ export async function getMobileHome(input?: {
           limit: 10,
         })
       : []
+  const manualHeroBanners = await getManualHeroBanners()
 
   return {
-    heroBanners: buildHeroBanners({
-      nearbyBranches,
-      featuredBrands: featuredBrandsPayload,
-    }),
+    heroBanners:
+      manualHeroBanners.length > 0
+        ? manualHeroBanners
+        : buildHeroBanners({
+            nearbyBranches,
+            featuredBrands: featuredBrandsPayload,
+          }),
     nearbyBranches,
     featuredBrands: featuredBrandsPayload,
   }

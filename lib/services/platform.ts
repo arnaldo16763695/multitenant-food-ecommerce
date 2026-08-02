@@ -17,6 +17,9 @@ import type {
   BusinessSignupSummary,
   CreateBusinessSignupInput,
   PlatformTenantSummary,
+  PlatformMobileHomeBannerOption,
+  PlatformMobileHomeBannerSummary,
+  SavePlatformMobileHomeBannerInput,
   UpdateBusinessSignupDecisionInput,
 } from "@/lib/domain/platform-admin"
 
@@ -51,6 +54,41 @@ type BusinessSignupRow = {
   tenants: {
     slug: string
   } | null
+}
+
+type MobileHomeBannerRow = {
+  id: string
+  tenant_id: string
+  branch_id: string | null
+  title: string
+  subtitle: string
+  image_url: string | null
+  cta_label: string
+  sort_order: number
+  is_active: boolean
+  starts_at: string | null
+  ends_at: string | null
+  tenants: {
+    name: string
+    slug: string
+  } | null
+  branches: {
+    name: string
+  } | null
+}
+
+type MobileHomeBannerTenantRow = {
+  id: string
+  name: string
+  slug: string
+  storefront_enabled: boolean
+}
+
+type MobileHomeBannerBranchRow = {
+  id: string
+  tenant_id: string
+  name: string
+  is_active: boolean
 }
 
 type ExistingProfileRow = {
@@ -334,6 +372,234 @@ export async function updateBusinessSignupDecision(
       signupId: input.signupId,
     },
   })
+
+  return { ok: true }
+}
+
+export async function getPlatformMobileHomeBanners(supabase: SupabaseClient): Promise<readonly PlatformMobileHomeBannerSummary[]> {
+  const bannersResult = await supabase
+    .from("mobile_home_banners")
+    .select("id, tenant_id, branch_id, title, subtitle, image_url, cta_label, sort_order, is_active, starts_at, ends_at, tenants(name, slug), branches(name)")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .returns<MobileHomeBannerRow[]>()
+
+  if (bannersResult.error) {
+    throw new Error(bannersResult.error.message)
+  }
+
+  return (bannersResult.data ?? []).map((banner) => ({
+    id: banner.id,
+    tenantId: banner.tenant_id,
+    tenantName: banner.tenants?.name ?? "Tenant",
+    tenantSlug: banner.tenants?.slug ?? "tenant",
+    branchId: banner.branch_id,
+    branchName: banner.branches?.name ?? null,
+    title: banner.title,
+    subtitle: banner.subtitle,
+    imageUrl: banner.image_url,
+    ctaLabel: banner.cta_label,
+    sortOrder: banner.sort_order,
+    isActive: banner.is_active,
+    startsAt: banner.starts_at,
+    endsAt: banner.ends_at,
+  }))
+}
+
+export async function getPlatformMobileHomeBannerOptions(supabase: SupabaseClient): Promise<readonly PlatformMobileHomeBannerOption[]> {
+  const [tenantsResult, branchesResult] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select("id, name, slug, storefront_enabled")
+      .eq("storefront_enabled", true)
+      .order("name", { ascending: true })
+      .returns<MobileHomeBannerTenantRow[]>(),
+    supabase
+      .from("branches")
+      .select("id, tenant_id, name, is_active")
+      .eq("is_active", true)
+      .order("name", { ascending: true })
+      .returns<MobileHomeBannerBranchRow[]>(),
+  ])
+
+  if (tenantsResult.error || branchesResult.error) {
+    throw new Error(tenantsResult.error?.message ?? branchesResult.error?.message ?? "No pudimos cargar opciones de banners mobile.")
+  }
+
+  const branchesByTenant = (branchesResult.data ?? []).reduce<Map<string, { id: string; name: string }[]>>((map, branch) => {
+    const current = map.get(branch.tenant_id) ?? []
+    map.set(branch.tenant_id, [...current, { id: branch.id, name: branch.name }])
+    return map
+  }, new Map())
+
+  return (tenantsResult.data ?? []).map((tenant) => ({
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+    tenantSlug: tenant.slug,
+    branches: branchesByTenant.get(tenant.id) ?? [],
+  }))
+}
+
+export async function savePlatformMobileHomeBanner(
+  supabase: SupabaseClient,
+  input: SavePlatformMobileHomeBannerInput & { readonly auditActor?: AuditActor }
+): Promise<{ ok: boolean; error?: string; bannerId?: string }> {
+  const title = input.title.trim()
+  const subtitle = input.subtitle.trim()
+  const ctaLabel = input.ctaLabel.trim() || "Abrir tienda"
+  const imageUrl = input.imageUrl?.trim() || null
+  const startsAt = input.startsAt?.trim() || null
+  const endsAt = input.endsAt?.trim() || null
+  const branchId = input.branchId?.trim() || null
+
+  if (!input.tenantId.trim() || !title) {
+    return { ok: false, error: "Selecciona un tenant y escribe un titulo para continuar." }
+  }
+
+  if (startsAt && endsAt && new Date(startsAt).getTime() > new Date(endsAt).getTime()) {
+    return { ok: false, error: "La fecha de inicio no puede ser mayor que la fecha de fin." }
+  }
+
+  const tenantResult = await supabase
+    .from("tenants")
+    .select("id, slug, storefront_enabled")
+    .eq("id", input.tenantId)
+    .limit(1)
+    .maybeSingle<{ id: string; slug: string; storefront_enabled: boolean }>()
+
+  if (tenantResult.error || !tenantResult.data || !tenantResult.data.storefront_enabled) {
+    return { ok: false, error: "Selecciona un tenant con storefront publicado." }
+  }
+
+  if (imageUrl) {
+    try {
+      const parsedUrl = new URL(imageUrl)
+
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        return { ok: false, error: "La imagen del banner debe usar una URL http o https valida." }
+      }
+    } catch {
+      return { ok: false, error: "La imagen del banner debe usar una URL valida." }
+    }
+  }
+
+  if (branchId) {
+    const branchResult = await supabase
+      .from("branches")
+      .select("id")
+      .eq("id", branchId)
+      .eq("tenant_id", input.tenantId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<{ id: string }>()
+
+    if (branchResult.error || !branchResult.data) {
+      return { ok: false, error: "La sucursal seleccionada no pertenece al tenant o no esta activa." }
+    }
+  }
+
+  const bannerId = input.bannerId?.trim() || randomUUID()
+  const beforeResult = input.bannerId
+    ? await supabase
+        .from("mobile_home_banners")
+        .select("id, tenant_id, branch_id, title, subtitle, image_url, cta_label, sort_order, is_active, starts_at, ends_at")
+        .eq("id", bannerId)
+        .limit(1)
+        .maybeSingle<Record<string, unknown>>()
+    : { data: null, error: null }
+
+  if (beforeResult.error) {
+    return { ok: false, error: beforeResult.error.message }
+  }
+
+  const upsertResult = await supabase
+    .from("mobile_home_banners")
+    .upsert(
+      {
+        id: bannerId,
+        tenant_id: input.tenantId,
+        branch_id: branchId,
+        title,
+        subtitle,
+        image_url: imageUrl,
+        cta_label: ctaLabel,
+        sort_order: input.sortOrder,
+        is_active: input.isActive,
+        starts_at: startsAt,
+        ends_at: endsAt,
+      },
+      { onConflict: "id" }
+    )
+    .select("id")
+    .limit(1)
+    .maybeSingle<{ id: string }>()
+
+  if (upsertResult.error || !upsertResult.data) {
+    return { ok: false, error: upsertResult.error?.message ?? "No pudimos guardar el banner mobile." }
+  }
+
+  if (input.auditActor) {
+    await writeAuditEvent(supabase, {
+      actor: input.auditActor,
+      entityType: "mobile_home_banner",
+      entityId: bannerId,
+      action: input.bannerId ? "updated" : "created",
+      summary: input.bannerId ? `Actualizo banner mobile ${title}.` : `Creo banner mobile ${title}.`,
+      beforeData: beforeResult.data,
+      afterData: {
+        tenantId: input.tenantId,
+        branchId,
+        title,
+        subtitle,
+        imageUrl,
+        ctaLabel,
+        sortOrder: input.sortOrder,
+        isActive: input.isActive,
+        startsAt,
+        endsAt,
+      },
+      metadata: {
+        tenantSlug: tenantResult.data.slug,
+      },
+    })
+  }
+
+  return { ok: true, bannerId }
+}
+
+export async function deletePlatformMobileHomeBanner(
+  supabase: SupabaseClient,
+  bannerId: string,
+  auditActor?: AuditActor
+): Promise<{ ok: boolean; error?: string }> {
+  const bannerResult = await supabase
+    .from("mobile_home_banners")
+    .select("id, tenant_id, branch_id, title, subtitle, image_url, cta_label, sort_order, is_active, starts_at, ends_at")
+    .eq("id", bannerId)
+    .limit(1)
+    .maybeSingle<Record<string, unknown>>()
+
+  if (bannerResult.error || !bannerResult.data) {
+    return { ok: false, error: bannerResult.error?.message ?? "No encontramos el banner mobile indicado." }
+  }
+
+  const deleteResult = await supabase.from("mobile_home_banners").delete().eq("id", bannerId)
+
+  if (deleteResult.error) {
+    return { ok: false, error: deleteResult.error.message }
+  }
+
+  if (auditActor) {
+    await writeAuditEvent(supabase, {
+      actor: auditActor,
+      entityType: "mobile_home_banner",
+      entityId: bannerId,
+      action: "deleted",
+      summary: `Elimino banner mobile ${(bannerResult.data.title as string | undefined) ?? bannerId}.`,
+      beforeData: bannerResult.data,
+      afterData: null,
+    })
+  }
 
   return { ok: true }
 }

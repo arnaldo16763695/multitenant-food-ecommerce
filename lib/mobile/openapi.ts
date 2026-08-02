@@ -180,6 +180,57 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
           },
         },
+        BranchDetail: {
+          type: "object",
+          required: [
+            "id",
+            "name",
+            "heroImageUrl",
+            "addressLine1",
+            "city",
+            "state",
+            "postalCode",
+            "countryCode",
+            "latitude",
+            "longitude",
+            "isActive",
+            "storefrontHref",
+            "tenant",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            heroImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            addressLine1: buildNullableSchema({ type: "string" }),
+            city: buildNullableSchema({ type: "string" }),
+            state: buildNullableSchema({ type: "string" }),
+            postalCode: buildNullableSchema({ type: "string" }),
+            countryCode: buildNullableSchema({ type: "string" }),
+            latitude: buildNullableSchema({ type: "number" }),
+            longitude: buildNullableSchema({ type: "number" }),
+            isActive: { type: "boolean" },
+            storefrontHref: buildNullableSchema({ type: "string" }),
+            tenant: {
+              type: "object",
+              required: ["id", "name", "slug", "logoImageUrl", "heroImageUrl", "storefrontEnabled"],
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string" },
+                slug: { type: "string" },
+                logoImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+                heroImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+                storefrontEnabled: { type: "boolean" },
+              },
+            },
+          },
+        },
+        BranchDetailResponse: {
+          type: "object",
+          required: ["branch"],
+          properties: {
+            branch: buildSchemaRef("BranchDetail"),
+          },
+        },
         NearbyBranchTenant: {
           type: "object",
           required: ["id", "name", "slug", "logoImageUrl", "heroImageUrl", "cuisine"],
@@ -394,6 +445,38 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
           type: "object",
           required: ["tenantSlug", "branch", "categories", "products"],
           properties: {
+            tenantSlug: { type: "string" },
+            branch: buildSchemaRef("StorefrontBranch"),
+            categories: {
+              type: "array",
+              items: buildSchemaRef("StorefrontMenuCategory"),
+            },
+            products: {
+              type: "array",
+              items: buildSchemaRef("StorefrontProduct"),
+            },
+          },
+        },
+        StorefrontPaymentSettings: {
+          type: "object",
+          required: ["mobilePaymentInstructions", "bankTransferInstructions"],
+          properties: {
+            mobilePaymentInstructions: buildNullableSchema({ type: "string" }),
+            bankTransferInstructions: buildNullableSchema({ type: "string" }),
+          },
+        },
+        StorefrontPaymentSettingsResponse: {
+          type: "object",
+          required: ["settings"],
+          properties: {
+            settings: buildSchemaRef("StorefrontPaymentSettings"),
+          },
+        },
+        StorefrontSearchResponse: {
+          type: "object",
+          required: ["query", "tenantSlug", "branch", "categories", "products"],
+          properties: {
+            query: { type: "string" },
             tenantSlug: { type: "string" },
             branch: buildSchemaRef("StorefrontBranch"),
             categories: {
@@ -748,6 +831,39 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
           },
         },
       },
+      "/branches/{branchId}": {
+        get: {
+          tags: ["Marketplace"],
+          operationId: "getMobileBranchDetail",
+          summary: "Return a single branch detail for mobile",
+          parameters: [
+            {
+              name: "branchId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Branch detail payload.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("BranchDetailResponse"),
+                },
+              },
+            },
+            404: {
+              description: "Branch not found.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
       "/customer/me": {
         get: {
           tags: ["Customer"],
@@ -860,6 +976,100 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
             404: {
               description: "Storefront or branch menu not found.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/storefront/{tenantSlug}/payment-settings": {
+        get: {
+          tags: ["Storefront"],
+          operationId: "getMobileStorefrontPaymentSettings",
+          summary: "Return manual payment instructions for a storefront",
+          parameters: [
+            {
+              name: "tenantSlug",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Payment settings payload.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("StorefrontPaymentSettingsResponse"),
+                },
+              },
+            },
+            404: {
+              description: "Payment settings not found.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            500: {
+              description: "Supabase admin client is not configured.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/storefront/{tenantSlug}/search": {
+        get: {
+          tags: ["Storefront"],
+          operationId: "searchMobileStorefrontMenu",
+          summary: "Search products inside a tenant storefront branch",
+          parameters: [
+            {
+              name: "tenantSlug",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+            {
+              name: "branchId",
+              in: "query",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+            {
+              name: "q",
+              in: "query",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Storefront search result payload.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("StorefrontSearchResponse"),
+                },
+              },
+            },
+            400: {
+              description: "Missing branchId or q.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            404: {
+              description: "Branch/storefront not found.",
               content: {
                 "application/json": {
                   schema: buildSchemaRef("ErrorResponse"),
