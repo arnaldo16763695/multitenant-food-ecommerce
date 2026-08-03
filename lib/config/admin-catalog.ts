@@ -50,6 +50,7 @@ export type CatalogModifierGroup = {
   readonly id: string
   readonly name: string
   readonly type: "Single" | "Multiple"
+  readonly modifierKind: "ingredient" | "addon" | "choice"
   readonly appliedTo: string
   readonly minSelect: number
   readonly maxSelect: number
@@ -58,6 +59,7 @@ export type CatalogModifierGroup = {
     id: string
     name: string
     priceDelta: string
+    defaultSelected: boolean
   }[]
 }
 
@@ -190,8 +192,8 @@ export const catalogCategories: readonly CatalogCategory[] = [
 ] as const
 
 export const catalogModifierGroups: readonly CatalogModifierGroup[] = [
-  { id: "mod-extras", name: "Extras", type: "Multiple", appliedTo: "6 productos", minSelect: 0, maxSelect: 3, optionCount: 3, options: [{ id: "opt-extra-queso", name: "Extra queso", priceDelta: "$ 1.20" }] },
-  { id: "mod-salsas", name: "Salsas", type: "Multiple", appliedTo: "12 productos", minSelect: 0, maxSelect: 2, optionCount: 3, options: [{ id: "opt-bbq", name: "BBQ", priceDelta: "$ 0.00" }] },
-  { id: "mod-bebidas", name: "Bebidas", type: "Single", appliedTo: "5 combos", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-cola-1l", name: "Cola 1L", priceDelta: "$ 0.00" }] },
-  { id: "mod-tamano", name: "Tamano", type: "Single", appliedTo: "9 bebidas", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-individual", name: "Individual", priceDelta: "$ 0.00" }] },
+  { id: "mod-extras", name: "Extras", type: "Multiple", modifierKind: "addon", appliedTo: "6 productos", minSelect: 0, maxSelect: 3, optionCount: 3, options: [{ id: "opt-extra-queso", name: "Extra queso", priceDelta: "$ 1.20", defaultSelected: false }] },
+  { id: "mod-salsas", name: "Salsas", type: "Multiple", modifierKind: "choice", appliedTo: "12 productos", minSelect: 0, maxSelect: 2, optionCount: 3, options: [{ id: "opt-bbq", name: "BBQ", priceDelta: "$ 0.00", defaultSelected: false }] },
+  { id: "mod-bebidas", name: "Bebidas", type: "Single", modifierKind: "choice", appliedTo: "5 combos", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-cola-1l", name: "Cola 1L", priceDelta: "$ 0.00", defaultSelected: true }] },
+  { id: "mod-tamano", name: "Tamano", type: "Single", modifierKind: "choice", appliedTo: "9 bebidas", minSelect: 1, maxSelect: 1, optionCount: 3, options: [{ id: "opt-individual", name: "Individual", priceDelta: "$ 0.00", defaultSelected: true }] },
 ] as const

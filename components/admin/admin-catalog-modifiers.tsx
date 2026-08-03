@@ -12,6 +12,7 @@ import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -20,6 +21,7 @@ type ModifierOptionFormValue = {
   readonly id: string
   readonly name: string
   readonly priceDelta: string
+  readonly defaultSelected: boolean
   readonly sortOrder: number
 }
 
@@ -27,6 +29,7 @@ type ModifierGroupFormValue = {
   readonly id: string
   readonly name: string
   readonly type: CatalogModifierGroup["type"]
+  readonly modifierKind: CatalogModifierGroup["modifierKind"]
   readonly minSelect: number
   readonly maxSelect: number
   readonly options: readonly ModifierOptionFormValue[]
@@ -44,12 +47,14 @@ function buildModifierGroupFormValues(group: CatalogModifierGroup): ModifierGrou
     id: group.id,
     name: group.name,
     type: group.type,
+    modifierKind: group.modifierKind,
     minSelect: group.minSelect,
     maxSelect: group.maxSelect,
     options: group.options.map((option, index) => ({
       id: option.id,
       name: option.name,
       priceDelta: option.priceDelta,
+      defaultSelected: option.defaultSelected,
       sortOrder: index,
     })),
   }
@@ -60,6 +65,7 @@ function buildEmptyModifierGroup(index: number): ModifierGroupFormValue {
     id: `draft-modifier-group-${index + 1}`,
     name: "",
     type: "Multiple",
+    modifierKind: "choice",
     minSelect: 0,
     maxSelect: 1,
     options: [
@@ -67,6 +73,7 @@ function buildEmptyModifierGroup(index: number): ModifierGroupFormValue {
         id: `draft-modifier-option-${index + 1}-1`,
         name: "",
         priceDelta: "$ 0.00",
+        defaultSelected: false,
         sortOrder: 0,
       },
     ],
@@ -123,7 +130,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
     }))
   }
 
-  function handleOptionChange(index: number, field: keyof Omit<ModifierOptionFormValue, "id" | "sortOrder">, value: string) {
+  function handleOptionChange(index: number, field: keyof Omit<ModifierOptionFormValue, "id" | "sortOrder">, value: string | boolean) {
     setFormErrorMessage("")
     setGroupFormValues((currentValues) => ({
       ...currentValues,
@@ -140,6 +147,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
           id: `draft-modifier-option-${currentValues.options.length + 1}`,
           name: "",
           priceDelta: "$ 0.00",
+          defaultSelected: false,
           sortOrder: currentValues.options.length,
         },
       ],
@@ -181,18 +189,20 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
       const formData = new FormData()
       formData.set("name", groupFormValues.name)
       formData.set("type", groupFormValues.type)
+      formData.set("modifierKind", groupFormValues.modifierKind)
       formData.set("minSelect", String(groupFormValues.minSelect))
       formData.set("maxSelect", String(groupFormValues.maxSelect))
       formData.set(
         "options",
         JSON.stringify(
-          groupFormValues.options.map((option) => ({
-            id: option.id.startsWith("draft-") ? undefined : option.id,
-            name: option.name,
-            priceDelta: option.priceDelta,
-            sortOrder: option.sortOrder,
-          }))
-        )
+            groupFormValues.options.map((option) => ({
+              id: option.id.startsWith("draft-") ? undefined : option.id,
+              name: option.name,
+              priceDelta: option.priceDelta,
+              defaultSelected: option.defaultSelected,
+              sortOrder: option.sortOrder,
+            }))
+          )
       )
 
       const result =
@@ -245,6 +255,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
                 <TableRow>
                   <TableHead className="h-10 px-3 text-xs">Grupo</TableHead>
                   <TableHead className="h-10 px-3 text-xs">Tipo</TableHead>
+                  <TableHead className="h-10 px-3 text-xs">Semantica</TableHead>
                   <TableHead className="h-10 px-3 text-xs">Regla</TableHead>
                   <TableHead className="h-10 px-3 text-xs">Opciones</TableHead>
                   <TableHead className="h-10 px-3 text-xs">Aplicacion</TableHead>
@@ -255,12 +266,15 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
                 {filteredModifierGroups.map((group) => (
                   <TableRow key={group.id}>
                     <TableCell className="px-3 py-2 font-semibold text-card-foreground">{group.name}</TableCell>
-                    <TableCell className="px-3 py-2">
-                      <Badge variant="outline">{group.type}</Badge>
-                    </TableCell>
-                    <TableCell className="px-3 py-2 text-muted-foreground">
-                      {group.minSelect} / {group.maxSelect}
-                    </TableCell>
+                     <TableCell className="px-3 py-2">
+                       <Badge variant="outline">{group.type}</Badge>
+                     </TableCell>
+                     <TableCell className="px-3 py-2">
+                       <Badge variant="secondary">{group.modifierKind}</Badge>
+                     </TableCell>
+                     <TableCell className="px-3 py-2 text-muted-foreground">
+                       {group.minSelect} / {group.maxSelect}
+                     </TableCell>
                     <TableCell className="px-3 py-2 text-muted-foreground">{group.optionCount} opciones</TableCell>
                     <TableCell className="px-3 py-2 text-muted-foreground">{group.appliedTo}</TableCell>
                     <TableCell className="px-3 py-2 text-right">
@@ -289,7 +303,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
           </DialogHeader>
 
           <div className="grid max-h-[calc(88vh-11rem)] gap-3 overflow-y-auto px-6 pb-2">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Nombre</span>
                 <Input value={groupFormValues.name} onChange={(event) => handleFieldChange("name", event.target.value)} placeholder="Ej. Salsas" />
@@ -299,6 +313,14 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
                 <select value={groupFormValues.type} onChange={(event) => handleFieldChange("type", event.target.value as ModifierGroupFormValue["type"])} className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
                   <option value="Single">Single</option>
                   <option value="Multiple">Multiple</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-card-foreground">Semantica</span>
+                <select value={groupFormValues.modifierKind} onChange={(event) => handleFieldChange("modifierKind", event.target.value as ModifierGroupFormValue["modifierKind"])} className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50">
+                  <option value="choice">choice</option>
+                  <option value="addon">addon</option>
+                  <option value="ingredient">ingredient</option>
                 </select>
               </label>
             </div>
@@ -318,7 +340,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-card-foreground">Opciones</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Cada opcion puede tener un delta de precio propio.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Cada opcion puede tener un delta propio y marcarse como predeterminada.</p>
                 </div>
                 <Button type="button" variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={addOptionRow}>
                   <Plus />
@@ -328,7 +350,7 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
 
               <div className="mt-3 grid gap-2.5">
                 {groupFormValues.options.map((option, index) => (
-                  <div key={option.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto] md:items-end">
+                  <div key={option.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.2fr_1fr_auto_auto] md:items-end">
                     <label className="grid gap-2 text-sm">
                       <span className="font-medium text-card-foreground">Nombre</span>
                       <Input value={option.name} onChange={(event) => handleOptionChange(index, "name", event.target.value)} placeholder="Ej. BBQ" />
@@ -336,6 +358,10 @@ export function AdminCatalogModifiers({ tenantSlug, initialModifierGroups = [] }
                     <label className="grid gap-2 text-sm">
                       <span className="font-medium text-card-foreground">Delta precio</span>
                       <Input value={option.priceDelta} onChange={(event) => handleOptionChange(index, "priceDelta", event.target.value)} placeholder="Ej. $ 0.50" />
+                    </label>
+                    <label className="flex h-8 items-center gap-2 rounded-lg border border-transparent px-1 text-sm text-card-foreground">
+                      <Checkbox checked={option.defaultSelected} onCheckedChange={(checked) => handleOptionChange(index, "defaultSelected", checked === true)} />
+                      <span>Predeterminada</span>
                     </label>
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeOptionRow(index)} disabled={groupFormValues.options.length === 1}>
                       <Trash2 />

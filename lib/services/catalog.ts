@@ -47,8 +47,8 @@ type ProductRow = {
   primary_image_alt: string | null
 }
 type BranchRow = { id: string; name: string }
-type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple"; min_select: number; max_select: number }
-type ModifierGroupOptionRow = { id: string; modifier_group_id: string; name: string; price_delta: number | string; sort_order: number }
+type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple"; modifier_kind: "ingredient" | "addon" | "choice"; min_select: number; max_select: number }
+type ModifierGroupOptionRow = { id: string; modifier_group_id: string; name: string; price_delta: number | string; default_selected: boolean; sort_order: number }
 type ProductVariantRow = { id: string; product_id: string; name: string; base_price: number | string; is_default: boolean; is_active: boolean; sort_order: number }
 type ProductModifierGroupRow = { product_id: string; modifier_group_id: string }
 type BranchProductOverrideRow = {
@@ -86,6 +86,7 @@ type ModifierGroupAuditRow = {
   tenant_id: string
   name: string
   selection_type: "single" | "multiple"
+  modifier_kind: "ingredient" | "addon" | "choice"
   min_select: number
   max_select: number
 }
@@ -138,12 +139,14 @@ function mapModifierGroupPayloadForAudit(payload: CatalogModifierGroupMutationIn
   return {
     name: payload.name.trim(),
     type: payload.type,
+    modifierKind: payload.modifierKind,
     minSelect: payload.minSelect,
     maxSelect: payload.maxSelect,
     options: payload.options.map((option) => ({
       id: option.id ?? null,
       name: option.name.trim(),
       priceDelta: normalizeCatalogPrice(option.priceDelta) ?? 0,
+      defaultSelected: option.defaultSelected,
       sortOrder: option.sortOrder,
     })),
   }
@@ -176,7 +179,7 @@ async function getCategoryAuditRow(supabase: SupabaseClient, categoryId: string,
 async function getModifierGroupAuditRow(supabase: SupabaseClient, modifierGroupId: string, tenantId: string) {
   const result = await supabase
     .from("modifier_groups")
-    .select("id, tenant_id, name, selection_type, min_select, max_select")
+    .select("id, tenant_id, name, selection_type, modifier_kind, min_select, max_select")
     .eq("id", modifierGroupId)
     .eq("tenant_id", tenantId)
     .limit(1)
@@ -618,8 +621,8 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name, is_visible, image_path, sort_order").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
     supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
-    supabase.from("modifier_groups").select("id, name, selection_type, min_select, max_select").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
-    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
+    supabase.from("modifier_groups").select("id, name, selection_type, modifier_kind, min_select, max_select").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
+    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, default_selected, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
     supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
   ])
 
@@ -734,6 +737,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     id: group.id,
     name: group.name,
     type: group.selection_type === "single" ? "Single" : "Multiple",
+    modifierKind: group.modifier_kind,
     appliedTo: `${modifierUsageCount.get(group.id) ?? 0} productos`,
     minSelect: group.min_select,
     maxSelect: group.max_select,
@@ -744,6 +748,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
         id: option.id,
         name: option.name,
         priceDelta: formatCurrency(option.price_delta),
+        defaultSelected: option.default_selected,
       })),
   }))
 
@@ -1191,6 +1196,7 @@ export function normalizeModifierGroupOptions(options: readonly CatalogModifierO
       id: option.id,
       name: option.name.trim(),
       priceDelta: normalizeCatalogPrice(option.priceDelta) ?? 0,
+      defaultSelected: option.defaultSelected,
       sortOrder: option.sortOrder ?? index,
     }))
     .filter((option) => option.name)
@@ -1200,6 +1206,18 @@ export function normalizeModifierGroupOptions(options: readonly CatalogModifierO
   }
 
   return { ok: true as const, options: normalizedOptions }
+}
+
+function validateModifierGroupDefaultSelections(payload: CatalogModifierGroupMutationInput, defaultSelectedCount: number) {
+  if (payload.type === "Single" && defaultSelectedCount > 1) {
+    return { ok: false as const, error: "Los modificadores single solo pueden tener una opcion predeterminada." }
+  }
+
+  if (defaultSelectedCount > payload.maxSelect) {
+    return { ok: false as const, error: "Las opciones predeterminadas no pueden superar el maximo permitido." }
+  }
+
+  return { ok: true as const }
 }
 
 export async function createCatalogModifierGroup(
@@ -1223,6 +1241,15 @@ export async function createCatalogModifierGroup(
     return { ok: false, error: normalizedOptionsResult.error }
   }
 
+  const defaultSelectionValidationResult = validateModifierGroupDefaultSelections(
+    payload,
+    normalizedOptionsResult.options.filter((option) => option.defaultSelected).length
+  )
+
+  if (!defaultSelectionValidationResult.ok) {
+    return { ok: false, error: defaultSelectionValidationResult.error }
+  }
+
   const insertResult = await supabase
     .from("modifier_groups")
     .insert({
@@ -1230,6 +1257,7 @@ export async function createCatalogModifierGroup(
       tenant_id: tenantId,
       name: normalizedName,
       selection_type: payload.type === "Single" ? "single" : "multiple",
+      modifier_kind: payload.modifierKind,
       min_select: payload.minSelect,
       max_select: payload.maxSelect,
       is_active: true,
@@ -1248,6 +1276,7 @@ export async function createCatalogModifierGroup(
         modifier_group_id: insertResult.data.id,
         name: option.name,
         price_delta: option.priceDelta,
+        default_selected: option.defaultSelected,
         sort_order: option.sortOrder,
         is_active: true,
       }))
@@ -1294,11 +1323,21 @@ export async function updateCatalogModifierGroup(
     return { ok: false, error: normalizedOptionsResult.error }
   }
 
+  const defaultSelectionValidationResult = validateModifierGroupDefaultSelections(
+    payload,
+    normalizedOptionsResult.options.filter((option) => option.defaultSelected).length
+  )
+
+  if (!defaultSelectionValidationResult.ok) {
+    return { ok: false, error: defaultSelectionValidationResult.error }
+  }
+
   const updateResult = await supabase
     .from("modifier_groups")
     .update({
       name: normalizedName,
       selection_type: payload.type === "Single" ? "single" : "multiple",
+      modifier_kind: payload.modifierKind,
       min_select: payload.minSelect,
       max_select: payload.maxSelect,
     })
@@ -1342,6 +1381,7 @@ export async function updateCatalogModifierGroup(
           modifier_group_id: modifierGroupId,
           name: option.name,
           price_delta: option.priceDelta,
+          default_selected: option.defaultSelected,
           sort_order: option.sortOrder,
           is_active: true,
         })),
@@ -1361,6 +1401,7 @@ export async function updateCatalogModifierGroup(
           modifier_group_id: modifierGroupId,
           name: option.name,
           price_delta: option.priceDelta,
+          default_selected: option.defaultSelected,
           sort_order: option.sortOrder,
           is_active: true,
         }))
@@ -1380,9 +1421,10 @@ export async function updateCatalogModifierGroup(
     action: "catalog.modifier_group_updated",
     summary: `Se actualizó el modificador ${normalizedName}.`,
     beforeData: currentModifierGroup
-      ? {
+        ? {
           name: currentModifierGroup.name,
           type: currentModifierGroup.selection_type === "single" ? "Single" : "Multiple",
+          modifierKind: currentModifierGroup.modifier_kind,
           minSelect: currentModifierGroup.min_select,
           maxSelect: currentModifierGroup.max_select,
         }

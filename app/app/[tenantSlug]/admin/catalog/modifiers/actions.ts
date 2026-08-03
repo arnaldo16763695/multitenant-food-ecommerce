@@ -31,12 +31,13 @@ function parseModifierOptions(formData: FormData): CatalogModifierGroupMutationI
 
     return parsedValue
       .filter((value): value is CatalogModifierGroupMutationInput["options"][number] => {
-        return Boolean(value) && typeof value === "object" && typeof value.name === "string" && typeof value.priceDelta === "string" && typeof value.sortOrder === "number"
+        return Boolean(value) && typeof value === "object" && typeof value.name === "string" && typeof value.priceDelta === "string" && typeof value.sortOrder === "number" && typeof value.defaultSelected === "boolean"
       })
       .map((value) => ({
         id: typeof value.id === "string" ? value.id : undefined,
         name: value.name,
         priceDelta: value.priceDelta,
+        defaultSelected: value.defaultSelected,
         sortOrder: value.sortOrder,
       }))
   } catch {
@@ -48,6 +49,7 @@ function parseModifierGroupPayload(formData: FormData): CatalogModifierGroupMuta
   return {
     name: String(formData.get("name") ?? ""),
     type: String(formData.get("type") ?? "Multiple") as CatalogModifierGroupMutationInput["type"],
+    modifierKind: String(formData.get("modifierKind") ?? "choice") as CatalogModifierGroupMutationInput["modifierKind"],
     minSelect: Number(formData.get("minSelect") ?? 0),
     maxSelect: Number(formData.get("maxSelect") ?? 1),
     options: parseModifierOptions(formData),

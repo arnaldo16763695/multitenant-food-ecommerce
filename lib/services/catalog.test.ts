@@ -56,23 +56,23 @@ describe("normalizePrepTimeMinutes", () => {
 describe("normalizeModifierGroupOptions", () => {
   it("normalizes option names and invalid prices to zero", () => {
     const result = normalizeModifierGroupOptions([
-      { name: "  Picante ", priceDelta: "abc", sortOrder: 2 },
-      { name: "Queso", priceDelta: "2.349", sortOrder: 3 },
+      { name: "  Picante ", priceDelta: "abc", defaultSelected: true, sortOrder: 2 },
+      { name: "Queso", priceDelta: "2.349", defaultSelected: false, sortOrder: 3 },
     ])
 
     expect(result).toEqual({
       ok: true,
       options: [
-        { id: undefined, name: "Picante", priceDelta: 0, sortOrder: 2 },
-        { id: undefined, name: "Queso", priceDelta: 2.35, sortOrder: 3 },
+        { id: undefined, name: "Picante", priceDelta: 0, defaultSelected: true, sortOrder: 2 },
+        { id: undefined, name: "Queso", priceDelta: 2.35, defaultSelected: false, sortOrder: 3 },
       ],
     })
   })
 
   it("rejects duplicate option names case-insensitively", () => {
     const result = normalizeModifierGroupOptions([
-      { name: "Queso", priceDelta: "1", sortOrder: 0 },
-      { name: "queso", priceDelta: "2", sortOrder: 1 },
+      { name: "Queso", priceDelta: "1", defaultSelected: false, sortOrder: 0 },
+      { name: "queso", priceDelta: "2", defaultSelected: true, sortOrder: 1 },
     ])
 
     expect(result).toEqual({ ok: false, error: "Las opciones del modificador no pueden repetir nombre." })

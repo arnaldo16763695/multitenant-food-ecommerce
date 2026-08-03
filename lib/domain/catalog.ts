@@ -35,12 +35,14 @@ export type CatalogModifierOptionMutationInput = {
   readonly id?: string
   readonly name: string
   readonly priceDelta: string
+  readonly defaultSelected: boolean
   readonly sortOrder: number
 }
 
 export type CatalogModifierGroupMutationInput = {
   readonly name: string
   readonly type: "Single" | "Multiple"
+  readonly modifierKind: "ingredient" | "addon" | "choice"
   readonly minSelect: number
   readonly maxSelect: number
   readonly options: readonly CatalogModifierOptionMutationInput[]
