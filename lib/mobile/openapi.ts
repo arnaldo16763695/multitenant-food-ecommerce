@@ -365,21 +365,23 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
         },
         StorefrontModifierOption: {
           type: "object",
-          required: ["id", "name", "priceDelta", "priceDeltaLabel"],
+          required: ["id", "name", "priceDelta", "priceDeltaLabel", "defaultSelected"],
           properties: {
             id: { type: "string", format: "uuid" },
             name: { type: "string" },
             priceDelta: { type: "number" },
             priceDeltaLabel: { type: "string" },
+            defaultSelected: { type: "boolean" },
           },
         },
         StorefrontModifierGroup: {
           type: "object",
-          required: ["id", "name", "selectionType", "minSelect", "maxSelect", "options"],
+          required: ["id", "name", "selectionType", "modifierKind", "minSelect", "maxSelect", "options"],
           properties: {
             id: { type: "string", format: "uuid" },
             name: { type: "string" },
             selectionType: { type: "string", enum: ["single", "multiple"] },
+            modifierKind: { type: "string", enum: ["ingredient", "addon", "choice"] },
             minSelect: { type: "integer" },
             maxSelect: { type: "integer" },
             options: {

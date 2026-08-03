@@ -86,18 +86,19 @@ where tenant_id = (select id from public.tenants where slug = 'demo-brand' limit
 with tenant_ref as (
   select id from public.tenants where slug = 'demo-brand' limit 1
 )
-insert into public.modifier_groups (tenant_id, name, selection_type, min_select, max_select, is_active)
-select tenant_ref.id, seed.name, seed.selection_type, seed.min_select, seed.max_select, true
+insert into public.modifier_groups (tenant_id, name, selection_type, modifier_kind, min_select, max_select, is_active)
+select tenant_ref.id, seed.name, seed.selection_type, seed.modifier_kind, seed.min_select, seed.max_select, true
 from tenant_ref
 cross join (
   values
-    ('Extras', 'multiple', 0, 3),
-    ('Salsas', 'multiple', 0, 2),
-    ('Bebidas', 'single', 1, 1),
-    ('Tamano', 'single', 1, 1)
-) as seed(name, selection_type, min_select, max_select)
+    ('Extras', 'multiple', 'addon', 0, 3),
+    ('Salsas', 'multiple', 'choice', 0, 2),
+    ('Bebidas', 'single', 'choice', 1, 1),
+    ('Tamano', 'single', 'choice', 1, 1)
+) as seed(name, selection_type, modifier_kind, min_select, max_select)
  on conflict (tenant_id, name) do update set
   selection_type = excluded.selection_type,
+  modifier_kind = excluded.modifier_kind,
   min_select = excluded.min_select,
   max_select = excluded.max_select,
   is_active = excluded.is_active,
@@ -170,27 +171,28 @@ join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = r
 on conflict (product_id, modifier_group_id) do update set
   sort_order = excluded.sort_order;
 
-insert into public.modifier_group_options (modifier_group_id, name, price_delta, is_active, sort_order)
-select modifier_group_ref.id, option_seed.name, option_seed.price_delta, true, option_seed.sort_order
+insert into public.modifier_group_options (modifier_group_id, name, price_delta, default_selected, is_active, sort_order)
+select modifier_group_ref.id, option_seed.name, option_seed.price_delta, option_seed.default_selected, true, option_seed.sort_order
 from (
   values
-    ('Extras', 'Extra queso', 1.20, 1),
-    ('Extras', 'Bacon crispy', 1.80, 2),
-    ('Extras', 'Aguacate', 1.60, 3),
-    ('Salsas', 'BBQ', 0.00, 1),
-    ('Salsas', 'Mayo chipotle', 0.00, 2),
-    ('Salsas', 'Ranch', 0.00, 3),
-    ('Bebidas', 'Cola 1L', 0.00, 1),
-    ('Bebidas', 'Limonada 1L', 0.50, 2),
-    ('Bebidas', 'Te frio 1L', 0.80, 3),
-    ('Tamano', 'Individual', 0.00, 1),
-    ('Tamano', 'Mediana', 1.40, 2),
-    ('Tamano', 'Familiar', 3.20, 3)
-) as option_seed(group_name, name, price_delta, sort_order)
+    ('Extras', 'Extra queso', 1.20, false, 1),
+    ('Extras', 'Bacon crispy', 1.80, false, 2),
+    ('Extras', 'Aguacate', 1.60, false, 3),
+    ('Salsas', 'BBQ', 0.00, false, 1),
+    ('Salsas', 'Mayo chipotle', 0.00, false, 2),
+    ('Salsas', 'Ranch', 0.00, false, 3),
+    ('Bebidas', 'Cola 1L', 0.00, true, 1),
+    ('Bebidas', 'Limonada 1L', 0.50, false, 2),
+    ('Bebidas', 'Te frio 1L', 0.80, false, 3),
+    ('Tamano', 'Individual', 0.00, true, 1),
+    ('Tamano', 'Mediana', 1.40, false, 2),
+    ('Tamano', 'Familiar', 3.20, false, 3)
+) as option_seed(group_name, name, price_delta, default_selected, sort_order)
 join public.modifier_groups as modifier_group_ref on modifier_group_ref.name = option_seed.group_name
 join public.tenants as tenant_ref on tenant_ref.id = modifier_group_ref.tenant_id and tenant_ref.slug = 'demo-brand'
 on conflict (modifier_group_id, name) do update set
   price_delta = excluded.price_delta,
+  default_selected = excluded.default_selected,
   is_active = excluded.is_active,
   sort_order = excluded.sort_order,
   updated_at = now();

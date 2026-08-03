@@ -34,6 +34,7 @@ type TenantProduct = {
     id: string
     name: string
     selectionType: "single" | "multiple"
+    modifierKind: "ingredient" | "addon" | "choice"
     minSelect: number
     maxSelect: number
     options: readonly {
@@ -41,6 +42,7 @@ type TenantProduct = {
       name: string
       priceDelta: number
       priceDeltaLabel: string
+      defaultSelected: boolean
     }[]
   }[]
   readonly category: string
@@ -101,6 +103,7 @@ type ModifierGroupRow = {
   id: string
   name: string
   selection_type: "single" | "multiple"
+  modifier_kind: "ingredient" | "addon" | "choice"
   min_select: number
   max_select: number
 }
@@ -115,6 +118,7 @@ type ModifierGroupOptionRow = {
   modifier_group_id: string
   name: string
   price_delta: number | string
+  default_selected: boolean
   sort_order: number
 }
 
@@ -199,6 +203,7 @@ function getDemoStorefrontData(): PublicStorefrontData {
             id: "demo-sauces",
             name: "Salsas",
             selectionType: "single",
+            modifierKind: "choice",
             minSelect: 1,
             maxSelect: 1,
             options: [
@@ -207,12 +212,14 @@ function getDemoStorefrontData(): PublicStorefrontData {
                 name: "Mayonesa de ajo",
                 priceDelta: 0,
                 priceDeltaLabel: "$ 0.00",
+                defaultSelected: true,
               },
               {
                 id: "demo-spicy",
                 name: "Picante",
                 priceDelta: 0.5,
                 priceDeltaLabel: "$ 0.50",
+                defaultSelected: false,
               },
             ],
           },
@@ -291,9 +298,9 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
       .order("name", { ascending: true })
       .returns<ProductRow[]>(),
     supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenant.id).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
-    supabase.from("modifier_groups").select("id, name, selection_type, min_select, max_select").eq("tenant_id", tenant.id).eq("is_active", true).returns<ModifierGroupRow[]>(),
+    supabase.from("modifier_groups").select("id, name, selection_type, modifier_kind, min_select, max_select").eq("tenant_id", tenant.id).eq("is_active", true).returns<ModifierGroupRow[]>(),
     supabase.from("product_modifier_groups").select("product_id, modifier_group_id").returns<ProductModifierGroupRow[]>(),
-    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
+    supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, default_selected, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
   ])
 
   const branches = (branchesResult.data ?? []).map((branch) => ({
@@ -405,6 +412,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
             id: group.id,
             name: group.name,
             selectionType: group.selection_type,
+            modifierKind: group.modifier_kind,
             minSelect: group.min_select,
             maxSelect: group.max_select,
             options: (modifierGroupOptionsMap.get(group.id) ?? [])
@@ -414,6 +422,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
                 name: option.name,
                 priceDelta: Number(option.price_delta),
                 priceDeltaLabel: formatCurrency(option.price_delta),
+                defaultSelected: option.default_selected,
               })),
           })),
         category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",

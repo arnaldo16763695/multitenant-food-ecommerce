@@ -33,7 +33,19 @@ describe("getPublicStorefrontBySlug", () => {
     })
     expect(storefront?.menu).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Classic Burger", category: "Burgers" }),
+        expect.objectContaining({
+          name: "Classic Burger",
+          category: "Burgers",
+          modifierGroups: expect.arrayContaining([
+            expect.objectContaining({
+              modifierKind: "choice",
+              options: expect.arrayContaining([
+                expect.objectContaining({ name: "Mayonesa de ajo", defaultSelected: true }),
+                expect.objectContaining({ name: "Picante", defaultSelected: false }),
+              ]),
+            }),
+          ]),
+        }),
         expect.objectContaining({ name: "Papas crujientes", category: "Acompanantes" }),
       ])
     )
