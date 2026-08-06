@@ -3,7 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { CheckCircle2, Eye, Search } from "lucide-react"
+import { Eye, Search } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
@@ -320,10 +320,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     })
   }
 
-  function handleQuickConfirm(orderId: string) {
-    handleStatusChange(orderId, "confirmed")
-  }
-
   return (
     <>
       <div className="mb-4 grid gap-3">
@@ -441,6 +437,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               const selectableStatuses = getSelectableStatuses(order.status)
               const selectablePaymentStatuses = getSelectablePaymentStatuses(order.paymentStatus)
               const paymentEditable = canEditPaymentStatus(order)
+              const readyToConfirm = isReadyToConfirm(order)
 
               return (
                 <TableRow key={order.id}>
@@ -500,7 +497,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <select
-                      className="h-8 min-w-40 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className={`h-8 min-w-40 rounded-lg px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 ${
+                        readyToConfirm ? "border-emerald-300 bg-emerald-50/70 text-emerald-950" : "border-input bg-transparent"
+                      }`}
                       value={order.status}
                       disabled={isPending || selectableStatuses.length === 1}
                       onChange={(event) => handleStatusChange(order.id, event.target.value as OrderStatus)}
@@ -511,22 +510,17 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                         </option>
                       ))}
                     </select>
+                    {readyToConfirm ? <div className="mt-1 text-[11px] font-medium text-emerald-700">Listo para confirmar pedido y pago</div> : null}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">
                     <LocalizedDateTime value={order.placedAt} />
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-right font-medium text-card-foreground">$ {order.totalAmount.toFixed(2)}</TableCell>
-                  <TableCell className="px-3 py-2">
-                    <div className="flex justify-end gap-2">
-                      {isReadyToConfirm(order) ? (
-                        <Button className="h-8 rounded-lg px-3 text-xs" disabled={isPending} onClick={() => handleQuickConfirm(order.id)} type="button">
-                          <CheckCircle2 />
-                          Confirmar
-                        </Button>
-                      ) : null}
-                      <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">
-                        <Link href={`/app/${tenantSlug}/admin/orders/${order.id}`}>Detalle</Link>
-                      </Button>
+                   <TableCell className="px-3 py-2 text-right font-medium text-card-foreground">$ {order.totalAmount.toFixed(2)}</TableCell>
+                   <TableCell className="px-3 py-2">
+                     <div className="flex justify-end gap-2">
+                       <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">
+                         <Link href={`/app/${tenantSlug}/admin/orders/${order.id}`}>Detalle</Link>
+                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
