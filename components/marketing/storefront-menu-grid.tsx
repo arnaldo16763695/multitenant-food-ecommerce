@@ -45,9 +45,14 @@ type StorefrontMenuGridProps = {
   readonly menu: readonly StorefrontMenuItem[]
   readonly customerSession?: boolean
   readonly initialBagItems?: readonly ShoppingBagItem[]
+  readonly branchOperationalStatus?: {
+    readonly acceptingOrders: boolean
+    readonly closureLabel: string | null
+    readonly nextTransitionLabel: string | null
+  } | null
 }
 
-export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [] }: StorefrontMenuGridProps) {
+export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [], branchOperationalStatus = null }: StorefrontMenuGridProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const [sheetProductId, setSheetProductId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
@@ -72,6 +77,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
     return menu.filter((item) => item.category === activeCategory)
   }, [activeCategory, menu])
   const sheetProduct = React.useMemo(() => visibleItems.find((item) => item.id === sheetProductId) ?? menu.find((item) => item.id === sheetProductId) ?? null, [menu, sheetProductId, visibleItems])
+  const branchAcceptingOrders = branchOperationalStatus?.acceptingOrders ?? true
 
   return (
     <div className="space-y-6">
@@ -157,10 +163,11 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
                   <Button
                     size="sm"
                     className="h-9 w-full rounded-full border-orange-600 bg-orange-600 px-3 text-xs text-white hover:bg-orange-500 hover:text-white sm:h-11 sm:px-5 sm:text-sm"
+                    disabled={!branchAcceptingOrders}
                     onClick={() => setSheetProductId(item.id)}
                   >
                     <ShoppingBag />
-                    Agregar
+                    {branchAcceptingOrders ? "Agregar" : "Sucursal cerrada"}
                   </Button>
                 ) : (
                   <Button asChild size="sm" className="h-9 w-full rounded-full border-stone-950 bg-stone-950 px-3 text-xs text-white hover:bg-orange-600 hover:text-white sm:h-11 sm:px-5 sm:text-sm">
@@ -192,6 +199,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
           open={Boolean(sheetProductId)}
           onOpenChange={(nextOpen) => setSheetProductId(nextOpen ? sheetProduct.id : null)}
           onItemAdded={upsertItem}
+          branchOperationalStatus={branchOperationalStatus}
         />
       ) : null}
     </div>

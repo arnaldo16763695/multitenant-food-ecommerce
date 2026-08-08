@@ -20,6 +20,11 @@ type StorefrontCheckoutViewProps = {
   readonly tenantSlug: string
   readonly branchId: string | null
   readonly branchLabel: string
+  readonly branchOperationalStatus?: {
+    readonly acceptingOrders: boolean
+    readonly closureLabel: string | null
+    readonly nextTransitionLabel: string | null
+  } | null
   readonly customerDefaults?: {
     fullName?: string | null
     email?: string | null
@@ -36,7 +41,7 @@ type AvailableManualPaymentMethod = {
   readonly instructions: string
 }
 
-export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, customerDefaults, manualPaymentSettings, customerSession, initialBagItems = [] }: StorefrontCheckoutViewProps) {
+export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, branchOperationalStatus = null, customerDefaults, manualPaymentSettings, customerSession, initialBagItems = [] }: StorefrontCheckoutViewProps) {
   const activeBranchId = branchId ?? ""
   const fulfillmentType = "pickup"
   const items = useShoppingBagItems(tenantSlug, activeBranchId, initialBagItems)
@@ -81,6 +86,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
     () => availablePaymentMethods.find((method) => method.key === paymentMethod) ?? null,
     [availablePaymentMethods, paymentMethod]
   )
+  const branchAcceptingOrders = branchOperationalStatus?.acceptingOrders ?? true
 
   React.useEffect(() => {
     if (!availablePaymentMethods.length) {
@@ -139,6 +145,11 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
 
     if (!branchId) {
       setErrorMessage("Selecciona una sucursal activa antes de continuar.")
+      return
+    }
+
+    if (!branchAcceptingOrders) {
+      setErrorMessage(branchOperationalStatus?.closureLabel ?? "Esta sucursal no esta aceptando pedidos en este momento.")
       return
     }
 
@@ -219,6 +230,14 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
               <CardDescription>Este MVP opera solo con pickup. Usamos esta información para confirmar tu pedido y ubicarte si hace falta.</CardDescription>
             </CardHeader>
             <CardContent>
+              {!branchAcceptingOrders ? (
+                <div className="mb-4 rounded-[1.2rem] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Sucursal cerrada por ahora</p>
+                  <p className="mt-1 text-amber-800">{branchOperationalStatus?.closureLabel ?? "No estamos aceptando pedidos en este momento."}</p>
+                  {branchOperationalStatus?.nextTransitionLabel ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-700">{branchOperationalStatus.nextTransitionLabel}</p> : null}
+                </div>
+              ) : null}
+
               <form className="grid gap-4" onSubmit={handleSubmit}>
              
 
@@ -344,7 +363,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, cust
 
                   <Button
                     className={`h-10 rounded-full ${primaryStorefrontButtonClassName}`}
-                    disabled={isSubmitting || items.length === 0 || !branchId || !selectedPaymentMethod || !paymentProofFile}
+                    disabled={isSubmitting || items.length === 0 || !branchId || !selectedPaymentMethod || !paymentProofFile || !branchAcceptingOrders}
                     type="submit"
                   >
                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult } from "@/lib/domain/bag"
+import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 
 type TenantRow = {
   id: string
@@ -90,6 +91,8 @@ type ResolvedBranchContext =
   | {
       readonly ok: true
       readonly tenantId: string
+      readonly branchAcceptingOrders: boolean
+      readonly branchClosureLabel: string | null
     }
   | {
       readonly ok: false
@@ -127,10 +130,18 @@ async function resolveBranchContext(supabase: SupabaseClient, tenantSlug: string
     return { ok: false, error: "No encontramos la sucursal activa para esta bolsa." }
   }
 
+  const branchOperationalStatus = (await getBranchOperationalStatusMap(supabase, [branchResult.data.id])).get(branchResult.data.id)
+
   return {
     ok: true,
     tenantId: tenantResult.data.id,
+    branchAcceptingOrders: branchOperationalStatus?.acceptingOrders ?? true,
+    branchClosureLabel: branchOperationalStatus?.closureLabel ?? null,
   }
+}
+
+function getClosedBranchBagError(context: Extract<ResolvedBranchContext, { ok: true }>) {
+  return context.branchClosureLabel ? `${context.branchClosureLabel} No estamos aceptando cambios nuevos en la bolsa por ahora.` : "Esta sucursal esta cerrada y no acepta cambios nuevos en la bolsa por ahora."
 }
 
 async function loadBranchProductMaps(
@@ -415,6 +426,10 @@ export async function addCustomerBagItem(
     return context
   }
 
+  if (!context.branchAcceptingOrders) {
+    return { ok: false, error: getClosedBranchBagError(context) }
+  }
+
   const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(
     supabase,
     context.tenantId,
@@ -570,6 +585,10 @@ export async function replaceCustomerBagItem(
 
   if (!context.ok) {
     return context
+  }
+
+  if (!context.branchAcceptingOrders) {
+    return { ok: false, error: getClosedBranchBagError(context) }
   }
 
   const currentBagItemResult = await supabase

@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation"
 
 import { updateBranchStorefrontHeroAction } from "@/app/app/[tenantSlug]/admin/branches/actions"
 import { uploadCatalogMedia } from "@/lib/catalog/upload-client"
+import type { BranchOrderingMode, BranchScheduleExceptionMode } from "@/lib/domain/branch-schedule"
 import { getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
+import { AdminBranchScheduleEditor } from "@/components/admin/admin-branch-schedule-editor"
 import { BranchStorefrontLinkActions } from "@/components/admin/branch-storefront-link-actions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,6 +36,31 @@ type BranchStorefrontItem = {
   readonly countryCode: string | null
   readonly latitude: number | null
   readonly longitude: number | null
+  readonly orderingMode: BranchOrderingMode
+  readonly weeklyWindows: readonly {
+    readonly id: string
+    readonly dayOfWeek: number
+    readonly opensAtLocal: string
+    readonly closesAtLocal: string
+    readonly isActive: boolean
+  }[]
+  readonly exceptions: readonly {
+    readonly id: string
+    readonly exceptionDate: string
+    readonly mode: BranchScheduleExceptionMode
+    readonly label: string | null
+    readonly isActive: boolean
+    readonly windows: readonly {
+      readonly id: string
+      readonly opensAtLocal: string
+      readonly closesAtLocal: string
+      readonly isActive: boolean
+    }[]
+  }[]
+  readonly isOpenNow: boolean
+  readonly acceptingOrders: boolean
+  readonly closureLabel: string | null
+  readonly nextTransitionLabel: string | null
 }
 
 type AdminBranchStorefrontSettingsProps = {
@@ -199,13 +226,14 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
             return (
               <div key={branch.id} className="grid gap-3 rounded-[1rem] border border-border bg-card p-3.5 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
                 <div className="space-y-2.5">
-                  <div className="flex items-center gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-foreground">{branch.name}</p>
-                      <p className="text-xs text-muted-foreground">{branch.id}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground">{branch.name}</p>
+                        <p className="text-xs text-muted-foreground">{branch.id}</p>
+                      </div>
+                      <Badge variant={branch.isActive ? "success" : "warning"}>{branch.isActive ? "Activa" : "Inactiva"}</Badge>
+                      <Badge variant={branch.acceptingOrders ? "success" : "warning"}>{branch.acceptingOrders ? "Abierta" : "Cerrada"}</Badge>
                     </div>
-                    <Badge variant={branch.isActive ? "success" : "warning"}>{branch.isActive ? "Activa" : "Inactiva"}</Badge>
-                  </div>
                   <div
                     className="relative min-h-[8.5rem] overflow-hidden rounded-[1rem] border border-stone-200 bg-stone-950 bg-cover bg-center"
                     style={{
@@ -242,14 +270,30 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                         : "Sin coordenadas GPS"}
                     </p>
                   </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Operacion</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {branch.orderingMode === "auto"
+                        ? branch.acceptingOrders
+                          ? "Horario automatico activo y aceptando pedidos."
+                          : branch.closureLabel ?? "Horario automatico activo y sucursal cerrada."
+                        : branch.orderingMode === "force_open"
+                          ? "Sucursal forzada como abierta."
+                          : "Sucursal forzada como cerrada."}
+                    </p>
+                    {branch.nextTransitionLabel ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{branch.nextTransitionLabel}</p> : null}
+                  </div>
                 </div>
 
                 <div className="flex flex-col justify-between gap-3">
                   <BranchStorefrontLinkActions url={storefrontUrl} />
-                  <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch)} type="button" variant="outline">
-                    <ImagePlus />
-                    Editar hero
-                  </Button>
+                  <div className="grid gap-2">
+                    <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch)} type="button" variant="outline">
+                      <ImagePlus />
+                      Editar hero
+                    </Button>
+                    <AdminBranchScheduleEditor tenantSlug={tenantSlug} branch={branch} />
+                  </div>
                 </div>
               </div>
             )

@@ -41,6 +41,15 @@ export default async function TenantPage({ params, searchParams }: TenantPagePro
       activeBranchId={storefront.activeBranch?.id}
       activeBranchLabel={storefront.activeBranch?.name ?? "Sin sucursal activa"}
       branches={storefront.branches}
+      branchOperationalStatus={
+        storefront.activeBranch
+          ? {
+              acceptingOrders: storefront.activeBranch.acceptingOrders,
+              closureLabel: storefront.activeBranch.closureLabel,
+              nextTransitionLabel: storefront.activeBranch.nextTransitionLabel,
+            }
+          : null
+      }
       etaMinutes={storefront.etaMinutes}
       heroImageUrl={storefront.activeBranch?.heroImageUrl ?? storefront.tenant.heroImageUrl}
       logoImageUrl={storefront.tenant.logoImageUrl}

@@ -333,11 +333,17 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
         },
         StorefrontBranch: {
           type: "object",
-          required: ["id", "name", "heroImageUrl"],
+          required: ["id", "name", "heroImageUrl", "isOpenNow", "acceptingOrders", "orderingMode", "closureLabel", "nextTransitionAt", "nextTransitionLabel"],
           properties: {
             id: { type: "string", format: "uuid" },
             name: { type: "string" },
             heroImageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            isOpenNow: { type: "boolean" },
+            acceptingOrders: { type: "boolean" },
+            orderingMode: { type: "string", enum: ["auto", "force_open", "force_closed"] },
+            closureLabel: buildNullableSchema({ type: "string" }),
+            nextTransitionAt: buildNullableSchema({ type: "string", format: "date-time" }),
+            nextTransitionLabel: buildNullableSchema({ type: "string" }),
           },
         },
         StorefrontTenant: {

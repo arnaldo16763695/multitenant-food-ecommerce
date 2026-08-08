@@ -3,11 +3,18 @@
 import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import type { BranchScheduleMutationInput } from "@/lib/domain/branch-schedule"
+import { updateBranchSchedule } from "@/lib/services/branch-schedule"
 import { buildAuditActor, writeAuditEvent } from "@/lib/services/audit"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { getCatalogMediaBucket, getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
 type UpdateBranchStorefrontHeroResult = {
+  readonly ok: boolean
+  readonly error?: string
+}
+
+type UpdateBranchScheduleResult = {
   readonly ok: boolean
   readonly error?: string
 }
@@ -228,4 +235,77 @@ export async function updateBranchStorefrontHeroAction(
   revalidateBranchStorefrontPaths(tenantSlug)
 
   return { ok: true }
+}
+
+function parseBranchSchedulePayload(formData: FormData): BranchScheduleMutationInput | null {
+  const rawSchedule = formData.get("schedule")
+
+  if (typeof rawSchedule !== "string" || !rawSchedule.trim()) {
+    return null
+  }
+
+  try {
+    return JSON.parse(rawSchedule) as BranchScheduleMutationInput
+  } catch {
+    return null
+  }
+}
+
+export async function updateBranchScheduleAction(
+  tenantSlug: string,
+  branchId: string,
+  formData: FormData
+): Promise<UpdateBranchScheduleResult> {
+  const access = await requireAdminAccess(tenantSlug)
+
+  if (!canManageBranchStorefront(access.membership.role)) {
+    return { ok: false, error: "No tienes permisos para editar el horario de esta sucursal." }
+  }
+
+  const adminClient = createSupabaseAdminClient()
+
+  if (!adminClient) {
+    throw new Error("Supabase admin client is not configured.")
+  }
+
+  if (access.membership.role === "branch_manager") {
+    const membershipResult = await adminClient
+      .from("branch_memberships")
+      .select("branch_id")
+      .eq("tenant_membership_id", access.membership.id)
+      .eq("branch_id", branchId)
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle<{ branch_id: string }>()
+
+    if (membershipResult.error || !membershipResult.data) {
+      return { ok: false, error: "No tienes acceso a esa sucursal." }
+    }
+  }
+
+  const schedulePayload = parseBranchSchedulePayload(formData)
+
+  if (!schedulePayload) {
+    return { ok: false, error: "No pudimos leer la configuración de horario enviada." }
+  }
+
+  const result = await updateBranchSchedule(
+    adminClient,
+    access.membership.tenantId,
+    branchId,
+    schedulePayload,
+    buildAuditActor({
+      surface: "admin",
+      profileId: access.profile.id,
+      membershipId: access.membership.id,
+      name: access.profile.fullName,
+      role: access.membership.role,
+    })
+  )
+
+  if (result.ok) {
+    revalidateBranchStorefrontPaths(tenantSlug)
+  }
+
+  return result
 }

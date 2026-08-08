@@ -27,6 +27,11 @@ type StorefrontBagViewProps = {
   readonly branchLabel: string
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
   readonly initialBagItems?: readonly ShoppingBagItem[]
+  readonly branchOperationalStatus?: {
+    readonly acceptingOrders: boolean
+    readonly closureLabel: string | null
+    readonly nextTransitionLabel: string | null
+  } | null
   readonly menu?: readonly {
     id: string
     name: string
@@ -57,7 +62,7 @@ type StorefrontBagViewProps = {
   }[]
 }
 
-export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerSession, initialBagItems = [], menu = [] }: StorefrontBagViewProps) {
+export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerSession, initialBagItems = [], branchOperationalStatus = null, menu = [] }: StorefrontBagViewProps) {
   const activeBranchId = branchId ?? ""
   const items = useShoppingBagItems(tenantSlug, activeBranchId, initialBagItems)
   const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId, initialBagItems)
@@ -77,6 +82,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
   const editingProduct = React.useMemo(() => menu.find((product) => product.id === editingItem?.productId) ?? null, [editingItem?.productId, menu])
   const primaryStorefrontButtonClassName =
     "border-orange-600 bg-orange-600 text-white hover:bg-orange-500 hover:text-white disabled:border-stone-300 disabled:bg-stone-300 disabled:text-stone-500"
+  const branchAcceptingOrders = branchOperationalStatus?.acceptingOrders ?? true
 
   async function handleIncrementItem(productId: string) {
     const currentItem = items.find((item) => item.id === productId)
@@ -229,6 +235,14 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
               <CardDescription>Revisa productos, cantidades y deja tu pedido listo para pasar a checkout.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!branchAcceptingOrders ? (
+                <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Sucursal cerrada por ahora</p>
+                  <p className="mt-1 text-amber-800">{branchOperationalStatus?.closureLabel ?? "No estamos aceptando pedidos en este momento."}</p>
+                  {branchOperationalStatus?.nextTransitionLabel ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-700">{branchOperationalStatus.nextTransitionLabel}</p> : null}
+                </div>
+              ) : null}
+
               {items.length === 0 ? (
                 <div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-50/80 px-6 py-12 text-center">
                   <ShoppingBag className="mx-auto mb-4 size-8 text-stone-400" />
@@ -274,13 +288,13 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                           <Minus />
                         </Button>
                         <span className="min-w-8 text-center text-sm font-semibold text-stone-950">{item.quantity}</span>
-                        <Button variant="outline" size="icon-sm" onClick={() => void handleIncrementItem(item.id)}>
+                        <Button variant="outline" size="icon-sm" disabled={!branchAcceptingOrders} onClick={() => void handleIncrementItem(item.id)}>
                           <Plus />
                         </Button>
                         <Button variant="ghost" size="icon-sm" disabled={pendingRemoveItemId === item.id} onClick={() => void handleRemoveItem(item.id)}>
                           <Trash2 />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" disabled={pendingRemoveItemId === item.id} onClick={() => setEditingItemId(item.id)}>
+                        <Button variant="ghost" size="icon-sm" disabled={pendingRemoveItemId === item.id || !branchAcceptingOrders} onClick={() => setEditingItemId(item.id)}>
                           <Pencil />
                         </Button>
                       </div>
@@ -316,7 +330,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                 Al enviar tu pedido, el negocio lo revisará y lo confirmará antes de pasarlo a cocina.
               </div>
 
-              <Button asChild className={`h-10 w-full rounded-full ${primaryStorefrontButtonClassName}`} disabled={items.length === 0 || !branchId}>
+              <Button asChild className={`h-10 w-full rounded-full ${primaryStorefrontButtonClassName}`} disabled={items.length === 0 || !branchId || !branchAcceptingOrders}>
                 <Link href={customerSession ? checkoutHref : checkoutLoginHref}>{customerSession ? "Continuar al checkout" : "Inicia sesión para continuar"}</Link>
               </Button>
               <Button variant="outline" className="h-10 w-full rounded-full" disabled={items.length === 0 || !branchId || isClearing} onClick={() => void handleClearBranchBag()}>
@@ -336,6 +350,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
             onItemAdded={handleReplaceItem}
             initialItem={editingItem}
             submitLabel="Guardar cambios"
+            branchOperationalStatus={branchOperationalStatus}
           />
         ) : null}
       </div>

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { AdminBranchStorefrontSettings } from "@/components/admin/admin-branch-storefront-settings"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getBranchScheduleConfigs, resolveBranchOperationalStatus } from "@/lib/services/branch-schedule"
 import { requireAdminSectionAccess } from "@/lib/auth/admin-section"
 import { getActiveBranchesForMembership, getStaffBranches } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -49,15 +50,35 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
       : await getStaffBranches(supabase, access.membership.tenantId)
 
   const publicAppUrl = getPublicAppUrl()
-  const activeBranchCount = branches.filter((branch) => branch.isActive).length
-  const inactiveBranchCount = branches.length - activeBranchCount
+  const branchScheduleConfigs = await getBranchScheduleConfigs(
+    supabase,
+    branches.map((branch) => branch.id)
+  )
+  const branchesWithSchedules = branches.map((branch) => {
+    const scheduleConfig = branchScheduleConfigs.get(branch.id)
+    const operationalStatus = scheduleConfig ? resolveBranchOperationalStatus(scheduleConfig) : null
+
+    return {
+      ...branch,
+      orderingMode: scheduleConfig?.orderingMode ?? "force_open",
+      weeklyWindows: scheduleConfig?.weeklyWindows ?? [],
+      exceptions: scheduleConfig?.exceptions ?? [],
+      isOpenNow: operationalStatus?.isOpenNow ?? true,
+      acceptingOrders: operationalStatus?.acceptingOrders ?? true,
+      closureLabel: operationalStatus?.closureLabel ?? null,
+      nextTransitionLabel: operationalStatus?.nextTransitionLabel ?? null,
+    }
+  })
+  const activeBranchCount = branchesWithSchedules.filter((branch) => branch.isActive).length
+  const inactiveBranchCount = branchesWithSchedules.length - activeBranchCount
+  const closedByScheduleCount = branchesWithSchedules.filter((branch) => branch.isActive && !branch.acceptingOrders).length
 
   return (
     <AdminPageShell
       eyebrow="Sucursales"
       title="Storefronts por sucursal"
       description="Desde aqui puedes abrir y compartir el link publico de cada sucursal. Cada URL entra al storefront del tenant con la sucursal ya seleccionada para que el cliente vea disponibilidad y precio reales por branch."
-      badge={`${branches.length} sucursales visibles`}
+      badge={`${branchesWithSchedules.length} sucursales visibles`}
       actions={
         <Link
           className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
@@ -67,7 +88,7 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
         </Link>
       }
     >
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Sucursales activas</CardDescription>
@@ -88,6 +109,15 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
         </Card>
         <Card>
           <CardHeader className="pb-3">
+            <CardDescription>Cerradas por horario</CardDescription>
+            <CardTitle className="text-2xl">{closedByScheduleCount}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Estan activas, pero no aceptan pedidos ahora mismo por configuracion operativa.
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
             <CardDescription>Base publica</CardDescription>
             <CardTitle className="break-all text-base">{publicAppUrl}</CardTitle>
           </CardHeader>
@@ -97,7 +127,7 @@ export default async function AdminBranchesPage({ params }: AdminBranchesPagePro
         </Card>
       </section>
 
-      <AdminBranchStorefrontSettings tenantSlug={tenantSlug} publicAppUrl={publicAppUrl} branches={branches} />
+      <AdminBranchStorefrontSettings tenantSlug={tenantSlug} publicAppUrl={publicAppUrl} branches={branchesWithSchedules} />
     </AdminPageShell>
   )
 }

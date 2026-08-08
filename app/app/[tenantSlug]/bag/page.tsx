@@ -31,6 +31,15 @@ export default async function StorefrontBagPage({ params, searchParams }: Storef
       branchLabel={storefront?.activeBranch?.name ?? "Sucursal activa"}
       customerSession={customerContext}
       initialBagItems={initialBagItems}
+      branchOperationalStatus={
+        storefront?.activeBranch
+          ? {
+              acceptingOrders: storefront.activeBranch.acceptingOrders,
+              closureLabel: storefront.activeBranch.closureLabel,
+              nextTransitionLabel: storefront.activeBranch.nextTransitionLabel,
+            }
+          : null
+      }
       menu={storefront?.menu ?? []}
     />
   )

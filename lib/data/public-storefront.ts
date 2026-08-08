@@ -1,4 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+import { type BranchOrderingMode } from "@/lib/domain/branch-schedule"
+import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 
 const DEMO_STOREFRONT_SLUG = "demo-brand"
 
@@ -16,6 +18,12 @@ type StorefrontBranch = {
   readonly id: string
   readonly name: string
   readonly heroImageUrl: string | null
+  readonly isOpenNow: boolean
+  readonly acceptingOrders: boolean
+  readonly orderingMode: BranchOrderingMode
+  readonly closureLabel: string | null
+  readonly nextTransitionAt: string | null
+  readonly nextTransitionLabel: string | null
 }
 
 type TenantProduct = {
@@ -170,6 +178,12 @@ function getDemoStorefrontData(): PublicStorefrontData {
     id: "demo-branch-centro",
     name: "Centro",
     heroImageUrl: null,
+    isOpenNow: true,
+    acceptingOrders: true,
+    orderingMode: "force_open",
+    closureLabel: null,
+    nextTransitionAt: null,
+    nextTransitionLabel: null,
   }
 
   return {
@@ -309,7 +323,26 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     heroImageUrl: branch.hero_image_url,
   }))
 
-  const activeBranch = resolveActiveBranch(branches, preferredBranchId)
+  const branchOperationalStatusMap = await getBranchOperationalStatusMap(
+    supabase,
+    branches.map((branch) => branch.id)
+  )
+
+  const mappedBranches = branches.map((branch) => {
+    const status = branchOperationalStatusMap.get(branch.id)
+
+    return {
+      ...branch,
+      isOpenNow: status?.isOpenNow ?? true,
+      acceptingOrders: status?.acceptingOrders ?? true,
+      orderingMode: status?.orderingMode ?? "force_open",
+      closureLabel: status?.closureLabel ?? null,
+      nextTransitionAt: status?.nextTransitionAt ?? null,
+      nextTransitionLabel: status?.nextTransitionLabel ?? null,
+    }
+  })
+
+  const activeBranch = resolveActiveBranch(mappedBranches, preferredBranchId)
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const products = productsResult.data ?? []
   const productVariants = productVariantsResult.data ?? []
@@ -432,7 +465,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
 
   return {
     tenant,
-    branches,
+    branches: mappedBranches,
     activeBranch,
     etaMinutes: 20,
     menu,

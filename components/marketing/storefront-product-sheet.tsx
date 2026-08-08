@@ -49,6 +49,11 @@ type StorefrontProductSheetProps = {
   readonly onItemAdded: (item: ShoppingBagItem) => void | Promise<void>
   readonly initialItem?: ShoppingBagItem | null
   readonly submitLabel?: string
+  readonly branchOperationalStatus?: {
+    readonly acceptingOrders: boolean
+    readonly closureLabel: string | null
+    readonly nextTransitionLabel: string | null
+  } | null
 }
 
 function parsePriceLabel(value: string) {
@@ -56,7 +61,7 @@ function parsePriceLabel(value: string) {
   return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
 }
 
-export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar" }: StorefrontProductSheetProps) {
+export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar", branchOperationalStatus = null }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const pushToast = useToastStore((state) => state.pushToast)
@@ -149,6 +154,11 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
   }
 
   async function handleConfirm() {
+    if (branchOperationalStatus && !branchOperationalStatus.acceptingOrders) {
+      setErrorMessage(branchOperationalStatus.closureLabel ?? "Esta sucursal no esta aceptando pedidos en este momento.")
+      return
+    }
+
     if (product.variants.length > 0 && !selectedVariant) {
       setErrorMessage("Selecciona un tamano para continuar.")
       return
@@ -236,6 +246,14 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               <p className="mt-3 text-sm leading-7 text-stone-600">{product.description}</p>
             </div>
           </div>
+
+          {branchOperationalStatus && !branchOperationalStatus.acceptingOrders ? (
+            <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+              <p className="font-semibold">Sucursal cerrada por ahora</p>
+              <p className="mt-1 text-amber-800">{branchOperationalStatus.closureLabel ?? "No estamos aceptando pedidos en este momento."}</p>
+              {branchOperationalStatus.nextTransitionLabel ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-700">{branchOperationalStatus.nextTransitionLabel}</p> : null}
+            </div>
+          ) : null}
 
           {product.variants.length > 0 ? (
             <section className="space-y-3 rounded-[1.4rem] border border-stone-200 bg-stone-50/80 p-4">
@@ -351,7 +369,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
             </div>
             <Button
               className="rounded-full border-orange-600 bg-orange-600 px-6 text-white hover:bg-orange-500 hover:text-white"
-              disabled={isSubmitting || (product.variants.length > 0 && !selectedVariant)}
+              disabled={isSubmitting || (product.variants.length > 0 && !selectedVariant) || Boolean(branchOperationalStatus && !branchOperationalStatus.acceptingOrders)}
               onClick={() => void handleConfirm()}
             >
               <ShoppingBag />

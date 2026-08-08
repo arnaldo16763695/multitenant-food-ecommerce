@@ -26,7 +26,16 @@ type TenantShellProps = {
   readonly branches?: readonly {
     readonly id: string
     readonly name: string
+    readonly isOpenNow?: boolean
+    readonly acceptingOrders?: boolean
+    readonly closureLabel?: string | null
+    readonly nextTransitionLabel?: string | null
   }[]
+  readonly branchOperationalStatus?: {
+    readonly acceptingOrders: boolean
+    readonly closureLabel: string | null
+    readonly nextTransitionLabel: string | null
+  } | null
   readonly etaMinutes?: number
   readonly shareUrl?: string
   readonly heroImageUrl?: string | null
@@ -72,6 +81,7 @@ export function TenantShell({
   activeBranchId,
   activeBranchLabel,
   branches,
+  branchOperationalStatus = null,
   etaMinutes,
   menu,
   shareUrl: _shareUrl,
@@ -192,6 +202,14 @@ export function TenantShell({
             </div>
           </div>
 
+          {!requiresBranchSelection && branchOperationalStatus && !branchOperationalStatus.acceptingOrders ? (
+            <div className="rounded-[1.4rem] border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+              <p className="font-semibold">Sucursal cerrada por ahora</p>
+              <p className="mt-1 text-amber-800">{branchOperationalStatus.closureLabel ?? "Esta sucursal no esta aceptando pedidos en este momento."}</p>
+              {branchOperationalStatus.nextTransitionLabel ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-700">{branchOperationalStatus.nextTransitionLabel}</p> : null}
+            </div>
+          ) : null}
+
           {!requiresBranchSelection ? (
             publicMenu.length ? (
               <StorefrontMenuGrid
@@ -200,6 +218,7 @@ export function TenantShell({
                 menu={publicMenu}
                 customerSession={Boolean(customerSession)}
                 initialBagItems={initialBagItems}
+                branchOperationalStatus={branchOperationalStatus}
               />
             ) : (
               <div className="rounded-2rem border border-dashed border-stone-300 bg-white/80 px-6 py-14 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">

@@ -36,6 +36,15 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
       tenantSlug={tenantSlug}
       branchId={storefront?.activeBranch?.id ?? null}
       branchLabel={storefront?.activeBranch?.name ?? "Sucursal activa"}
+      branchOperationalStatus={
+        storefront?.activeBranch
+          ? {
+              acceptingOrders: storefront.activeBranch.acceptingOrders,
+              closureLabel: storefront.activeBranch.closureLabel,
+              nextTransitionLabel: storefront.activeBranch.nextTransitionLabel,
+            }
+          : null
+      }
       customerSession={customerContext}
       customerDefaults={{
         fullName: customerContext?.customer.fullName,

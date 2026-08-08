@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { AuditActor } from "@/lib/services/audit"
 import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 import { writeAuditEvent } from "@/lib/services/audit"
 
 type TenantRow = { id: string }
@@ -669,6 +670,17 @@ export async function createStorefrontOrder(
 
   if (branchResult.error || !branchResult.data) {
     return { ok: false, error: "No encontramos la sucursal activa seleccionada para este pedido." }
+  }
+
+  const branchOperationalStatus = (await getBranchOperationalStatusMap(supabase, [branchResult.data.id])).get(branchResult.data.id)
+
+  if (branchOperationalStatus && !branchOperationalStatus.acceptingOrders) {
+    return {
+      ok: false,
+      error: branchOperationalStatus.closureLabel
+        ? `${branchOperationalStatus.closureLabel} No estamos aceptando pedidos en esta sucursal por ahora.`
+        : "Esta sucursal esta cerrada y no acepta pedidos por ahora.",
+    }
   }
 
   if (input.items.some((item) => item.tenantSlug !== input.tenantSlug || item.branchId !== input.branchId)) {
