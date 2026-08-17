@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import type { AuditActor } from "@/lib/services/audit"
-import type { AdminOrderDetail, AdminOrderSummary, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 import { writeAuditEvent } from "@/lib/services/audit"
 
@@ -36,6 +36,33 @@ type BranchProductVariantOverrideRow = {
 type CategoryRow = {
   id: string
   name: string
+}
+
+type ProductModifierGroupRow = {
+  product_id: string
+  modifier_group_id: string
+}
+
+type OrderModifierGroupRow = {
+  id: string
+  name: string
+  selection_type: "single" | "multiple"
+  modifier_kind: "ingredient" | "addon" | "choice"
+  min_select: number
+  max_select: number
+}
+
+type OrderModifierGroupOptionRow = {
+  id: string
+  modifier_group_id: string
+  price_delta: number | string
+}
+
+type ResolvedOrderModifier = {
+  modifier_group_name_snapshot: string
+  modifier_option_name_snapshot: string
+  modifier_kind_snapshot: "ingredient" | "addon" | "choice"
+  price_snapshot: number
 }
 type AtomicOrderInsertRow = {
   order_id: string
@@ -643,6 +670,76 @@ export async function replaceCustomerManualPaymentReceipt(
   return { ok: true }
 }
 
+// Re-validates and re-prices one order item's modifier selections against the tenant's own
+// catalog. Checkout must not trust the client payload (web and mobile both send raw
+// group/option ids, names and prices here) — a tampered request could otherwise misprice an
+// order or attach a modifier that doesn't actually belong to the product. This mirrors
+// validateModifierSelections in customer-bag.ts, but operates on CheckoutBagItemModifierInput
+// (no priceDeltaLabel/modifierKind) across potentially many products in a single checkout.
+function validateAndPriceItemModifiers(
+  selections: readonly CheckoutBagItemModifierInput[],
+  allowedGroupIds: ReadonlySet<string>,
+  modifierGroupMap: ReadonlyMap<string, OrderModifierGroupRow>,
+  modifierGroupOptionsMap: ReadonlyMap<string, readonly OrderModifierGroupOptionRow[]>
+): { ok: true; modifiers: readonly ResolvedOrderModifier[] } | { ok: false; error: string } {
+  const selectionsByGroup = selections.reduce<Map<string, CheckoutBagItemModifierInput[]>>((map, selection) => {
+    const currentSelections = map.get(selection.modifierGroupId) ?? []
+    map.set(selection.modifierGroupId, [...currentSelections, selection])
+    return map
+  }, new Map())
+
+  for (const [groupId, groupSelections] of selectionsByGroup) {
+    if (!allowedGroupIds.has(groupId)) {
+      return { ok: false, error: "Uno de los modificadores seleccionados ya no está disponible para este producto." }
+    }
+
+    const group = modifierGroupMap.get(groupId)
+
+    if (!group) {
+      return { ok: false, error: "Uno de los grupos de modificadores seleccionados ya no existe." }
+    }
+
+    if (group.selection_type === "single" && groupSelections.length > 1) {
+      return { ok: false, error: `Solo puedes elegir una opción en ${group.name}.` }
+    }
+
+    if (groupSelections.length < group.min_select || groupSelections.length > group.max_select) {
+      return { ok: false, error: `La selección en ${group.name} no cumple las reglas configuradas.` }
+    }
+
+    const allowedOptions = new Set((modifierGroupOptionsMap.get(groupId) ?? []).map((option) => option.id))
+
+    for (const selection of groupSelections) {
+      if (!allowedOptions.has(selection.modifierOptionId)) {
+        return { ok: false, error: `La opción ${selection.modifierOptionName} ya no está disponible.` }
+      }
+    }
+  }
+
+  for (const groupId of allowedGroupIds) {
+    const group = modifierGroupMap.get(groupId)
+    const groupSelections = selectionsByGroup.get(groupId) ?? []
+
+    if (group && groupSelections.length < group.min_select) {
+      return { ok: false, error: `Debes completar la selección requerida en ${group.name}.` }
+    }
+  }
+
+  const modifiers = selections.map((selection) => {
+    const group = modifierGroupMap.get(selection.modifierGroupId)
+    const option = (modifierGroupOptionsMap.get(selection.modifierGroupId) ?? []).find((candidate) => candidate.id === selection.modifierOptionId)
+
+    return {
+      modifier_group_name_snapshot: selection.modifierGroupName,
+      modifier_option_name_snapshot: selection.modifierOptionName,
+      modifier_kind_snapshot: group?.modifier_kind ?? "choice",
+      price_snapshot: Number(option?.price_delta ?? 0),
+    }
+  })
+
+  return { ok: true, modifiers }
+}
+
 export async function createStorefrontOrder(
   supabase: SupabaseClient,
   input: CreateOrderInput & {
@@ -753,24 +850,54 @@ export async function createStorefrontOrder(
     return { ok: false, error: "Una o más variantes ya no están disponibles." }
   }
 
-  // modifier_kind is derived server-side from the tenant's own catalog rather than trusted from
-  // the client payload (web and the mobile app both send raw group/option names and prices here),
-  // so a stale or crafted selection can't misrepresent an addon as an ingredient exclusion.
-  const modifierGroupIds = [...new Set(input.items.flatMap((item) => item.modifierSelections.map((selection) => selection.modifierGroupId)))]
-  const modifierGroupKindResult = modifierGroupIds.length
-    ? await supabase
-        .from("modifier_groups")
-        .select("id, modifier_kind")
-        .eq("tenant_id", tenantResult.data.id)
-        .in("id", modifierGroupIds)
-        .returns<{ id: string; modifier_kind: "ingredient" | "addon" | "choice" }[]>()
+  // Modifiers are validated and re-priced against the tenant's own catalog below (see
+  // validateAndPriceItemModifiers) instead of trusting the client-supplied group/option/price.
+  const productModifierGroupsResult = productIds.length
+    ? await supabase.from("product_modifier_groups").select("product_id, modifier_group_id").in("product_id", productIds).returns<ProductModifierGroupRow[]>()
     : { data: [], error: null }
 
-  if (modifierGroupKindResult.error) {
-    return { ok: false, error: modifierGroupKindResult.error.message }
+  if (productModifierGroupsResult.error) {
+    return { ok: false, error: productModifierGroupsResult.error.message }
   }
 
-  const modifierGroupKindMap = new Map((modifierGroupKindResult.data ?? []).map((group) => [group.id, group.modifier_kind]))
+  const allowedGroupIdsByProduct = (productModifierGroupsResult.data ?? []).reduce<Map<string, Set<string>>>((map, relation) => {
+    const currentSet = map.get(relation.product_id) ?? new Set<string>()
+    currentSet.add(relation.modifier_group_id)
+    map.set(relation.product_id, currentSet)
+    return map
+  }, new Map())
+
+  const modifierGroupIds = [...new Set(input.items.flatMap((item) => item.modifierSelections.map((selection) => selection.modifierGroupId)))]
+
+  const [modifierGroupsResult, modifierGroupOptionsResult] = await Promise.all([
+    modifierGroupIds.length
+      ? supabase
+          .from("modifier_groups")
+          .select("id, name, selection_type, modifier_kind, min_select, max_select")
+          .eq("tenant_id", tenantResult.data.id)
+          .in("id", modifierGroupIds)
+          .returns<OrderModifierGroupRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: OrderModifierGroupRow[]; error: null }),
+    modifierGroupIds.length
+      ? supabase
+          .from("modifier_group_options")
+          .select("id, modifier_group_id, price_delta")
+          .eq("is_active", true)
+          .in("modifier_group_id", modifierGroupIds)
+          .returns<OrderModifierGroupOptionRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: OrderModifierGroupOptionRow[]; error: null }),
+  ])
+
+  if (modifierGroupsResult.error || modifierGroupOptionsResult.error) {
+    return { ok: false, error: modifierGroupsResult.error?.message ?? modifierGroupOptionsResult.error?.message ?? "No pudimos validar los modificadores del pedido." }
+  }
+
+  const modifierGroupMap = new Map((modifierGroupsResult.data ?? []).map((group) => [group.id, group]))
+  const modifierGroupOptionsMap = (modifierGroupOptionsResult.data ?? []).reduce<Map<string, OrderModifierGroupOptionRow[]>>((map, option) => {
+    const currentOptions = map.get(option.modifier_group_id) ?? []
+    map.set(option.modifier_group_id, [...currentOptions, option])
+    return map
+  }, new Map())
 
   if (
     input.items.some((item) => {
@@ -788,12 +915,36 @@ export async function createStorefrontOrder(
     return { ok: false, error: "Uno o más productos ya no están disponibles en esta sucursal." }
   }
 
-  const orderItemsPayload = input.items.map((item) => {
+  const orderItemsPayload: {
+    product_id: string
+    product_variant_id: string | null
+    product_name_snapshot: string
+    variant_name_snapshot: string | null
+    category_name_snapshot: string | null
+    unit_price_snapshot: number
+    quantity: number
+    line_total: number
+    modifiers: readonly ResolvedOrderModifier[]
+    notes: null
+  }[] = []
+
+  for (const item of input.items) {
     const product = productMap.get(item.productId)
     const productVariant = item.productVariantId ? productVariantMap.get(item.productVariantId) : null
 
     if (!product) {
-      throw new Error(`Product ${item.productId} not found during checkout.`)
+      return { ok: false, error: "Uno o más productos ya no están disponibles." }
+    }
+
+    const modifierValidationResult = validateAndPriceItemModifiers(
+      item.modifierSelections,
+      allowedGroupIdsByProduct.get(item.productId) ?? new Set(),
+      modifierGroupMap,
+      modifierGroupOptionsMap
+    )
+
+    if (!modifierValidationResult.ok) {
+      return { ok: false, error: modifierValidationResult.error }
     }
 
     const baseUnitPrice = Number(
@@ -801,10 +952,10 @@ export async function createStorefrontOrder(
         ? branchVariantOverrideMap.get(productVariant.id)?.price_override ?? productVariant.base_price
         : branchOverrideMap.get(product.id)?.price_override ?? product.base_price
     )
-    const modifierDelta = item.modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)
+    const modifierDelta = modifierValidationResult.modifiers.reduce((total, modifier) => total + modifier.price_snapshot, 0)
     const unitPrice = Number((baseUnitPrice + modifierDelta).toFixed(2))
 
-    return {
+    orderItemsPayload.push({
       product_id: product.id,
       product_variant_id: productVariant?.id ?? null,
       product_name_snapshot: product.name,
@@ -813,15 +964,10 @@ export async function createStorefrontOrder(
       unit_price_snapshot: unitPrice,
       quantity: item.quantity,
       line_total: Number((unitPrice * item.quantity).toFixed(2)),
-      modifiers: item.modifierSelections.map((selection) => ({
-        modifier_group_name_snapshot: selection.modifierGroupName,
-        modifier_option_name_snapshot: selection.modifierOptionName,
-        modifier_kind_snapshot: modifierGroupKindMap.get(selection.modifierGroupId) ?? "choice",
-        price_snapshot: selection.priceDelta,
-      })),
+      modifiers: modifierValidationResult.modifiers,
       notes: null,
-    }
-  })
+    })
+  }
 
   const subtotal = orderItemsPayload.reduce((total, item) => total + item.line_total, 0)
 

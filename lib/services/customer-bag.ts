@@ -286,6 +286,25 @@ export function validateModifierSelections(
   return { ok: true as const }
 }
 
+// Call only after validateModifierSelections has confirmed every option exists — replaces the
+// client-supplied priceDelta/priceDeltaLabel with the tenant's real price so a tampered request
+// can't under- or over-price the bag (and, downstream, the order total at checkout).
+function resolveAuthoritativeModifierSelections(
+  selections: readonly ShoppingBagModifierSelection[],
+  modifierGroupOptionsMap: ReadonlyMap<string, readonly ModifierGroupOptionRow[]>
+): readonly ShoppingBagModifierSelection[] {
+  return selections.map((selection) => {
+    const option = (modifierGroupOptionsMap.get(selection.modifierGroupId) ?? []).find((candidate) => candidate.id === selection.modifierOptionId)
+    const priceDelta = Number(option?.price_delta ?? 0)
+
+    return {
+      ...selection,
+      priceDelta,
+      priceDeltaLabel: formatMoney(priceDelta),
+    }
+  })
+}
+
 function buildBagItem(
   bagItemId: string,
   tenantSlug: string,
@@ -450,13 +469,15 @@ export async function addCustomerBagItem(
     return { ok: false, error: "No encontramos la variante seleccionada." }
   }
 
-  const modifierSelections = input.modifierSelections ?? []
+  const requestedModifierSelections = input.modifierSelections ?? []
   const { modifierGroupMap, modifierGroupOptionsMap } = await loadProductModifierConfiguration(supabase, context.tenantId, input.productId)
-  const modifierValidationResult = validateModifierSelections(modifierSelections, modifierGroupMap, modifierGroupOptionsMap)
+  const modifierValidationResult = validateModifierSelections(requestedModifierSelections, modifierGroupMap, modifierGroupOptionsMap)
 
   if (!modifierValidationResult.ok) {
     return modifierValidationResult
   }
+
+  const modifierSelections = resolveAuthoritativeModifierSelections(requestedModifierSelections, modifierGroupOptionsMap)
 
   if (!input.productVariantId) {
     const activeVariantsResult = await supabase
@@ -640,6 +661,8 @@ export async function replaceCustomerBagItem(
       return modifierValidationResult
     }
 
+    const authoritativeModifierSelections = resolveAuthoritativeModifierSelections(nextModifierSelections, modifierGroupOptionsMap)
+
     const updateResult = await supabase
       .from("customer_bag_items")
       .update({ quantity: Math.max(input.quantity, 1) })
@@ -659,9 +682,9 @@ export async function replaceCustomerBagItem(
       return { ok: false, error: deleteModifiersResult.error.message }
     }
 
-    if (nextModifierSelections.length > 0) {
+    if (authoritativeModifierSelections.length > 0) {
       const insertModifiersResult = await supabase.from("customer_bag_item_modifiers").insert(
-        nextModifierSelections.map((selection) => ({
+        authoritativeModifierSelections.map((selection) => ({
           customer_bag_item_id: input.bagItemId,
           modifier_group_id: selection.modifierGroupId,
           modifier_option_id: selection.modifierOptionId,
@@ -684,7 +707,7 @@ export async function replaceCustomerBagItem(
       categoryMap,
       branchOverrideMap,
       branchVariantOverrideMap,
-      nextModifierSelections
+      authoritativeModifierSelections
     )
 
     if (!bagItem) {
