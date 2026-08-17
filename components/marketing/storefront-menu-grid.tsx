@@ -26,6 +26,7 @@ type StorefrontMenuItem = {
     id: string
     name: string
     selectionType: "single" | "multiple"
+    modifierKind: "ingredient" | "addon" | "choice"
     minSelect: number
     maxSelect: number
     options: readonly {

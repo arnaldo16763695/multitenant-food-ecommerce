@@ -143,6 +143,7 @@ export type CustomerOrderDetailItem = {
   readonly modifiers: readonly {
     modifierGroupName: string
     modifierOptionName: string
+    modifierKind: "ingredient" | "addon" | "choice"
   }[]
 }
 
@@ -177,6 +178,7 @@ export type AdminOrderDetailItem = {
   readonly modifiers: readonly {
     modifierGroupName: string
     modifierOptionName: string
+    modifierKind: "ingredient" | "addon" | "choice"
   }[]
 }
 
@@ -237,6 +239,7 @@ export type KitchenOrderSummary = {
     modifiers: readonly {
       modifierGroupName: string
       modifierOptionName: string
+      modifierKind: "ingredient" | "addon" | "choice"
     }[]
   }[]
 }

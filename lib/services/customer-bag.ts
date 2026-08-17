@@ -25,6 +25,7 @@ type CustomerBagItemModifierRow = {
   modifier_groups: {
     id: string
     name: string
+    modifier_kind: "ingredient" | "addon" | "choice"
   } | null
   modifier_group_options: {
     id: string
@@ -368,7 +369,7 @@ export async function getCustomerBagItems(
   const bagItemModifiersResult = bagItemIds.length
     ? await supabase
         .from("customer_bag_item_modifiers")
-        .select("customer_bag_item_id, price_delta_snapshot, modifier_groups(id, name), modifier_group_options(id, name)")
+        .select("customer_bag_item_id, price_delta_snapshot, modifier_groups(id, name, modifier_kind), modifier_group_options(id, name)")
         .in("customer_bag_item_id", bagItemIds)
         .returns<CustomerBagItemModifierRow[]>()
     : { data: [], error: null }
@@ -384,6 +385,7 @@ export async function getCustomerBagItems(
       {
         modifierGroupId: modifier.modifier_groups?.id ?? "",
         modifierGroupName: modifier.modifier_groups?.name ?? "Grupo",
+        modifierKind: modifier.modifier_groups?.modifier_kind ?? "choice",
         modifierOptionId: modifier.modifier_group_options?.id ?? "",
         modifierOptionName: modifier.modifier_group_options?.name ?? "Opcion",
         priceDelta: Number(modifier.price_delta_snapshot),

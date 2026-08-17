@@ -7,6 +7,7 @@ function createSelection(overrides: Partial<ShoppingBagModifierSelection> = {}):
   return {
     modifierGroupId: "group-1",
     modifierGroupName: "Salsas",
+    modifierKind: "choice",
     modifierOptionId: "option-1",
     modifierOptionName: "Mayonesa",
     priceDelta: 1,

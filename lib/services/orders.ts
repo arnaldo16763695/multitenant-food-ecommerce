@@ -140,6 +140,7 @@ type KitchenOrderItemPreview = {
   modifiers: readonly {
     modifierGroupName: string
     modifierOptionName: string
+    modifierKind: "ingredient" | "addon" | "choice"
   }[]
 }
 
@@ -147,6 +148,7 @@ type OrderItemModifierRow = {
   order_item_id: string
   modifier_group_name_snapshot: string
   modifier_option_name_snapshot: string
+  modifier_kind_snapshot: "ingredient" | "addon" | "choice"
 }
 
 type OrderItemCountRow = {
@@ -184,6 +186,7 @@ type CustomerOrderItemModifierRow = {
   order_item_id: string
   modifier_group_name_snapshot: string
   modifier_option_name_snapshot: string
+  modifier_kind_snapshot: "ingredient" | "addon" | "choice"
 }
 
 type PaymentReceiptRow = {
@@ -750,6 +753,25 @@ export async function createStorefrontOrder(
     return { ok: false, error: "Una o más variantes ya no están disponibles." }
   }
 
+  // modifier_kind is derived server-side from the tenant's own catalog rather than trusted from
+  // the client payload (web and the mobile app both send raw group/option names and prices here),
+  // so a stale or crafted selection can't misrepresent an addon as an ingredient exclusion.
+  const modifierGroupIds = [...new Set(input.items.flatMap((item) => item.modifierSelections.map((selection) => selection.modifierGroupId)))]
+  const modifierGroupKindResult = modifierGroupIds.length
+    ? await supabase
+        .from("modifier_groups")
+        .select("id, modifier_kind")
+        .eq("tenant_id", tenantResult.data.id)
+        .in("id", modifierGroupIds)
+        .returns<{ id: string; modifier_kind: "ingredient" | "addon" | "choice" }[]>()
+    : { data: [], error: null }
+
+  if (modifierGroupKindResult.error) {
+    return { ok: false, error: modifierGroupKindResult.error.message }
+  }
+
+  const modifierGroupKindMap = new Map((modifierGroupKindResult.data ?? []).map((group) => [group.id, group.modifier_kind]))
+
   if (
     input.items.some((item) => {
       if (item.productVariantId) {
@@ -794,6 +816,7 @@ export async function createStorefrontOrder(
       modifiers: item.modifierSelections.map((selection) => ({
         modifier_group_name_snapshot: selection.modifierGroupName,
         modifier_option_name_snapshot: selection.modifierOptionName,
+        modifier_kind_snapshot: modifierGroupKindMap.get(selection.modifierGroupId) ?? "choice",
         price_snapshot: selection.priceDelta,
       })),
       notes: null,
@@ -987,6 +1010,7 @@ type AdminOrderItemModifierRow = {
   order_item_id: string
   modifier_group_name_snapshot: string
   modifier_option_name_snapshot: string
+  modifier_kind_snapshot: "ingredient" | "addon" | "choice"
 }
 
 type AdminOrderPaymentReceiptSubmissionRow = {
@@ -1238,13 +1262,13 @@ export async function getKitchenOrders(
   const orderItemModifiersResult = orderItemIds.length
     ? await supabase
         .from("order_item_modifiers")
-        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot, modifier_kind_snapshot")
         .in("order_item_id", orderItemIds)
         .returns<OrderItemModifierRow[]>()
     : { data: [], error: null }
 
   const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
-    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+    Map<string, { modifierGroupName: string; modifierOptionName: string; modifierKind: "ingredient" | "addon" | "choice" }[]>
   >((map, modifier) => {
     const currentModifiers = map.get(modifier.order_item_id) ?? []
     map.set(modifier.order_item_id, [
@@ -1252,6 +1276,7 @@ export async function getKitchenOrders(
       {
         modifierGroupName: modifier.modifier_group_name_snapshot,
         modifierOptionName: modifier.modifier_option_name_snapshot,
+        modifierKind: modifier.modifier_kind_snapshot,
       },
     ])
     return map
@@ -1873,7 +1898,7 @@ export async function getAdminOrderDetail(
   const orderItemModifiersResult = orderItemIds.length
     ? await supabase
         .from("order_item_modifiers")
-        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot, modifier_kind_snapshot")
         .in("order_item_id", orderItemIds)
         .returns<AdminOrderItemModifierRow[]>()
     : { data: [], error: null }
@@ -1891,7 +1916,7 @@ export async function getAdminOrderDetail(
   }
 
   const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
-    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+    Map<string, { modifierGroupName: string; modifierOptionName: string; modifierKind: "ingredient" | "addon" | "choice" }[]>
   >((map, modifier) => {
     const currentModifiers = map.get(modifier.order_item_id) ?? []
     map.set(modifier.order_item_id, [
@@ -1899,6 +1924,7 @@ export async function getAdminOrderDetail(
       {
         modifierGroupName: modifier.modifier_group_name_snapshot,
         modifierOptionName: modifier.modifier_option_name_snapshot,
+        modifierKind: modifier.modifier_kind_snapshot,
       },
     ])
     return map
@@ -2002,7 +2028,7 @@ export async function getCustomerOrderDetail(
   const orderItemModifiersResult = orderItemIds.length
     ? await supabase
         .from("order_item_modifiers")
-        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot")
+        .select("order_item_id, modifier_group_name_snapshot, modifier_option_name_snapshot, modifier_kind_snapshot")
         .in("order_item_id", orderItemIds)
         .returns<CustomerOrderItemModifierRow[]>()
     : { data: [], error: null }
@@ -2027,7 +2053,7 @@ export async function getCustomerOrderDetail(
   }
 
   const orderItemModifiersMap = (orderItemModifiersResult.data ?? []).reduce<
-    Map<string, { modifierGroupName: string; modifierOptionName: string }[]>
+    Map<string, { modifierGroupName: string; modifierOptionName: string; modifierKind: "ingredient" | "addon" | "choice" }[]>
   >((map, modifier) => {
     const currentModifiers = map.get(modifier.order_item_id) ?? []
     map.set(modifier.order_item_id, [
@@ -2035,6 +2061,7 @@ export async function getCustomerOrderDetail(
       {
         modifierGroupName: modifier.modifier_group_name_snapshot,
         modifierOptionName: modifier.modifier_option_name_snapshot,
+        modifierKind: modifier.modifier_kind_snapshot,
       },
     ])
     return map

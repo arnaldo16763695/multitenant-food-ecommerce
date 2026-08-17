@@ -123,6 +123,7 @@ describe("POST /api/mobile/storefront/[tenantSlug]/bag/items", () => {
           {
             modifierGroupId: "group-1",
             modifierGroupName: "Salsas",
+            modifierKind: "choice",
             modifierOptionId: "option-1",
             modifierOptionName: "Mayonesa",
             priceDelta: 1.5,

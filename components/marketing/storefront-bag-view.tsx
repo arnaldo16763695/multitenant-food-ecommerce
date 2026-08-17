@@ -48,6 +48,7 @@ type StorefrontBagViewProps = {
       id: string
       name: string
       selectionType: "single" | "multiple"
+      modifierKind: "ingredient" | "addon" | "choice"
       minSelect: number
       maxSelect: number
       options: readonly {
@@ -270,7 +271,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                               <span
                                 key={`${selection.modifierGroupId}-${selection.modifierOptionId}`}
                                 className={
-                                  isExclusionGroup(selection.modifierGroupName)
+                                  isExclusionGroup(selection.modifierKind)
                                     ? "rounded-full border border-stone-300 bg-stone-100 px-2.5 py-1 text-stone-700"
                                     : "rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800"
                                 }

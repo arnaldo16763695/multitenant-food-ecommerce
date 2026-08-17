@@ -34,6 +34,7 @@ type StorefrontProductSheetProps = {
       id: string
       name: string
       selectionType: "single" | "multiple"
+      modifierKind: "ingredient" | "addon" | "choice"
       minSelect: number
       maxSelect: number
       options: readonly {
@@ -101,6 +102,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
         .map((option) => ({
           modifierGroupId: group.id,
           modifierGroupName: group.name,
+          modifierKind: group.modifierKind,
           modifierOptionId: option.id,
           modifierOptionName: option.name,
           priceDelta: option.priceDelta,
@@ -309,9 +311,9 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
               {product.modifierGroups.map((group) => (
                 <div key={group.id} className="space-y-2 rounded-[1rem] border border-stone-200 bg-white p-3">
                   <div>
-                    <p className="text-sm font-semibold text-stone-950">{formatModifierGroupTitle(group.name)}</p>
+                    <p className="text-sm font-semibold text-stone-950">{formatModifierGroupTitle(group.name, group.modifierKind)}</p>
                     <p className="mt-1 text-xs text-stone-500">
-                      {isExclusionGroup(group.name)
+                      {isExclusionGroup(group.modifierKind)
                         ? `Marca lo que quieres quitar${group.maxSelect > 0 ? `, hasta ${group.maxSelect} opciones` : ""}.`
                         : group.selectionType === "single"
                           ? "Elige una opcion"
@@ -322,7 +324,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
                   <div className="grid gap-2">
                     {group.options.map((option) => {
                       const isSelected = (selectedOptionsByGroup[group.id] ?? []).includes(option.id)
-                      const exclusionGroup = isExclusionGroup(group.name)
+                      const exclusionGroup = isExclusionGroup(group.modifierKind)
 
                       return (
                         <button

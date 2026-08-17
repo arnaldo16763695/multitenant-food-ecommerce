@@ -399,7 +399,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
                               <span
                                 key={`${selection.modifierGroupId}-${selection.modifierOptionId}`}
                                 className={
-                                  isExclusionGroup(selection.modifierGroupName)
+                                  isExclusionGroup(selection.modifierKind)
                                     ? "rounded-full border border-stone-300 bg-stone-100 px-2 py-0.5 text-stone-700"
                                     : "rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-orange-800"
                                 }

@@ -50,6 +50,9 @@ function parseModifierSelections(value: unknown): readonly ShoppingBagModifierSe
     selections.push({
       modifierGroupId,
       modifierGroupName,
+      // The mobile client doesn't send modifier_kind for bag mutations (it isn't persisted on
+      // customer_bag_item_modifiers); getCustomerBagItems resolves the real value on the next read.
+      modifierKind: "choice",
       modifierOptionId,
       modifierOptionName,
       priceDelta,

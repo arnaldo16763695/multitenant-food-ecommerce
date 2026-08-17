@@ -1,6 +1,7 @@
 export type ShoppingBagModifierSelection = {
   readonly modifierGroupId: string
   readonly modifierGroupName: string
+  readonly modifierKind: "ingredient" | "addon" | "choice"
   readonly modifierOptionId: string
   readonly modifierOptionName: string
   readonly priceDelta: number
