@@ -26,6 +26,7 @@ export type CatalogProduct = {
     name: string
     basePrice: string
     isDefault: boolean
+    branchStatuses: readonly CatalogBranchStatus[]
   }[]
   readonly status: "Activo" | "Draft"
   readonly primaryImagePath?: string | null

@@ -24,6 +24,7 @@ import {
   type CatalogModifierOptionMutationInput,
   type CatalogProductVariantInput,
   type CatalogProductStatus,
+  type CatalogVariantBranchOverrideInput,
 } from "@/lib/domain/catalog"
 
 type CatalogModuleData = {
@@ -54,6 +55,13 @@ type ProductModifierGroupRow = { product_id: string; modifier_group_id: string }
 type BranchProductOverrideRow = {
   branch_id: string
   product_id: string
+  availability_status: "available" | "paused" | "out_of_stock"
+  price_override: number | string | null
+  prep_time_minutes: number | null
+}
+type BranchProductVariantOverrideRow = {
+  branch_id: string
+  product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
   prep_time_minutes: number | null
@@ -117,6 +125,13 @@ function mapCatalogPayloadForAudit(payload: CatalogProductMutationInput) {
     })),
     modifierGroupIds: payload.modifierGroupIds ?? [],
     branchOverrides: (payload.branchOverrides ?? []).map((override) => ({
+      branchId: override.branchId,
+      availabilityStatus: override.availabilityStatus,
+      priceOverride: normalizeCatalogPrice(override.priceOverride),
+      prepTimeMinutes: normalizePrepTimeMinutes(override.prepTimeMinutes),
+    })),
+    variantBranchOverrides: (payload.variantBranchOverrides ?? []).map((override) => ({
+      variantId: override.variantId,
       branchId: override.branchId,
       availabilityStatus: override.availabilityStatus,
       priceOverride: normalizeCatalogPrice(override.priceOverride),
@@ -225,6 +240,23 @@ function mapAvailabilityStatus(status: BranchProductOverrideRow["availability_st
   if (status === "paused") return "Pausado" as const
 
   return "Sin stock" as const
+}
+
+function mapBranchOverridesToStatuses(
+  branchMap: ReadonlyMap<string, BranchRow>,
+  overrides: readonly { branch_id: string; availability_status: BranchProductOverrideRow["availability_status"]; price_override: number | string | null; prep_time_minutes: number | null }[],
+  fallbackPrice: number | string
+) {
+  return overrides.map((override) => ({
+    branchId: override.branch_id,
+    branchName: branchMap.get(override.branch_id)?.name ?? "Sucursal",
+    availabilityStatus: override.availability_status,
+    availability: mapAvailabilityStatus(override.availability_status),
+    priceOverride: override.price_override == null ? "" : String(override.price_override),
+    price: formatCurrency(override.price_override ?? fallbackPrice),
+    prepTimeMinutes: override.prep_time_minutes == null ? "" : String(override.prep_time_minutes),
+    prepTime: override.prep_time_minutes ? `${override.prep_time_minutes} min` : "-",
+  }))
 }
 
 export function normalizePrepTimeMinutes(value: string) {
@@ -351,6 +383,104 @@ export async function updateCatalogProductBranchOverrides(
       summary: `Se actualizaron overrides por sucursal para ${product.name}.`,
       afterData: {
         branchOverrides: rows,
+      },
+      metadata: {
+        productId,
+        allowedBranchIds,
+      },
+    })
+  }
+
+  return { ok: true }
+}
+
+async function upsertBranchProductVariantOverrides(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  variantBranchOverrides?: readonly CatalogVariantBranchOverrideInput[]
+): Promise<CatalogMutationResult> {
+  const overrides = variantBranchOverrides ?? []
+
+  if (!overrides.length) {
+    return { ok: true }
+  }
+
+  // Never trust a client-supplied variantId directly -- only accept overrides for variants
+  // that actually belong to this product and tenant.
+  const variantsResult = await supabase
+    .from("product_variants")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("product_id", productId)
+    .returns<{ id: string }[]>()
+
+  if (variantsResult.error) {
+    return { ok: false, error: variantsResult.error.message }
+  }
+
+  const validVariantIds = new Set((variantsResult.data ?? []).map((variant) => variant.id))
+  const scopedOverrides = overrides.filter((override) => validVariantIds.has(override.variantId))
+
+  if (!scopedOverrides.length) {
+    return { ok: true }
+  }
+
+  const rows = scopedOverrides.map((override) => ({
+    branch_id: override.branchId,
+    product_variant_id: override.variantId,
+    availability_status: override.availabilityStatus,
+    price_override: normalizeCatalogPrice(override.priceOverride) ?? null,
+    prep_time_minutes: normalizePrepTimeMinutes(override.prepTimeMinutes),
+  }))
+
+  const upsertResult = await supabase.from("branch_product_variant_overrides").upsert(rows, {
+    onConflict: "branch_id,product_variant_id",
+  })
+
+  if (upsertResult.error) {
+    return { ok: false, error: upsertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
+export async function updateCatalogProductVariantBranchOverrides(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  variantBranchOverrides: readonly CatalogVariantBranchOverrideInput[],
+  allowedBranchIds: readonly string[],
+  auditActor?: AuditActor
+): Promise<CatalogMutationResult> {
+  if (!allowedBranchIds.length) {
+    return { ok: false, error: "No tienes sucursales activas asignadas para operar productos." }
+  }
+
+  const branchScopedOverrides = variantBranchOverrides.filter((override) => allowedBranchIds.includes(override.branchId))
+
+  if (!branchScopedOverrides.length) {
+    return { ok: false, error: "No enviamos overrides validos para tus sucursales asignadas." }
+  }
+
+  const upsertResult = await upsertBranchProductVariantOverrides(supabase, tenantId, productId, branchScopedOverrides)
+
+  if (!upsertResult.ok) {
+    return upsertResult
+  }
+
+  const product = await getProductAuditRow(supabase, productId, tenantId)
+
+  if (product) {
+    await writeAuditEvent(supabase, {
+      tenantId,
+      actor: auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "admin" },
+      entityType: "catalog_product",
+      entityId: productId,
+      action: "catalog.product_variant_branch_overrides_updated",
+      summary: `Se actualizaron overrides por sucursal y variante para ${product.name}.`,
+      afterData: {
+        variantBranchOverrides: branchScopedOverrides,
       },
       metadata: {
         productId,
@@ -638,8 +768,9 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const productVariants = productVariantsResult.data ?? []
 
   const productIds = products.map((product) => product.id)
+  const variantIds = productVariants.map((variant) => variant.id)
 
-  const [productModifierGroupsResult, branchProductOverridesResult] = await Promise.all([
+  const [productModifierGroupsResult, branchProductOverridesResult, branchVariantOverridesResult] = await Promise.all([
     productIds.length
       ? supabase.from("product_modifier_groups").select("product_id, modifier_group_id").in("product_id", productIds).returns<ProductModifierGroupRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: ProductModifierGroupRow[]; error: null }),
@@ -650,14 +781,22 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
           .in("product_id", productIds)
           .returns<BranchProductOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductOverrideRow[]; error: null }),
+    variantIds.length
+      ? supabase
+          .from("branch_product_variant_overrides")
+          .select("branch_id, product_variant_id, availability_status, price_override, prep_time_minutes")
+          .in("product_variant_id", variantIds)
+          .returns<BranchProductVariantOverrideRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
   ])
 
-  if (productModifierGroupsResult.error || branchProductOverridesResult.error) {
+  if (productModifierGroupsResult.error || branchProductOverridesResult.error || branchVariantOverridesResult.error) {
     return EMPTY_CATALOG_MODULE
   }
 
   const productModifierGroups = productModifierGroupsResult.data ?? []
   const branchProductOverrides = branchProductOverridesResult.data ?? []
+  const branchVariantOverrides = branchVariantOverridesResult.data ?? []
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]))
   const branchMap = new Map(branches.map((branch) => [branch.id, branch]))
@@ -685,6 +824,12 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     return map
   }, new Map())
 
+  const branchVariantOverridesMap = branchVariantOverrides.reduce<Map<string, BranchProductVariantOverrideRow[]>>((map, override) => {
+    const currentValue = map.get(override.product_variant_id) ?? []
+    map.set(override.product_variant_id, [...currentValue, override])
+    return map
+  }, new Map())
+
   const mappedProducts: CatalogProduct[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -697,6 +842,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
       name: variant.name,
       basePrice: formatCurrency(variant.base_price),
       isDefault: variant.is_default,
+      branchStatuses: mapBranchOverridesToStatuses(branchMap, branchVariantOverridesMap.get(variant.id) ?? [], variant.base_price),
     })),
     status: fromCatalogDbStatus(product.status),
     primaryImagePath: product.primary_image_path,
@@ -706,16 +852,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     modifierGroups: (productModifierGroupsMap.get(product.id) ?? [])
       .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId)?.name)
       .filter((value): value is string => Boolean(value)),
-    branchStatuses: (branchProductOverridesMap.get(product.id) ?? []).map((override) => ({
-      branchId: override.branch_id,
-      branchName: branchMap.get(override.branch_id)?.name ?? "Sucursal",
-      availabilityStatus: override.availability_status,
-      availability: mapAvailabilityStatus(override.availability_status),
-      priceOverride: override.price_override == null ? "" : String(override.price_override),
-      price: formatCurrency(override.price_override ?? product.base_price),
-      prepTimeMinutes: override.prep_time_minutes == null ? "" : String(override.prep_time_minutes),
-      prepTime: override.prep_time_minutes ? `${override.prep_time_minutes} min` : "-",
-    })),
+    branchStatuses: mapBranchOverridesToStatuses(branchMap, branchProductOverridesMap.get(product.id) ?? [], product.base_price),
   }))
 
   const mappedCategories: CatalogCategory[] = categories.map((category) => ({
@@ -828,6 +965,12 @@ export async function createCatalogProductWithOptions(
     return variantsResult
   }
 
+  const variantBranchOverridesResult = await upsertBranchProductVariantOverrides(supabase, tenantId, insertResult.data.id, payload.variantBranchOverrides)
+
+  if (!variantBranchOverridesResult.ok) {
+    return variantBranchOverridesResult
+  }
+
   const modifierGroupsResult = await syncProductModifierGroups(supabase, tenantId, insertResult.data.id, payload.modifierGroupIds)
 
   if (!modifierGroupsResult.ok) {
@@ -902,6 +1045,12 @@ export async function updateCatalogProduct(
 
   if (!variantsResult.ok) {
     return variantsResult
+  }
+
+  const variantBranchOverridesResult = await upsertBranchProductVariantOverrides(supabase, tenantId, productId, payload.variantBranchOverrides)
+
+  if (!variantBranchOverridesResult.ok) {
+    return variantBranchOverridesResult
   }
 
   const modifierGroupsResult = await syncProductModifierGroups(supabase, tenantId, productId, payload.modifierGroupIds)

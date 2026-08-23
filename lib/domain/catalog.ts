@@ -10,6 +10,14 @@ export type CatalogBranchOverrideInput = {
   readonly prepTimeMinutes: string
 }
 
+export type CatalogVariantBranchOverrideInput = {
+  readonly variantId: string
+  readonly branchId: string
+  readonly availabilityStatus: CatalogBranchAvailabilityStatus
+  readonly priceOverride: string
+  readonly prepTimeMinutes: string
+}
+
 export type CatalogProductMutationInput = {
   readonly name: string
   readonly category: string
@@ -21,6 +29,7 @@ export type CatalogProductMutationInput = {
   readonly primaryImagePath?: string
   readonly primaryImageAlt?: string
   readonly branchOverrides?: readonly CatalogBranchOverrideInput[]
+  readonly variantBranchOverrides?: readonly CatalogVariantBranchOverrideInput[]
 }
 
 export type CatalogProductVariantInput = {

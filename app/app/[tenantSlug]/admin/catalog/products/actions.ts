@@ -1,11 +1,12 @@
 "use server"
 
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
-import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput } from "@/lib/domain/catalog"
-import { buildAuditActor } from "@/lib/services/audit"
+import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput, type CatalogVariantBranchOverrideInput } from "@/lib/domain/catalog"
+import { buildAuditActor, type AuditActor } from "@/lib/services/audit"
 import {
   createCatalogProduct,
   createCatalogProductWithOptions,
@@ -13,6 +14,7 @@ import {
   toggleCatalogProductStatus,
   updateCatalogProduct,
   updateCatalogProductBranchOverrides,
+  updateCatalogProductVariantBranchOverrides,
 } from "@/lib/services/catalog"
 import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -48,6 +50,44 @@ function parseBranchOverrides(formData: FormData): readonly CatalogBranchOverrid
         )
       })
       .map((value) => ({
+        branchId: value.branchId,
+        availabilityStatus: value.availabilityStatus,
+        priceOverride: value.priceOverride,
+        prepTimeMinutes: value.prepTimeMinutes,
+      }))
+  } catch {
+    return []
+  }
+}
+
+function parseVariantBranchOverrides(formData: FormData): readonly CatalogVariantBranchOverrideInput[] {
+  const rawValue = formData.get("variantBranchOverrides")
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue
+      .filter((value): value is CatalogVariantBranchOverrideInput => {
+        return (
+          Boolean(value) &&
+          typeof value === "object" &&
+          typeof value.variantId === "string" &&
+          typeof value.branchId === "string" &&
+          typeof value.availabilityStatus === "string" &&
+          typeof value.priceOverride === "string" &&
+          typeof value.prepTimeMinutes === "string"
+        )
+      })
+      .map((value) => ({
+        variantId: value.variantId,
         branchId: value.branchId,
         availabilityStatus: value.availabilityStatus,
         priceOverride: value.priceOverride,
@@ -106,6 +146,39 @@ function parseModifierGroupIds(formData: FormData): readonly string[] {
   } catch {
     return []
   }
+}
+
+// branch_manager can only touch branch-scoped data (product-level and, when the product has
+// variants, variant-level overrides) -- never the master catalog fields. Run both writes
+// sequentially and stop at the first failure so a partial save never looks like a success.
+async function applyBranchManagerCatalogOverrides(
+  supabase: SupabaseClient,
+  tenantId: string,
+  productId: string,
+  payload: CatalogProductMutationInput,
+  allowedBranchIds: readonly string[],
+  auditActor: AuditActor
+): Promise<CatalogMutationResult> {
+  const branchOverridesResult = await updateCatalogProductBranchOverrides(
+    supabase,
+    tenantId,
+    productId,
+    payload.branchOverrides ?? [],
+    allowedBranchIds,
+    auditActor
+  )
+
+  if (!branchOverridesResult.ok) {
+    return branchOverridesResult
+  }
+
+  const variantBranchOverrides = payload.variantBranchOverrides ?? []
+
+  if (!variantBranchOverrides.length) {
+    return branchOverridesResult
+  }
+
+  return updateCatalogProductVariantBranchOverrides(supabase, tenantId, productId, variantBranchOverrides, allowedBranchIds, auditActor)
 }
 
 export async function createProductAction(tenantSlug: string, payload: CatalogProductMutationInput): Promise<CatalogMutationResult> {
@@ -212,11 +285,11 @@ export async function updateProductAction(productId: string, tenantSlug: string,
           role: access.membership.role,
         })
       )
-    : await updateCatalogProductBranchOverrides(
+    : await applyBranchManagerCatalogOverrides(
         supabase,
         access.membership.tenantId,
         productId,
-        payload.branchOverrides ?? [],
+        payload,
         await getActiveBranchIdsForMembership(supabase, access.membership.id),
         buildAuditActor({
           surface: "admin",
@@ -254,6 +327,7 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
     branchOverrides: parseBranchOverrides(formData),
+    variantBranchOverrides: parseVariantBranchOverrides(formData),
   }
 
   const result = canManageCatalogMaster(access.membership.role)
@@ -268,11 +342,11 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
         name: access.profile.fullName,
         role: access.membership.role,
       }))
-    : await updateCatalogProductBranchOverrides(
+    : await applyBranchManagerCatalogOverrides(
         supabase,
         access.membership.tenantId,
         productId,
-        payload.branchOverrides ?? [],
+        payload,
         await getActiveBranchIdsForMembership(supabase, access.membership.id),
         buildAuditActor({
           surface: "admin",

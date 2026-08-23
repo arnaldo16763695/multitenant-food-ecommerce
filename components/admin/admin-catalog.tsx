@@ -57,6 +57,7 @@ type ProductFormValues = {
     basePrice: string
     isDefault: boolean
     sortOrder: number
+    branchOverrides: readonly VariantBranchOverrideFormValue[]
   }[]
   readonly branchOverrides: readonly {
     branchId: string
@@ -65,6 +66,37 @@ type ProductFormValues = {
     priceOverride: string
     prepTimeMinutes: string
   }[]
+}
+
+type VariantBranchOverrideFormValue = {
+  readonly branchId: string
+  readonly branchName: string
+  readonly availabilityStatus: "available" | "paused" | "out_of_stock"
+  readonly priceOverride: string
+  readonly prepTimeMinutes: string
+}
+
+function isSavedVariant(variantId: string) {
+  return !variantId.startsWith("draft-")
+}
+
+function buildVariantBranchOverrides(
+  variant: CatalogProduct["variants"][number] | undefined,
+  branches: readonly CatalogBranchOption[]
+): readonly VariantBranchOverrideFormValue[] {
+  const overridesMap = new Map((variant?.branchStatuses ?? []).map((branchStatus) => [branchStatus.branchId, branchStatus]))
+
+  return branches.map((branch) => {
+    const override = overridesMap.get(branch.id)
+
+    return {
+      branchId: branch.id,
+      branchName: branch.name,
+      availabilityStatus: override?.availabilityStatus ?? "available",
+      priceOverride: override?.priceOverride ?? "",
+      prepTimeMinutes: override?.prepTimeMinutes ?? "",
+    }
+  })
 }
 
 type ProductDialogMode = "create" | "edit"
@@ -90,6 +122,7 @@ function buildFormValues(product: CatalogProduct, branches: readonly CatalogBran
       basePrice: variant.basePrice,
       isDefault: variant.isDefault,
       sortOrder: index,
+      branchOverrides: buildVariantBranchOverrides(variant, branches),
     })),
     branchOverrides: branches.map((branch) => {
       const branchOverride = branchOverridesMap.get(branch.id)
@@ -300,6 +333,7 @@ export function AdminCatalogProducts({
           basePrice: currentValues.basePrice,
           isDefault: currentValues.variants.length === 0,
           sortOrder: currentValues.variants.length,
+          branchOverrides: [],
         },
       ],
     }))
@@ -310,6 +344,28 @@ export function AdminCatalogProducts({
     setProductFormValues((currentValues) => ({
       ...currentValues,
       variants: currentValues.variants.map((variant, currentIndex) => (currentIndex === index ? { ...variant, [field]: value } : variant)),
+    }))
+  }
+
+  function handleVariantBranchOverrideChange(
+    variantIndex: number,
+    branchId: string,
+    field: "availabilityStatus" | "priceOverride" | "prepTimeMinutes",
+    value: string
+  ) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      variants: currentValues.variants.map((variant, currentIndex) =>
+        currentIndex === variantIndex
+          ? {
+              ...variant,
+              branchOverrides: variant.branchOverrides.map((branchOverride) =>
+                branchOverride.branchId === branchId ? { ...branchOverride, [field]: value } : branchOverride
+              ),
+            }
+          : variant
+      ),
     }))
   }
 
@@ -382,6 +438,22 @@ export function AdminCatalogProducts({
             priceOverride: branchOverride.priceOverride,
             prepTimeMinutes: branchOverride.prepTimeMinutes,
           }))
+        )
+      )
+      formData.set(
+        "variantBranchOverrides",
+        JSON.stringify(
+          productFormValues.variants
+            .filter((variant) => isSavedVariant(variant.id))
+            .flatMap((variant) =>
+              variant.branchOverrides.map((branchOverride) => ({
+                variantId: variant.id,
+                branchId: branchOverride.branchId,
+                availabilityStatus: branchOverride.availabilityStatus,
+                priceOverride: branchOverride.priceOverride,
+                prepTimeMinutes: branchOverride.prepTimeMinutes,
+              }))
+            )
         )
       )
 
@@ -727,24 +799,71 @@ export function AdminCatalogProducts({
               {productFormValues.variants.length > 0 ? (
                 <div className="mt-3 grid gap-2.5">
                   {productFormValues.variants.map((variant, index) => (
-                    <div key={variant.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.3fr_1fr_auto_auto] md:items-end">
-                      <label className="grid gap-2 text-sm">
-                        <span className="font-medium text-card-foreground">Nombre</span>
-                        <Input value={variant.name} onChange={(event) => handleVariantChange(index, "name", event.target.value)} placeholder="Ej. Grande" disabled={!canEditGlobalCatalog} />
-                      </label>
-                      <label className="grid gap-2 text-sm">
-                        <span className="font-medium text-card-foreground">Precio</span>
-                        <Input value={variant.basePrice} onChange={(event) => handleVariantChange(index, "basePrice", event.target.value)} placeholder="Ej. $ 14.90" disabled={!canEditGlobalCatalog} />
-                      </label>
-                      <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-card-foreground">
-                        <input checked={variant.isDefault} onChange={() => handleDefaultVariantChange(index)} type="radio" name="defaultVariant" disabled={!canEditGlobalCatalog} />
-                        Predeterminada
-                      </label>
-                      {canEditGlobalCatalog ? (
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeVariantRow(index)}>
-                          <Trash2 />
-                        </Button>
-                      ) : null}
+                    <div key={variant.id} className="rounded-[0.9rem] border border-border bg-secondary/20 p-3">
+                      <div className="grid gap-2.5 md:grid-cols-[1.3fr_1fr_auto_auto] md:items-end">
+                        <label className="grid gap-2 text-sm">
+                          <span className="font-medium text-card-foreground">Nombre</span>
+                          <Input value={variant.name} onChange={(event) => handleVariantChange(index, "name", event.target.value)} placeholder="Ej. Grande" disabled={!canEditGlobalCatalog} />
+                        </label>
+                        <label className="grid gap-2 text-sm">
+                          <span className="font-medium text-card-foreground">Precio</span>
+                          <Input value={variant.basePrice} onChange={(event) => handleVariantChange(index, "basePrice", event.target.value)} placeholder="Ej. $ 14.90" disabled={!canEditGlobalCatalog} />
+                        </label>
+                        <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-card-foreground">
+                          <input checked={variant.isDefault} onChange={() => handleDefaultVariantChange(index)} type="radio" name="defaultVariant" disabled={!canEditGlobalCatalog} />
+                          Predeterminada
+                        </label>
+                        {canEditGlobalCatalog ? (
+                          <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeVariantRow(index)}>
+                            <Trash2 />
+                          </Button>
+                        ) : null}
+                      </div>
+
+                      {isSavedVariant(variant.id) ? (
+                        variant.branchOverrides.length > 0 ? (
+                          <div className="mt-3 grid gap-2 border-t border-border pt-3">
+                            <p className="text-xs font-medium text-muted-foreground">Disponibilidad y precio por sucursal para &quot;{variant.name || "esta variante"}&quot;</p>
+                            {variant.branchOverrides.map((branchOverride) => (
+                              <div key={branchOverride.branchId} className="grid gap-2 rounded-lg border border-border bg-background p-2.5 md:grid-cols-[1fr_1fr_1fr_1fr] md:items-end">
+                                <p className="text-sm font-medium text-card-foreground">{branchOverride.branchName}</p>
+                                <label className="grid gap-1.5 text-xs">
+                                  <span className="font-medium text-muted-foreground">Disponibilidad</span>
+                                  <select
+                                    value={branchOverride.availabilityStatus}
+                                    onChange={(event) => handleVariantBranchOverrideChange(index, branchOverride.branchId, "availabilityStatus", event.target.value)}
+                                    className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                                  >
+                                    <option value="available">Disponible</option>
+                                    <option value="paused">Pausado</option>
+                                    <option value="out_of_stock">Sin stock</option>
+                                  </select>
+                                </label>
+                                <label className="grid gap-1.5 text-xs">
+                                  <span className="font-medium text-muted-foreground">Precio local</span>
+                                  <Input
+                                    value={branchOverride.priceOverride}
+                                    onChange={(event) => handleVariantBranchOverrideChange(index, branchOverride.branchId, "priceOverride", event.target.value)}
+                                    placeholder={`Usa ${variant.basePrice || "precio de la variante"}`}
+                                  />
+                                </label>
+                                <label className="grid gap-1.5 text-xs">
+                                  <span className="font-medium text-muted-foreground">Prep time</span>
+                                  <Input
+                                    value={branchOverride.prepTimeMinutes}
+                                    onChange={(event) => handleVariantBranchOverrideChange(index, branchOverride.branchId, "prepTimeMinutes", event.target.value)}
+                                    placeholder="Ej. 12"
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null
+                      ) : (
+                        <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+                          Guarda el producto para poder configurar disponibilidad y precio por sucursal de este tamano.
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
