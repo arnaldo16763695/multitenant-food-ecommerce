@@ -676,7 +676,7 @@ export async function replaceCustomerManualPaymentReceipt(
 // order or attach a modifier that doesn't actually belong to the product. This mirrors
 // validateModifierSelections in customer-bag.ts, but operates on CheckoutBagItemModifierInput
 // (no priceDeltaLabel/modifierKind) across potentially many products in a single checkout.
-function validateAndPriceItemModifiers(
+export function validateAndPriceItemModifiers(
   selections: readonly CheckoutBagItemModifierInput[],
   allowedGroupIds: ReadonlySet<string>,
   modifierGroupMap: ReadonlyMap<string, OrderModifierGroupRow>,
