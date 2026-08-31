@@ -103,7 +103,19 @@ statements; grep all migrations for the real, current table set)
 
 ## Recent focus (from git history, for continuity — verify before assuming still true)
 
-Branch operating schedules, admin login/orders UX, storefront + admin modifier semantics, and
-mobile home banner management were the last few landed features. If asked to touch catalog
-modifiers, branch scheduling, or the admin orders/login flow, check these recent commits first —
-they're the freshest examples of the current conventions in that area.
+Catalog/modifiers and order-pricing correctness were the last few landed features, in this
+order: (1) unified modifier semantics onto the explicit `modifier_kind` field instead of a
+group-name string heuristic, across storefront, bag, checkout and order history, including a
+snapshot column (`order_item_modifiers.modifier_kind_snapshot`) so historical orders stay
+correct; (2) hardened checkout and the bag write path so modifier prices are always re-derived
+server-side from `modifier_group_options.price_delta` — a client-supplied `priceDelta` is never
+trusted for money math; (3) added admin write support for `branch_product_variant_overrides`
+(price/availability per branch **per variant**, not just per product), including an RLS policy
+fix so `branch_manager` isn't silently blocked at the DB layer; (4) added unit test coverage for
+`lib/services/orders.ts`, which previously had none despite being the most business-critical
+file in the repo.
+
+Before that: branch operating schedules, admin login/orders UX, and mobile home banner
+management. If asked to touch catalog modifiers, order pricing, branch-level catalog overrides,
+or the admin orders/login flow, check these recent commits first — they're the freshest examples
+of the current conventions in that area.
