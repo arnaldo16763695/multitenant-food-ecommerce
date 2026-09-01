@@ -19,7 +19,7 @@ import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 function getOrderBadgeVariant(status: string): React.ComponentProps<typeof Badge>["variant"] {
-  if (status === "ready" || status === "fulfilled" || status === "completed") return "success"
+  if (status === "ready" || status === "fulfilled") return "success"
   if (status === "in_preparation") return "secondary"
 
   return "warning"

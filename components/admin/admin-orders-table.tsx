@@ -7,6 +7,7 @@ import { Eye, Search } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
+  releaseAdminOrderAssignmentAction,
   updateAdminOrderPaymentStatusAction,
   updateAdminOrderStatusAction,
 } from "@/app/app/[tenantSlug]/admin/orders/actions"
@@ -51,7 +52,7 @@ function matchesQueueFilter(order: AdminOrderSummary, queueFilter: OrderQueueFil
     case "ready_to_confirm":
       return isReadyToConfirm(order)
     case "confirmed":
-      return order.status === "confirmed" || order.status === "in_preparation" || order.status === "ready" || order.status === "fulfilled" || order.status === "completed"
+      return order.status === "confirmed" || order.status === "in_preparation" || order.status === "ready" || order.status === "fulfilled"
     default:
       return true
   }
@@ -112,6 +113,12 @@ function getSelectablePaymentStatuses(status: PaymentStatus) {
 
 function canEditPaymentStatus(order: AdminOrderSummary) {
   return order.status !== "pending_payment"
+}
+
+// Assignment only matters while an order is actively moving through kitchen. A stale
+// assignedMembershipId on a fulfilled/cancelled order is historical, not something to "release".
+function canReleaseAssignment(order: AdminOrderSummary) {
+  return Boolean(order.assignedStaffName) && (order.status === "in_preparation" || order.status === "ready")
 }
 
 function parseQueueFilter(value: string | null): OrderQueueFilter {
@@ -320,6 +327,21 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
     })
   }
 
+  function handleReleaseAssignment(orderId: string) {
+    setErrorMessage("")
+
+    startTransition(async () => {
+      const result = await releaseAdminOrderAssignmentAction(tenantSlug, orderId)
+
+      if (!result.ok) {
+        setErrorMessage(result.error ?? "No pudimos liberar la asignación.")
+        return
+      }
+
+      router.refresh()
+    })
+  }
+
   return (
     <>
       <div className="mb-4 grid gap-3">
@@ -429,7 +451,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
               <TableHead className="h-10 px-3 text-xs">Fecha</TableHead>
               <TableHead className="h-10 px-3 text-right text-xs">Total</TableHead>
-              <TableHead className="h-10 w-[160px] px-3 text-right text-xs">Acciones</TableHead>
+              <TableHead className="h-10 w-[220px] px-3 text-right text-xs">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -511,13 +533,24 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                       ))}
                     </select>
                     {readyToConfirm ? <div className="mt-1 text-[11px] font-medium text-emerald-700">Listo para confirmar pedido y pago</div> : null}
+                    {order.assignedStaffName ? <div className="mt-1 text-[11px] text-muted-foreground">Tomada por {order.assignedStaffName}</div> : null}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">
                     <LocalizedDateTime value={order.placedAt} />
                   </TableCell>
                    <TableCell className="px-3 py-2 text-right font-medium text-card-foreground">$ {order.totalAmount.toFixed(2)}</TableCell>
                    <TableCell className="px-3 py-2">
-                     <div className="flex justify-end gap-2">
+                     <div className="flex flex-wrap justify-end gap-2">
+                       {canReleaseAssignment(order) ? (
+                         <Button
+                           variant="outline"
+                           className="h-8 rounded-lg px-3 text-xs"
+                           disabled={isPending}
+                           onClick={() => handleReleaseAssignment(order.id)}
+                         >
+                           Liberar asignación
+                         </Button>
+                       ) : null}
                        <Button asChild variant="outline" className="h-8 rounded-lg px-3 text-xs">
                          <Link href={`/app/${tenantSlug}/admin/orders/${order.id}`}>Detalle</Link>
                        </Button>
