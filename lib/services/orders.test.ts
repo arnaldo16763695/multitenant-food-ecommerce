@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type { CheckoutBagItemModifierInput } from "@/lib/domain/order"
-import { ensureKitchenAssignmentAccess, validateAndPriceItemModifiers } from "@/lib/services/orders"
+import { ensureKitchenAssignmentAccess, updateAdminOrderStatus, validateAndPriceItemModifiers } from "@/lib/services/orders"
 
 // A minimal stand-in for the `.from("orders").select(...).eq(...).eq(...).limit(1).maybeSingle()`
 // chain ensureKitchenAssignmentAccess runs after its role gate. Used only to prove a call reached
@@ -17,6 +17,49 @@ function createOrderLookupSupabaseStub(): SupabaseClient {
   }
 
   return chain as unknown as SupabaseClient
+}
+
+// Stands in for the two tables updateAdminOrderStatus reads before it would ever mutate
+// anything: "orders" (the current row) and, only for a "ready" transition,
+// "order_items" (canKitchenMarkOrderReady's own prep-status check). rpc is a spy so a test can
+// assert the mutation never ran when the ready-gate rejects the transition.
+function createReadyGateSupabaseStub(
+  orderRow: { status: string; branch_id: string; order_number: number; payment_status: string },
+  orderItems: readonly { prep_status: "pending" | "ready" }[]
+) {
+  const ordersChain = {
+    select: () => ordersChain,
+    eq: () => ordersChain,
+    limit: () => ordersChain,
+    maybeSingle: async () => ({ data: orderRow, error: null }),
+  }
+
+  const orderItemsChain = {
+    select: () => orderItemsChain,
+    eq: () => orderItemsChain,
+    returns: () => ({ data: orderItems, error: null }),
+  }
+
+  // writeAuditEvent runs after a successful transition and must never fail the operation --
+  // give it somewhere harmless to write instead of letting it hit the "unexpected table" guard.
+  const auditEventsChain = {
+    insert: async () => ({ data: null, error: null }),
+  }
+
+  const rpc = vi.fn()
+
+  const client = {
+    from: (table: string) => {
+      if (table === "orders") return ordersChain
+      if (table === "order_items") return orderItemsChain
+      if (table === "audit_events") return auditEventsChain
+
+      throw new Error(`createReadyGateSupabaseStub: unexpected table "${table}"`)
+    },
+    rpc,
+  }
+
+  return { client: client as unknown as SupabaseClient, rpc }
 }
 
 function createSelection(overrides: Partial<CheckoutBagItemModifierInput> = {}): CheckoutBagItemModifierInput {
@@ -221,5 +264,37 @@ describe("ensureKitchenAssignmentAccess", () => {
     // The stub reports no matching order, so a result past the role gate surfaces as "order not
     // found" -- proving this role reached the database instead of being rejected up front.
     expect(result).toEqual({ ok: false, error: "No encontramos la orden." })
+  })
+})
+
+describe("updateAdminOrderStatus", () => {
+  it('blocks marking an order "ready" when not every item has been prepared, regardless of the caller', async () => {
+    const { client, rpc } = createReadyGateSupabaseStub(
+      { status: "in_preparation", branch_id: "branch-1", order_number: 42, payment_status: "paid" },
+      [{ prep_status: "ready" }, { prep_status: "pending" }]
+    )
+
+    const result = await updateAdminOrderStatus(client, "tenant-1", "order-1", "ready")
+
+    expect(result).toEqual({ ok: false, error: "Debes marcar todos los items como listos antes de finalizar la orden." })
+    // The rejection must happen before the state-changing RPC ever runs -- otherwise this is a
+    // check with no teeth.
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('allows marking an order "ready" once every item is prepared', async () => {
+    const { client, rpc } = createReadyGateSupabaseStub(
+      { status: "in_preparation", branch_id: "branch-1", order_number: 42, payment_status: "paid" },
+      [{ prep_status: "ready" }, { prep_status: "ready" }]
+    )
+    rpc.mockResolvedValue({ data: true, error: null })
+
+    const result = await updateAdminOrderStatus(client, "tenant-1", "order-1", "ready")
+
+    expect(rpc).toHaveBeenCalledWith(
+      "update_order_status_atomic",
+      expect.objectContaining({ p_from_status: "in_preparation", p_to_status: "ready" })
+    )
+    expect(result).toEqual({ ok: true })
   })
 })

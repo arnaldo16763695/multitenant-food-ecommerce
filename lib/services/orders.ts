@@ -1807,6 +1807,16 @@ export async function updateAdminOrderStatus(
     }
   }
 
+  // "ready" means every item has been prepared -- true regardless of which surface triggers the
+  // transition, so enforce it here once instead of only in the kitchen board's own action.
+  if (nextStatus === "ready") {
+    const readyCheck = await canKitchenMarkOrderReady(supabase, tenantId, orderId)
+
+    if (!readyCheck.ok) {
+      return readyCheck
+    }
+  }
+
   const updateResult = await supabase.rpc("update_order_status_atomic", {
     p_tenant_id: tenantId,
     p_order_id: orderId,
