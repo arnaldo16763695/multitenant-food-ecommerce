@@ -1,4 +1,7 @@
+import Link from "next/link"
+
 import { requireKitchenAccess } from "@/lib/auth/admin"
+import { getDefaultRouteForRole } from "@/lib/auth/permissions"
 import { getKitchenOrders } from "@/lib/services/orders"
 import { getKitchenBranchesForMembership } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -7,6 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { KitchenBoard } from "@/components/kitchen/kitchen-board"
 import { AdminPageShell } from "@/components/admin/admin-page-shell"
 import { AdminSignOutButton } from "@/components/auth/admin-sign-out-button"
+import { Button } from "@/components/ui/button"
 import { KitchenBranchSelector } from "@/components/kitchen/kitchen-branch-selector"
 import { OrderRealtimeRefresh } from "@/components/realtime/order-realtime-refresh"
 
@@ -40,6 +44,12 @@ export default async function KitchenPage({ params, searchParams }: KitchenPageP
   const activeBranch = activeBranches.find((branch) => branch.id === activeBranchId) ?? null
   const orders = await getKitchenOrders(supabase, access.membership.tenantId, activeBranchId ? [activeBranchId] : [])
 
+  // Kitchen lives outside the /admin route tree (no shared sidebar), so a role that also has an
+  // admin home -- everyone except preparer -- needs its own way back instead of relying on the
+  // browser's back button.
+  const adminHomeHref = getDefaultRouteForRole(tenantSlug, access.membership.role)
+  const canReturnToAdmin = adminHomeHref !== `/app/${tenantSlug}/kitchen`
+
   return (
     <AdminPageShell
       eyebrow="Kitchen"
@@ -52,6 +62,11 @@ export default async function KitchenPage({ params, searchParams }: KitchenPageP
       badge={`${orders.length} órdenes activas`}
       actions={
         <>
+          {canReturnToAdmin ? (
+            <Button asChild variant="outline">
+              <Link href={adminHomeHref}>Volver a Admin</Link>
+            </Button>
+          ) : null}
           {activeBranches.length > 1 ? (
             <KitchenBranchSelector
               activeBranchId={activeBranchId}
