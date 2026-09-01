@@ -23,19 +23,13 @@ import type {
   UpdateBusinessSignupDecisionInput,
 } from "@/lib/domain/platform-admin"
 
-type TenantRow = {
+type PlatformTenantSummaryRow = {
   id: string
   name: string
   slug: string
   storefront_enabled: boolean
-}
-
-type BranchCountRow = {
-  tenant_id: string
-}
-
-type MembershipCountRow = {
-  tenant_id: string
+  active_branch_count: number
+  active_membership_count: number
 }
 
 type BusinessSignupRow = {
@@ -189,33 +183,29 @@ function normalizeSlug(value: string) {
 }
 
 export async function getPlatformTenants(supabase: SupabaseClient): Promise<readonly PlatformTenantSummary[]> {
-  const [tenantsResult, branchesResult, membershipsResult] = await Promise.all([
-    supabase.from("tenants").select("id, name, slug, storefront_enabled").order("name", { ascending: true }).returns<TenantRow[]>(),
-    supabase.from("branches").select("tenant_id").eq("is_active", true).returns<BranchCountRow[]>(),
-    supabase.from("tenant_memberships").select("tenant_id").eq("is_active", true).returns<MembershipCountRow[]>(),
-  ])
+  // get_platform_tenant_summaries aggregates active branch/membership counts per tenant in
+  // Postgres (GROUP BY) instead of fetching every branch/membership row across the whole
+  // platform and counting them in JS -- the response is bounded by tenant count, not by total
+  // branches/staff platform-wide.
+  const summariesResult = await supabase.rpc("get_platform_tenant_summaries", {})
 
-  if (tenantsResult.error || branchesResult.error || membershipsResult.error) {
-    throw new Error(tenantsResult.error?.message ?? branchesResult.error?.message ?? membershipsResult.error?.message ?? "No pudimos cargar tenants.")
+  if (summariesResult.error) {
+    throw new Error(summariesResult.error.message)
   }
 
-  const activeBranchCountMap = (branchesResult.data ?? []).reduce<Map<string, number>>((map, branch) => {
-    map.set(branch.tenant_id, (map.get(branch.tenant_id) ?? 0) + 1)
-    return map
-  }, new Map())
+  // The Supabase client here has no generated Database schema to type .rpc() calls against, so
+  // its return type degenerates to `any` -- cast against the shape get_platform_tenant_summaries
+  // actually declares (`returns table(...)`), the same manual-typing approach every other query
+  // in this file already uses via .returns<T[]>().
+  const summaries = (summariesResult.data ?? []) as readonly PlatformTenantSummaryRow[]
 
-  const activeMembershipCountMap = (membershipsResult.data ?? []).reduce<Map<string, number>>((map, membership) => {
-    map.set(membership.tenant_id, (map.get(membership.tenant_id) ?? 0) + 1)
-    return map
-  }, new Map())
-
-  return (tenantsResult.data ?? []).map((tenant) => ({
+  return summaries.map((tenant) => ({
     id: tenant.id,
     name: tenant.name,
     slug: tenant.slug,
     storefrontEnabled: tenant.storefront_enabled,
-    activeBranchCount: activeBranchCountMap.get(tenant.id) ?? 0,
-    activeMembershipCount: activeMembershipCountMap.get(tenant.id) ?? 0,
+    activeBranchCount: Number(tenant.active_branch_count),
+    activeMembershipCount: Number(tenant.active_membership_count),
   }))
 }
 
