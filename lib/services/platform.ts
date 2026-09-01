@@ -136,6 +136,7 @@ async function generateBusinessOwnerAccessLink(
       ok: true as const,
       authUserId: existingProfile.auth_user_id,
       invitationUrl: linkResult.data.properties.action_link,
+      wasNewlyCreated: false,
     }
   }
 
@@ -174,6 +175,7 @@ async function generateBusinessOwnerAccessLink(
     ok: true as const,
     authUserId: createUserResult.data.user.id,
     invitationUrl: linkResult.data.properties.action_link,
+    wasNewlyCreated: true,
   }
 }
 
@@ -698,6 +700,15 @@ export async function provisionBusinessSignup(
     .single<{ id: string }>()
 
   if (profileResult.error || !profileResult.data) {
+    // If we just created this auth user (brand-new owner email) and the profile row that should
+    // be linked to it never got committed, that user is an orphan: the "already provisioned"
+    // check below is keyed off the profiles table, so a retry would call auth.admin.createUser
+    // again with the same email and fail permanently on a duplicate-email error. Reusing a
+    // pre-existing profile's auth user is never deleted here.
+    if (accessLinkResult.wasNewlyCreated) {
+      await supabase.auth.admin.deleteUser(accessLinkResult.authUserId)
+    }
+
     return { ok: false, error: profileResult.error?.message ?? "No pudimos preparar el perfil del owner." }
   }
 
