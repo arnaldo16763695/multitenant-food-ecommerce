@@ -1,6 +1,6 @@
 import { requireKitchenAccess } from "@/lib/auth/admin"
 import { getKitchenOrders } from "@/lib/services/orders"
-import { getActiveBranchesForMembership, getActiveBranchIdsForMembership } from "@/lib/services/staff"
+import { getKitchenBranchesForMembership } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -29,10 +29,8 @@ export default async function KitchenPage({ params, searchParams }: KitchenPageP
     throw new Error("Supabase client is not configured.")
   }
 
-  const [activeBranches, branchIds] = await Promise.all([
-    getActiveBranchesForMembership(supabase, access.membership.id),
-    getActiveBranchIdsForMembership(supabase, access.membership.id),
-  ])
+  const activeBranches = await getKitchenBranchesForMembership(supabase, access.membership.tenantId, access.membership.id, access.membership.role)
+  const branchIds = activeBranches.map((branch) => branch.id)
 
   const activeBranchId =
     requestedBranchId && branchIds.includes(requestedBranchId)
@@ -48,7 +46,7 @@ export default async function KitchenPage({ params, searchParams }: KitchenPageP
       title="Tablero operativo de cocina"
       description={
         activeBranch
-          ? `Kitchen enfocado en ${activeBranch.name}. El preparador trabaja una sucursal activa por vez para reducir ruido operativo.`
+          ? `Kitchen enfocado en ${activeBranch.name}. El tablero opera una sucursal activa por vez para reducir ruido operativo.`
           : "No tienes sucursales activas asignadas para operar kitchen."
       }
       badge={`${orders.length} órdenes activas`}

@@ -1,7 +1,23 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
 import type { CheckoutBagItemModifierInput } from "@/lib/domain/order"
-import { validateAndPriceItemModifiers } from "@/lib/services/orders"
+import { ensureKitchenAssignmentAccess, validateAndPriceItemModifiers } from "@/lib/services/orders"
+
+// A minimal stand-in for the `.from("orders").select(...).eq(...).eq(...).limit(1).maybeSingle()`
+// chain ensureKitchenAssignmentAccess runs after its role gate. Used only to prove a call reached
+// (or never reached) that query -- not to exercise the query itself.
+function createOrderLookupSupabaseStub(): SupabaseClient {
+  const chain = {
+    from: () => chain,
+    select: () => chain,
+    eq: () => chain,
+    limit: () => chain,
+    maybeSingle: async () => ({ data: null, error: null }),
+  }
+
+  return chain as unknown as SupabaseClient
+}
 
 function createSelection(overrides: Partial<CheckoutBagItemModifierInput> = {}): CheckoutBagItemModifierInput {
   return {
@@ -178,5 +194,32 @@ describe("validateAndPriceItemModifiers", () => {
     )
 
     expect(result).toEqual({ ok: true, modifiers: [] })
+  })
+})
+
+describe("ensureKitchenAssignmentAccess", () => {
+  it("rejects a role with no kitchen access before touching the database", async () => {
+    // Passing a supabase stub whose every method throws proves the rejection happens purely
+    // from the role check, before any query is attempted.
+    const throwingSupabase = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("ensureKitchenAssignmentAccess should not query the database for a disallowed role")
+        },
+      }
+    ) as unknown as SupabaseClient
+
+    const result = await ensureKitchenAssignmentAccess(throwingSupabase, "tenant-1", "order-1", "membership-1", "cashier", ["branch-1"])
+
+    expect(result).toEqual({ ok: false, error: "No tienes permisos para operar ordenes desde kitchen." })
+  })
+
+  it.each(["preparer", "owner", "manager", "branch_manager"])("lets %s past the role gate", async (role) => {
+    const result = await ensureKitchenAssignmentAccess(createOrderLookupSupabaseStub(), "tenant-1", "order-1", "membership-1", role, ["branch-1"])
+
+    // The stub reports no matching order, so a result past the role gate surfaces as "order not
+    // found" -- proving this role reached the database instead of being rejected up front.
+    expect(result).toEqual({ ok: false, error: "No encontramos la orden." })
   })
 })

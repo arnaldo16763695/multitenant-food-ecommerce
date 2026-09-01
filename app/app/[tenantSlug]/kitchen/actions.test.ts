@@ -8,7 +8,7 @@ const {
   requireKitchenAccess,
   createSupabaseAdminClient,
   createSupabaseServerClient,
-  getActiveBranchIdsForMembership,
+  getKitchenBranchIdsForMembership,
   assignKitchenOrder,
   canKitchenMarkOrderReady,
   ensureKitchenAssignmentAccess,
@@ -18,7 +18,7 @@ const {
   requireKitchenAccess: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
-  getActiveBranchIdsForMembership: vi.fn(),
+  getKitchenBranchIdsForMembership: vi.fn(),
   assignKitchenOrder: vi.fn(),
   canKitchenMarkOrderReady: vi.fn(),
   ensureKitchenAssignmentAccess: vi.fn(),
@@ -43,7 +43,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }))
 
 vi.mock("@/lib/services/staff", () => ({
-  getActiveBranchIdsForMembership,
+  getKitchenBranchIdsForMembership,
 }))
 
 vi.mock("@/lib/services/orders", async () => {
@@ -84,12 +84,12 @@ describe("assignKitchenOrderAction", () => {
 
   it("loads active branch ids and revalidates paths on success", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1", "branch-2"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1", "branch-2"])
     assignKitchenOrder.mockResolvedValue({ ok: true })
 
     const result = await assignKitchenOrderAction("burger-house", "order-1")
 
-    expect(getActiveBranchIdsForMembership).toHaveBeenCalledWith({ kind: "admin-client" }, "membership-1")
+    expect(getKitchenBranchIdsForMembership).toHaveBeenCalledWith({ kind: "admin-client" }, "tenant-1", "membership-1", "preparer")
     expect(assignKitchenOrder).toHaveBeenCalledWith(
       { kind: "admin-client" },
       "tenant-1",
@@ -137,7 +137,7 @@ describe("updateKitchenOrderStatusAction", () => {
 
   it("stops when assignment access fails", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1"])
     ensureKitchenAssignmentAccess.mockResolvedValue({ ok: false, error: "No puedes operar esta orden." })
 
     const result = await updateKitchenOrderStatusAction("burger-house", "order-1", "in_preparation")
@@ -157,7 +157,7 @@ describe("updateKitchenOrderStatusAction", () => {
 
   it("requires the ready check before moving an order to ready", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1"])
     ensureKitchenAssignmentAccess.mockResolvedValue({ ok: true })
     canKitchenMarkOrderReady.mockResolvedValue({ ok: false, error: "Faltan items por preparar." })
 
@@ -170,7 +170,7 @@ describe("updateKitchenOrderStatusAction", () => {
 
   it("updates the status and revalidates affected paths when checks pass", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1"])
     ensureKitchenAssignmentAccess.mockResolvedValue({ ok: true })
     canKitchenMarkOrderReady.mockResolvedValue({ ok: true })
     updateAdminOrderStatus.mockResolvedValue({ ok: true })
@@ -219,7 +219,7 @@ describe("updateKitchenOrderItemPrepStatusAction", () => {
 
   it("stops when assignment access fails", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1"])
     ensureKitchenAssignmentAccess.mockResolvedValue({ ok: false, error: "No puedes operar esta orden." })
 
     const result = await updateKitchenOrderItemPrepStatusAction("burger-house", "order-1", "item-1", "ready")
@@ -231,7 +231,7 @@ describe("updateKitchenOrderItemPrepStatusAction", () => {
 
   it("updates item prep status and revalidates affected paths on success", async () => {
     createSupabaseAdminClient.mockReturnValue({ kind: "admin-client" })
-    getActiveBranchIdsForMembership.mockResolvedValue(["branch-1"])
+    getKitchenBranchIdsForMembership.mockResolvedValue(["branch-1"])
     ensureKitchenAssignmentAccess.mockResolvedValue({ ok: true })
     updateKitchenOrderItemPrepStatus.mockResolvedValue({ ok: true })
 

@@ -13,7 +13,7 @@ import {
   updateAdminOrderStatus,
   updateKitchenOrderItemPrepStatus,
 } from "@/lib/services/orders"
-import { getActiveBranchIdsForMembership } from "@/lib/services/staff"
+import { getKitchenBranchIdsForMembership } from "@/lib/services/staff"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -27,7 +27,7 @@ export async function assignKitchenOrderAction(tenantSlug: string, orderId: stri
     throw new Error("Supabase client is not configured.")
   }
 
-  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const branchIds = await getKitchenBranchIdsForMembership(supabase, access.membership.tenantId, access.membership.id, access.membership.role)
   const result = await assignKitchenOrder(
     supabase,
     access.membership.tenantId,
@@ -63,7 +63,7 @@ export async function updateKitchenOrderStatusAction(tenantSlug: string, orderId
     throw new Error("Supabase client is not configured.")
   }
 
-  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const branchIds = await getKitchenBranchIdsForMembership(supabase, access.membership.tenantId, access.membership.id, access.membership.role)
 
   const accessCheck = await ensureKitchenAssignmentAccess(
     supabase,
@@ -119,7 +119,7 @@ export async function releaseKitchenOrderAction(tenantSlug: string, orderId: str
     throw new Error("Supabase client is not configured.")
   }
 
-  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const branchIds = await getKitchenBranchIdsForMembership(supabase, access.membership.tenantId, access.membership.id, access.membership.role)
   const result = await releaseKitchenOrder(
     supabase,
     access.membership.tenantId,
@@ -156,7 +156,7 @@ export async function updateKitchenOrderItemPrepStatusAction(
     throw new Error("Supabase client is not configured.")
   }
 
-  const branchIds = await getActiveBranchIdsForMembership(supabase, access.membership.id)
+  const branchIds = await getKitchenBranchIdsForMembership(supabase, access.membership.tenantId, access.membership.id, access.membership.role)
 
   const accessCheck = await ensureKitchenAssignmentAccess(
     supabase,

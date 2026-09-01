@@ -260,6 +260,34 @@ export async function getActiveBranchesForMembership(
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
+// owner/manager operate tenant-wide and typically have no branch_memberships rows at all, so
+// they need every branch in the tenant; branch_manager and preparer are scoped to whatever
+// branch_memberships assigns them. Kitchen is the one surface both tiers can reach, so this is
+// shared across the kitchen page and its four write actions instead of repeating the branch
+// per role.
+export async function getKitchenBranchesForMembership(
+  supabase: SupabaseClient,
+  tenantId: string,
+  membershipId: string,
+  role: string
+): Promise<readonly StaffBranchOption[]> {
+  if (role === "owner" || role === "manager") {
+    return getStaffBranches(supabase, tenantId)
+  }
+
+  return getActiveBranchesForMembership(supabase, membershipId)
+}
+
+export async function getKitchenBranchIdsForMembership(
+  supabase: SupabaseClient,
+  tenantId: string,
+  membershipId: string,
+  role: string
+): Promise<readonly string[]> {
+  const branches = await getKitchenBranchesForMembership(supabase, tenantId, membershipId, role)
+  return branches.map((branch) => branch.id)
+}
+
 export async function getAdminStaffMembers(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminStaffMember[]> {
   const membershipsResult = await supabase
     .from("tenant_memberships")

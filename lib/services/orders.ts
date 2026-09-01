@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
+import { canAccessAdminSection } from "@/lib/auth/permissions"
 import type { AuditActor } from "@/lib/services/audit"
 import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
@@ -1725,8 +1726,8 @@ export async function ensureKitchenAssignmentAccess(
   role: string,
   branchIds: readonly string[]
 ): Promise<{ ok: boolean; error?: string }> {
-  if (role !== "preparer") {
-    return { ok: false, error: "Solo los preparadores pueden operar ordenes desde kitchen." }
+  if (!canAccessAdminSection(role, "kitchen")) {
+    return { ok: false, error: "No tienes permisos para operar ordenes desde kitchen." }
   }
 
   const currentAssignment = await getKitchenOrderAssignment(supabase, tenantId, orderId)
@@ -1744,7 +1745,7 @@ export async function ensureKitchenAssignmentAccess(
   }
 
   if (currentAssignment.assignedMembershipId !== membershipId) {
-    return { ok: false, error: "Esta orden ya esta asignada a otro preparador." }
+    return { ok: false, error: "Esta orden ya esta asignada a otro miembro del staff." }
   }
 
   return { ok: true }

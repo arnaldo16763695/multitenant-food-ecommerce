@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
+  ChefHat,
   ChevronDown,
   ChevronRight,
   LayoutDashboard,
@@ -181,6 +182,9 @@ type AppSidebarProps = {
 
 export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
   const baseAdminPath = `/app/${tenantSlug}/admin`
+  // Kitchen lives at /app/{tenantSlug}/kitchen, outside the /admin tree -- it can't go through
+  // buildAdminHref like the rest of adminNavigation.
+  const kitchenHref = `/app/${tenantSlug}/kitchen`
   const pathname = usePathname()
 
   function buildAdminHref(href: string) {
@@ -252,6 +256,16 @@ export function AppSidebar({ tenantSlug, role, user }: AppSidebarProps) {
                   pathname={pathname}
                 />
               ))}
+              {canAccessAdminSection(role, "kitchen") ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isPathActive(pathname, kitchenHref)}>
+                    <Link href={kitchenHref}>
+                      <ChefHat />
+                      <span>Kitchen</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 
+import { canAccessAdminSection } from "@/lib/auth/permissions"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type AdminAccessContext = {
@@ -109,7 +110,9 @@ export async function requireAdminAccess(tenantSlug: string): Promise<AdminAcces
 export async function requireKitchenAccess(tenantSlug: string): Promise<AdminAccessContext> {
   const access = await requireTenantMembershipAccess(tenantSlug, `/app/${tenantSlug}/kitchen`)
 
-  if (access.membership.role !== "preparer") {
+  // Source of truth for who can reach the kitchen board is the same role/section matrix the
+  // admin sidebar uses (lib/auth/permissions.ts) -- owner, manager, branch_manager and preparer.
+  if (!canAccessAdminSection(access.membership.role, "kitchen")) {
     redirect(`/app/${tenantSlug}/admin/overview?reason=kitchen-role`)
   }
 
