@@ -132,6 +132,20 @@ describe("updateAdminOrderStatusAction", () => {
       "Supabase environment variables are missing."
     )
   })
+
+  it("rejects a preparer before touching Supabase or the orders service", async () => {
+    requireAdminAccess.mockResolvedValue({
+      membership: { id: "membership-1", tenantId: "tenant-1", role: "preparer" },
+      profile: { id: "profile-1", fullName: "Prep Uno" },
+    })
+
+    const result = await updateAdminOrderStatusAction("burger-house", "order-1", "confirmed")
+
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled()
+    expect(updateAdminOrderStatus).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, error: "No tienes permisos para operar sobre esta orden." })
+  })
 })
 
 describe("updateAdminOrderPaymentStatusAction", () => {
@@ -177,6 +191,20 @@ describe("updateAdminOrderPaymentStatusAction", () => {
     expect(revalidatePath).toHaveBeenNthCalledWith(4, "/app/burger-house/orders/order-1")
     expect(result).toEqual({ ok: true })
   })
+
+  it("rejects a preparer before touching Supabase or the orders service", async () => {
+    requireAdminAccess.mockResolvedValue({
+      membership: { id: "membership-1", tenantId: "tenant-1", role: "preparer" },
+      profile: { id: "profile-1", fullName: "Prep Uno" },
+    })
+
+    const result = await updateAdminOrderPaymentStatusAction("burger-house", "order-1", "paid")
+
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled()
+    expect(updateAdminOrderPaymentStatus).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, error: "No tienes permisos para operar sobre esta orden." })
+  })
 })
 
 describe("releaseAdminOrderAssignmentAction", () => {
@@ -216,6 +244,20 @@ describe("releaseAdminOrderAssignmentAction", () => {
     )
     expect(revalidatePath).toHaveBeenCalledTimes(5)
     expect(result).toEqual({ ok: true })
+  })
+
+  it("rejects a preparer before touching Supabase or the orders service", async () => {
+    requireAdminAccess.mockResolvedValue({
+      membership: { id: "membership-1", tenantId: "tenant-1", role: "preparer" },
+      profile: { id: "profile-1", fullName: "Prep Uno" },
+    })
+
+    const result = await releaseAdminOrderAssignmentAction("burger-house", "order-1")
+
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled()
+    expect(releaseAdminOrderAssignment).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, error: "No tienes permisos para operar sobre esta orden." })
   })
 })
 
@@ -262,5 +304,19 @@ describe("rejectManualPaymentAction", () => {
     expect(revalidatePath).toHaveBeenNthCalledWith(3, "/app/burger-house/account/orders")
     expect(revalidatePath).toHaveBeenNthCalledWith(4, "/app/burger-house/orders/order-1")
     expect(result).toEqual({ ok: true })
+  })
+
+  it("rejects a preparer before touching Supabase or the orders service", async () => {
+    requireAdminAccess.mockResolvedValue({
+      membership: { id: "membership-1", tenantId: "tenant-1", role: "preparer" },
+      profile: { id: "profile-1", fullName: "Prep Uno" },
+    })
+
+    const result = await rejectManualPaymentAction("burger-house", "order-1", "Comprobante ilegible")
+
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled()
+    expect(rejectManualPayment).not.toHaveBeenCalled()
+    expect(revalidatePath).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, error: "No tienes permisos para operar sobre esta orden." })
   })
 })

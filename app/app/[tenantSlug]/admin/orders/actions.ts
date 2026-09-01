@@ -3,14 +3,33 @@
 import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
+import { canAccessAdminSection } from "@/lib/auth/permissions"
 import type { OrderStatus, PaymentStatus } from "@/lib/domain/order"
 import { buildAuditActor } from "@/lib/services/audit"
 import { releaseAdminOrderAssignment, rejectManualPayment, updateAdminOrderPaymentStatus, updateAdminOrderStatus } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
+// requireAdminAccess only proves an active membership in this tenant, not that the role can
+// touch orders -- preparer (kitchen-only) must not reach these actions directly, only through
+// the kitchen board's own, more restrictive checks. Mirrors the "orders" entry in
+// ROLE_SECTION_ACCESS, the same rule the admin orders page and sidebar already enforce.
+function assertOrdersAccess(role: string) {
+  if (!canAccessAdminSection(role, "orders")) {
+    return { ok: false as const, error: "No tienes permisos para operar sobre esta orden." }
+  }
+
+  return { ok: true as const }
+}
+
 export async function updateAdminOrderStatusAction(tenantSlug: string, orderId: string, nextStatus: OrderStatus) {
   const access = await requireAdminAccess(tenantSlug)
+  const accessCheck = assertOrdersAccess(access.membership.role)
+
+  if (!accessCheck.ok) {
+    return accessCheck
+  }
+
   const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
@@ -45,6 +64,12 @@ export async function updateAdminOrderStatusAction(tenantSlug: string, orderId: 
 
 export async function updateAdminOrderPaymentStatusAction(tenantSlug: string, orderId: string, nextPaymentStatus: PaymentStatus) {
   const access = await requireAdminAccess(tenantSlug)
+  const accessCheck = assertOrdersAccess(access.membership.role)
+
+  if (!accessCheck.ok) {
+    return accessCheck
+  }
+
   const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
@@ -77,6 +102,12 @@ export async function updateAdminOrderPaymentStatusAction(tenantSlug: string, or
 
 export async function releaseAdminOrderAssignmentAction(tenantSlug: string, orderId: string) {
   const access = await requireAdminAccess(tenantSlug)
+  const accessCheck = assertOrdersAccess(access.membership.role)
+
+  if (!accessCheck.ok) {
+    return accessCheck
+  }
+
   const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
@@ -109,6 +140,12 @@ export async function releaseAdminOrderAssignmentAction(tenantSlug: string, orde
 
 export async function rejectManualPaymentAction(tenantSlug: string, orderId: string, rejectionReason: string) {
   const access = await requireAdminAccess(tenantSlug)
+  const accessCheck = assertOrdersAccess(access.membership.role)
+
+  if (!accessCheck.ok) {
+    return accessCheck
+  }
+
   const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient())
 
   if (!supabase) {
