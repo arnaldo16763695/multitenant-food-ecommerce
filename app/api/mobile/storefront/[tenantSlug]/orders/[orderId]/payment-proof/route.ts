@@ -2,7 +2,7 @@ import type { ManualPaymentMethod } from "@/lib/domain/order"
 import { buildAuditActor } from "@/lib/services/audit"
 import { mobileError, mobileJson } from "@/lib/mobile/api"
 import { authenticateMobileCustomerRequest } from "@/lib/mobile/customer"
-import { replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
+import { getOwnedPendingPaymentOrder, replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
 import { buildPaymentProofImagePath, getFileExtension, getPaymentProofsBucket } from "@/lib/supabase/storage"
 
 type MobilePaymentProofRouteContext = {
@@ -10,10 +10,6 @@ type MobilePaymentProofRouteContext = {
     tenantSlug: string
     orderId: string
   }>
-}
-
-type TenantRow = {
-  id: string
 }
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
@@ -51,20 +47,23 @@ export async function POST(request: Request, context: MobilePaymentProofRouteCon
     return mobileError(400, "El comprobante supera el tamano maximo permitido de 5 MB.")
   }
 
-  const tenantResult = await authResult.adminClient
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .limit(1)
-    .maybeSingle<TenantRow>()
+  // Verify ownership BEFORE writing anything to storage -- otherwise an authenticated customer
+  // who knows/guesses another customer's orderId could upload a file into that order's storage
+  // path even though the later DB write gets correctly rejected.
+  const ownedOrderResult = await getOwnedPendingPaymentOrder(
+    authResult.adminClient,
+    tenantSlug,
+    authResult.customerContext.customer.id,
+    orderId
+  )
 
-  if (tenantResult.error || !tenantResult.data) {
-    return mobileError(404, "No encontramos la marca asociada a la orden.")
+  if (!ownedOrderResult.ok) {
+    return mobileError(ownedOrderResult.status, ownedOrderResult.error)
   }
 
   const fileExtension = getFileExtension(paymentProofFile.name)
   const paymentProofPath = buildPaymentProofImagePath(
-    tenantResult.data.id,
+    ownedOrderResult.tenantId,
     orderId,
     `receipt-${Date.now()}-${crypto.randomUUID()}.${fileExtension}`
   )

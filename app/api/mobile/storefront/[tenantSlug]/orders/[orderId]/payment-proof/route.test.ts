@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
   authenticateMobileCustomerRequest,
+  getOwnedPendingPaymentOrder,
   replaceCustomerManualPaymentReceipt,
   buildPaymentProofImagePath,
   getFileExtension,
   getPaymentProofsBucket,
 } = vi.hoisted(() => ({
   authenticateMobileCustomerRequest: vi.fn(),
+  getOwnedPendingPaymentOrder: vi.fn(),
   replaceCustomerManualPaymentReceipt: vi.fn(),
   buildPaymentProofImagePath: vi.fn(),
   getFileExtension: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("@/lib/services/orders", async () => {
 
   return {
     ...actual,
+    getOwnedPendingPaymentOrder,
     replaceCustomerManualPaymentReceipt,
   }
 })
@@ -48,22 +51,14 @@ function createFormData(paymentMethod = "mobile_payment") {
 
 function createAdminClient() {
   const upload = vi.fn()
-  const maybeSingle = vi.fn()
 
   const adminClient = {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          limit: vi.fn(() => ({ maybeSingle })),
-        })),
-      })),
-    })),
     storage: {
       from: vi.fn(() => ({ upload })),
     },
   }
 
-  return { adminClient, upload, maybeSingle }
+  return { adminClient, upload }
 }
 
 describe("POST /api/mobile/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () => {
@@ -93,16 +88,17 @@ describe("POST /api/mobile/storefront/[tenantSlug]/orders/[orderId]/payment-proo
 
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({ error: "Missing Bearer token." })
+    expect(getOwnedPendingPaymentOrder).not.toHaveBeenCalled()
   })
 
-  it("returns 404 when the tenant cannot be resolved", async () => {
-    const { adminClient, maybeSingle } = createAdminClient()
+  it("returns 404 when the tenant cannot be resolved, without touching storage", async () => {
+    const { adminClient, upload } = createAdminClient()
     authenticateMobileCustomerRequest.mockResolvedValue({
       ok: true,
       adminClient,
       customerContext: { customer: { id: "customer-1", fullName: "Ana Perez" }, profile: { id: "profile-1", fullName: "Ana Perez" } },
     })
-    maybeSingle.mockResolvedValue({ error: null, data: null })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: false, status: 404, error: "No encontramos la marca asociada a la orden." })
 
     const response = await POST(createRequest(createFormData()), {
       params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
@@ -110,16 +106,36 @@ describe("POST /api/mobile/storefront/[tenantSlug]/orders/[orderId]/payment-proo
 
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toEqual({ error: "No encontramos la marca asociada a la orden." })
+    expect(upload).not.toHaveBeenCalled()
   })
 
-  it("replaces the receipt and returns ok on success", async () => {
-    const { adminClient, maybeSingle, upload } = createAdminClient()
+  it("rejects an order the customer does not own before uploading anything to storage", async () => {
+    const { adminClient, upload } = createAdminClient()
     authenticateMobileCustomerRequest.mockResolvedValue({
       ok: true,
       adminClient,
       customerContext: { customer: { id: "customer-1", fullName: "Ana Perez" }, profile: { id: "profile-1", fullName: "Ana Perez" } },
     })
-    maybeSingle.mockResolvedValue({ error: null, data: { id: "tenant-1" } })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: false, status: 400, error: "No encontramos la orden dentro de tu cuenta." })
+
+    const response = await POST(createRequest(createFormData()), {
+      params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: "No encontramos la orden dentro de tu cuenta." })
+    expect(upload).not.toHaveBeenCalled()
+    expect(replaceCustomerManualPaymentReceipt).not.toHaveBeenCalled()
+  })
+
+  it("replaces the receipt and returns ok on success", async () => {
+    const { adminClient, upload } = createAdminClient()
+    authenticateMobileCustomerRequest.mockResolvedValue({
+      ok: true,
+      adminClient,
+      customerContext: { customer: { id: "customer-1", fullName: "Ana Perez" }, profile: { id: "profile-1", fullName: "Ana Perez" } },
+    })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: true, tenantId: "tenant-1", order: { id: "order-1" } })
     upload.mockResolvedValue({ error: null })
     replaceCustomerManualPaymentReceipt.mockResolvedValue({ ok: true })
 
@@ -127,6 +143,7 @@ describe("POST /api/mobile/storefront/[tenantSlug]/orders/[orderId]/payment-proo
       params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
     })
 
+    expect(getOwnedPendingPaymentOrder).toHaveBeenCalledWith(adminClient, "demo-brand", "customer-1", "order-1")
     expect(replaceCustomerManualPaymentReceipt).toHaveBeenCalledWith(
       adminClient,
       expect.objectContaining({

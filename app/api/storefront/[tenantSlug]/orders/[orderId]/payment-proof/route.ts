@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import type { ManualPaymentMethod } from "@/lib/domain/order"
 import { buildAuditActor } from "@/lib/services/audit"
-import { replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
+import { getOwnedPendingPaymentOrder, replaceCustomerManualPaymentReceipt } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { buildPaymentProofImagePath, getFileExtension, getPaymentProofsBucket } from "@/lib/supabase/storage"
 
@@ -54,20 +54,18 @@ export async function POST(request: Request, context: PaymentProofRouteContext) 
     return NextResponse.json({ error: "El comprobante supera el tamaño máximo permitido de 5 MB." }, { status: 400 })
   }
 
-  const tenantResult = await adminClient
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .limit(1)
-    .maybeSingle<{ id: string }>()
+  // Verify ownership BEFORE writing anything to storage -- otherwise an authenticated customer
+  // who knows/guesses another customer's orderId could upload a file into that order's storage
+  // path even though the later DB write gets correctly rejected.
+  const ownedOrderResult = await getOwnedPendingPaymentOrder(adminClient, tenantSlug, customerContext.customer.id, orderId)
 
-  if (tenantResult.error || !tenantResult.data) {
-    return NextResponse.json({ error: "No encontramos la marca asociada a la orden." }, { status: 404 })
+  if (!ownedOrderResult.ok) {
+    return NextResponse.json({ error: ownedOrderResult.error }, { status: ownedOrderResult.status })
   }
 
   const fileExtension = getFileExtension(paymentProofFile.name)
   const paymentProofPath = buildPaymentProofImagePath(
-    tenantResult.data.id,
+    ownedOrderResult.tenantId,
     orderId,
     `receipt-${Date.now()}-${crypto.randomUUID()}.${fileExtension}`
   )

@@ -564,6 +564,55 @@ export async function rejectManualPayment(
   return { ok: true }
 }
 
+type OwnedPendingPaymentOrderRow = {
+  id: string
+  branch_id: string
+  order_number: number
+  status: OrderStatus
+  payment_status: PaymentStatus
+}
+
+// Verifies (tenant + customer ownership + still pending_payment) for a receipt-upload target.
+// Callers that perform a side effect before writing the actual payment record -- e.g. uploading
+// the receipt image to storage -- must run this check FIRST: doing the ownership check only
+// inside replaceCustomerManualPaymentReceipt (after the upload) still stops the DB write, but
+// lets an unauthorized caller who guesses/knows another customer's orderId write an arbitrary
+// file into that order's storage path before the rejection ever happens.
+export async function getOwnedPendingPaymentOrder(
+  supabase: SupabaseClient,
+  tenantSlug: string,
+  customerId: string,
+  orderId: string
+): Promise<
+  | { ok: true; tenantId: string; order: OwnedPendingPaymentOrderRow }
+  | { ok: false; status: 404 | 400; error: string }
+> {
+  const tenantResult = await supabase.from("tenants").select("id").eq("slug", tenantSlug).limit(1).maybeSingle<TenantRow>()
+
+  if (tenantResult.error || !tenantResult.data) {
+    return { ok: false, status: 404, error: "No encontramos la marca asociada a la orden." }
+  }
+
+  const orderResult = await supabase
+    .from("orders")
+    .select("id, branch_id, order_number, status, payment_status")
+    .eq("tenant_id", tenantResult.data.id)
+    .eq("customer_id", customerId)
+    .eq("id", orderId)
+    .limit(1)
+    .maybeSingle<OwnedPendingPaymentOrderRow>()
+
+  if (orderResult.error || !orderResult.data) {
+    return { ok: false, status: 400, error: "No encontramos la orden dentro de tu cuenta." }
+  }
+
+  if (orderResult.data.status !== "pending_payment") {
+    return { ok: false, status: 400, error: "Solo puedes actualizar el comprobante mientras la orden siga pendiente de pago." }
+  }
+
+  return { ok: true, tenantId: tenantResult.data.id, order: orderResult.data }
+}
+
 export async function replaceCustomerManualPaymentReceipt(
   supabase: SupabaseClient,
   input: {
@@ -575,28 +624,13 @@ export async function replaceCustomerManualPaymentReceipt(
     readonly auditActor?: AuditActor
   }
 ): Promise<{ ok: boolean; error?: string }> {
-  const tenantResult = await supabase.from("tenants").select("id").eq("slug", input.tenantSlug).limit(1).maybeSingle<TenantRow>()
+  const ownedOrderResult = await getOwnedPendingPaymentOrder(supabase, input.tenantSlug, input.customerId, input.orderId)
 
-  if (tenantResult.error || !tenantResult.data) {
-    return { ok: false, error: "No encontramos la marca asociada a la orden." }
+  if (!ownedOrderResult.ok) {
+    return ownedOrderResult
   }
 
-  const orderResult = await supabase
-    .from("orders")
-    .select("id, branch_id, order_number, status, payment_status")
-    .eq("tenant_id", tenantResult.data.id)
-    .eq("customer_id", input.customerId)
-    .eq("id", input.orderId)
-    .limit(1)
-    .maybeSingle<{ id: string; branch_id: string; order_number: number; status: OrderStatus; payment_status: PaymentStatus }>()
-
-  if (orderResult.error || !orderResult.data) {
-    return { ok: false, error: "No encontramos la orden dentro de tu cuenta." }
-  }
-
-  if (orderResult.data.status !== "pending_payment") {
-    return { ok: false, error: "Solo puedes actualizar el comprobante mientras la orden siga pendiente de pago." }
-  }
+  const { tenantId, order } = ownedOrderResult
 
   const currentPaymentResult = await getPaymentRecordForOrder(supabase, input.orderId)
 
@@ -636,7 +670,7 @@ export async function replaceCustomerManualPaymentReceipt(
   const orderUpdateResult = await supabase
     .from("orders")
     .update({ payment_status: "pending" })
-    .eq("tenant_id", tenantResult.data.id)
+    .eq("tenant_id", tenantId)
     .eq("id", input.orderId)
 
   if (orderUpdateResult.error) {
@@ -644,13 +678,13 @@ export async function replaceCustomerManualPaymentReceipt(
   }
 
   await writeAuditEvent(supabase, {
-    tenantId: tenantResult.data.id,
-    branchId: orderResult.data.branch_id,
+    tenantId,
+    branchId: order.branch_id,
     actor: input.auditActor ?? { profileId: null, membershipId: null, name: null, role: null, surface: "storefront" },
     entityType: "order_payment",
     entityId: input.orderId,
     action: "payment.receipt_resubmitted",
-    summary: `Se reenvio el comprobante de la ${getOrderAuditLabel(orderResult.data.order_number)}.`,
+    summary: `Se reenvio el comprobante de la ${getOrderAuditLabel(order.order_number)}.`,
     beforeData: {
       paymentStatus: currentPaymentResult.status,
       paymentMethod: currentPaymentResult.payment_method,
@@ -664,7 +698,7 @@ export async function replaceCustomerManualPaymentReceipt(
     },
     metadata: {
       orderId: input.orderId,
-      orderNumber: orderResult.data.order_number,
+      orderNumber: order.order_number,
     },
   })
 

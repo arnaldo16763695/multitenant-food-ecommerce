@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { describe, expect, it, vi } from "vitest"
 
 import type { CheckoutBagItemModifierInput } from "@/lib/domain/order"
-import { ensureKitchenAssignmentAccess, updateAdminOrderStatus, validateAndPriceItemModifiers } from "@/lib/services/orders"
+import { ensureKitchenAssignmentAccess, getOwnedPendingPaymentOrder, updateAdminOrderStatus, validateAndPriceItemModifiers } from "@/lib/services/orders"
 
 // A minimal stand-in for the `.from("orders").select(...).eq(...).eq(...).limit(1).maybeSingle()`
 // chain ensureKitchenAssignmentAccess runs after its role gate. Used only to prove a call reached
@@ -296,5 +296,76 @@ describe("updateAdminOrderStatus", () => {
       expect.objectContaining({ p_from_status: "in_preparation", p_to_status: "ready" })
     )
     expect(result).toEqual({ ok: true })
+  })
+})
+
+// Stands in for the two-table lookup (tenants, then orders) getOwnedPendingPaymentOrder runs.
+function createOwnedPendingPaymentOrderStub(
+  tenantRow: { id: string } | null,
+  orderRow: { id: string; branch_id: string; order_number: number; status: string; payment_status: string } | null
+): SupabaseClient {
+  const tenantsChain = {
+    select: () => tenantsChain,
+    eq: () => tenantsChain,
+    limit: () => tenantsChain,
+    maybeSingle: async () => ({ data: tenantRow, error: null }),
+  }
+
+  const ordersChain = {
+    select: () => ordersChain,
+    eq: () => ordersChain,
+    limit: () => ordersChain,
+    maybeSingle: async () => ({ data: orderRow, error: null }),
+  }
+
+  const client = {
+    from: (table: string) => {
+      if (table === "tenants") return tenantsChain
+      if (table === "orders") return ordersChain
+
+      throw new Error(`createOwnedPendingPaymentOrderStub: unexpected table "${table}"`)
+    },
+  }
+
+  return client as unknown as SupabaseClient
+}
+
+describe("getOwnedPendingPaymentOrder", () => {
+  it("returns a 404-flagged error when the tenant slug does not resolve", async () => {
+    const result = await getOwnedPendingPaymentOrder(createOwnedPendingPaymentOrderStub(null, null), "unknown-tenant", "customer-1", "order-1")
+
+    expect(result).toEqual({ ok: false, status: 404, error: "No encontramos la marca asociada a la orden." })
+  })
+
+  it("returns a 400-flagged error when the order does not belong to this customer", async () => {
+    const result = await getOwnedPendingPaymentOrder(
+      createOwnedPendingPaymentOrderStub({ id: "tenant-1" }, null),
+      "demo-brand",
+      "customer-1",
+      "order-1"
+    )
+
+    // Deliberately not 404 here: the query already scoped by tenant + customer + orderId
+    // together, so a miss is ownership-shaped, not "resource doesn't exist" in the REST sense.
+    expect(result).toEqual({ ok: false, status: 400, error: "No encontramos la orden dentro de tu cuenta." })
+  })
+
+  it("returns a 400-flagged error when the order is no longer pending payment", async () => {
+    const result = await getOwnedPendingPaymentOrder(
+      createOwnedPendingPaymentOrderStub({ id: "tenant-1" }, { id: "order-1", branch_id: "branch-1", order_number: 7, status: "confirmed", payment_status: "paid" }),
+      "demo-brand",
+      "customer-1",
+      "order-1"
+    )
+
+    expect(result).toEqual({ ok: false, status: 400, error: "Solo puedes actualizar el comprobante mientras la orden siga pendiente de pago." })
+  })
+
+  it("succeeds for a pending-payment order the customer actually owns", async () => {
+    const orderRow = { id: "order-1", branch_id: "branch-1", order_number: 7, status: "pending_payment", payment_status: "pending" }
+
+    const result = await getOwnedPendingPaymentOrder(createOwnedPendingPaymentOrderStub({ id: "tenant-1" }, orderRow), "demo-brand", "customer-1", "order-1")
+
+    expect(result).toEqual({ ok: true, tenantId: "tenant-1", order: orderRow })
   })
 })

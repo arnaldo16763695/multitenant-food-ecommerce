@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
   getCustomerAccountContext,
+  getOwnedPendingPaymentOrder,
   replaceCustomerManualPaymentReceipt,
   createSupabaseAdminClient,
   buildPaymentProofImagePath,
@@ -9,6 +10,7 @@ const {
   getPaymentProofsBucket,
 } = vi.hoisted(() => ({
   getCustomerAccountContext: vi.fn(),
+  getOwnedPendingPaymentOrder: vi.fn(),
   replaceCustomerManualPaymentReceipt: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
   buildPaymentProofImagePath: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock("@/lib/services/orders", async () => {
 
   return {
     ...actual,
+    getOwnedPendingPaymentOrder,
     replaceCustomerManualPaymentReceipt,
   }
 })
@@ -66,28 +69,14 @@ function createPaymentProofFormData(overrides?: { paymentMethod?: string; paymen
 
 function createAdminClient() {
   const upload = vi.fn()
-  const maybeSingle = vi.fn()
 
   const adminClient = {
-    from: vi.fn((table: string) => {
-      if (table === "tenants") {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              limit: vi.fn(() => ({ maybeSingle })),
-            })),
-          })),
-        }
-      }
-
-      throw new Error(`Unexpected table: ${table}`)
-    }),
     storage: {
       from: vi.fn(() => ({ upload })),
     },
   }
 
-  return { adminClient, upload, maybeSingle }
+  return { adminClient, upload }
 }
 
 describe("POST /api/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () => {
@@ -114,12 +103,13 @@ describe("POST /api/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () 
 
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({ error: "Inicia sesión para actualizar el comprobante." })
+    expect(getOwnedPendingPaymentOrder).not.toHaveBeenCalled()
   })
 
-  it("returns 404 when the tenant cannot be resolved", async () => {
-    const { adminClient, maybeSingle } = createAdminClient()
+  it("returns 404 when the tenant cannot be resolved, without touching storage", async () => {
+    const { adminClient, upload } = createAdminClient()
     createSupabaseAdminClient.mockReturnValue(adminClient)
-    maybeSingle.mockResolvedValue({ error: null, data: null })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: false, status: 404, error: "No encontramos la marca asociada a la orden." })
 
     const response = await POST(createPaymentProofRequest(createPaymentProofFormData()), {
       params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
@@ -127,12 +117,28 @@ describe("POST /api/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () 
 
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toEqual({ error: "No encontramos la marca asociada a la orden." })
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it("rejects an order the customer does not own before uploading anything to storage", async () => {
+    const { adminClient, upload } = createAdminClient()
+    createSupabaseAdminClient.mockReturnValue(adminClient)
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: false, status: 400, error: "No encontramos la orden dentro de tu cuenta." })
+
+    const response = await POST(createPaymentProofRequest(createPaymentProofFormData()), {
+      params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
+    })
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({ error: "No encontramos la orden dentro de tu cuenta." })
+    expect(upload).not.toHaveBeenCalled()
+    expect(replaceCustomerManualPaymentReceipt).not.toHaveBeenCalled()
   })
 
   it("returns 500 when upload fails", async () => {
-    const { adminClient, maybeSingle, upload } = createAdminClient()
+    const { adminClient, upload } = createAdminClient()
     createSupabaseAdminClient.mockReturnValue(adminClient)
-    maybeSingle.mockResolvedValue({ error: null, data: { id: "tenant-1" } })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: true, tenantId: "tenant-1", order: { id: "order-1" } })
     upload.mockResolvedValue({ error: { message: "storage failed" } })
 
     const response = await POST(createPaymentProofRequest(createPaymentProofFormData()), {
@@ -144,9 +150,9 @@ describe("POST /api/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () 
   })
 
   it("replaces the receipt and returns ok on success", async () => {
-    const { adminClient, maybeSingle, upload } = createAdminClient()
+    const { adminClient, upload } = createAdminClient()
     createSupabaseAdminClient.mockReturnValue(adminClient)
-    maybeSingle.mockResolvedValue({ error: null, data: { id: "tenant-1" } })
+    getOwnedPendingPaymentOrder.mockResolvedValue({ ok: true, tenantId: "tenant-1", order: { id: "order-1" } })
     upload.mockResolvedValue({ error: null })
     replaceCustomerManualPaymentReceipt.mockResolvedValue({ ok: true })
 
@@ -154,6 +160,7 @@ describe("POST /api/storefront/[tenantSlug]/orders/[orderId]/payment-proof", () 
       params: Promise.resolve({ tenantSlug: "demo-brand", orderId: "order-1" }),
     })
 
+    expect(getOwnedPendingPaymentOrder).toHaveBeenCalledWith(adminClient, "demo-brand", "customer-1", "order-1")
     expect(replaceCustomerManualPaymentReceipt).toHaveBeenCalledWith(
       adminClient,
       expect.objectContaining({
