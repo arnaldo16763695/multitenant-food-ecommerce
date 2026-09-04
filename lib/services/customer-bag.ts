@@ -40,6 +40,7 @@ type ProductRow = {
   base_price: number | string
   category_id: string | null
   status: "active" | "draft"
+  is_combo: boolean
 }
 
 type ProductVariantRow = {
@@ -86,6 +87,12 @@ type BranchProductVariantOverrideRow = {
   product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
+}
+
+type ComboComponentAvailabilityRow = {
+  combo_product_id: string
+  component_product_id: string
+  component_variant_id: string | null
 }
 
 type ResolvedBranchContext =
@@ -159,12 +166,13 @@ async function loadBranchProductMaps(
       categoryMap: new Map<string, string>(),
       branchOverrideMap: new Map<string, BranchProductOverrideRow>(),
       branchVariantOverrideMap: new Map<string, BranchProductVariantOverrideRow>(),
+      comboComponentsMap: new Map<string, ComboComponentAvailabilityRow[]>(),
     }
   }
 
   const productsResult = await supabase
     .from("products")
-    .select("id, name, description, base_price, category_id, status")
+    .select("id, name, description, base_price, category_id, status, is_combo")
     .eq("tenant_id", tenantId)
     .in("id", [...productIds])
     .returns<ProductRow[]>()
@@ -176,7 +184,7 @@ async function loadBranchProductMaps(
   const products = productsResult.data ?? []
   const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
 
-  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult, comboComponentsResult] = await Promise.all([
     variantIds.length
       ? supabase.from("product_variants").select("id, product_id, name, base_price, is_active").eq("tenant_id", tenantId).in("id", [...variantIds]).returns<ProductVariantRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: ProductVariantRow[]; error: null }),
@@ -197,11 +205,31 @@ async function loadBranchProductMaps(
           .in("product_variant_id", [...variantIds])
           .returns<BranchProductVariantOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
+    productIds.length
+      ? supabase
+          .from("product_combo_components")
+          .select("combo_product_id, component_product_id, component_variant_id")
+          .in("combo_product_id", [...productIds])
+          .returns<ComboComponentAvailabilityRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ComboComponentAvailabilityRow[]; error: null }),
   ])
 
-  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
-    throw new Error(productVariantsResult.error?.message ?? categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? branchVariantOverridesResult.error?.message ?? "No pudimos validar la bolsa.")
+  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error || comboComponentsResult.error) {
+    throw new Error(
+      productVariantsResult.error?.message ??
+        categoriesResult.error?.message ??
+        branchOverridesResult.error?.message ??
+        branchVariantOverridesResult.error?.message ??
+        comboComponentsResult.error?.message ??
+        "No pudimos validar la bolsa."
+    )
   }
+
+  const comboComponentsMap = (comboComponentsResult.data ?? []).reduce<Map<string, ComboComponentAvailabilityRow[]>>((map, component) => {
+    const currentComponents = map.get(component.combo_product_id) ?? []
+    map.set(component.combo_product_id, [...currentComponents, component])
+    return map
+  }, new Map())
 
   return {
     productMap: new Map(products.map((product) => [product.id, product])),
@@ -209,6 +237,7 @@ async function loadBranchProductMaps(
     categoryMap: new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name])),
     branchOverrideMap: new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override])),
     branchVariantOverrideMap: new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override])),
+    comboComponentsMap,
   }
 }
 
@@ -305,6 +334,31 @@ function resolveAuthoritativeModifierSelections(
   })
 }
 
+// A combo is available only when every one of its components resolves available -- reuses the
+// same override maps already loaded for the bag's own products/variants, since a combo's
+// components are just other products/variants of this same tenant+branch. Mirrors the identical
+// check in lib/data/public-storefront.ts and lib/services/orders.ts. Exported (unlike its two
+// siblings, which stay nested closures) because this is the standalone-friendliest of the three
+// and is worth direct unit coverage as the core combo-availability rule.
+export function isComboComponentsAvailable(
+  comboProductId: string,
+  comboComponentsMap: ReadonlyMap<string, readonly ComboComponentAvailabilityRow[]>,
+  branchOverrideMap: ReadonlyMap<string, BranchProductOverrideRow>,
+  branchVariantOverrideMap: ReadonlyMap<string, BranchProductVariantOverrideRow>
+) {
+  const components = comboComponentsMap.get(comboProductId) ?? []
+
+  return components.every((component) => {
+    if (component.component_variant_id) {
+      const variantOverride = branchVariantOverrideMap.get(component.component_variant_id)
+      return variantOverride ? variantOverride.availability_status === "available" : true
+    }
+
+    const productOverride = branchOverrideMap.get(component.component_product_id)
+    return productOverride ? productOverride.availability_status === "available" : true
+  })
+}
+
 function buildBagItem(
   bagItemId: string,
   tenantSlug: string,
@@ -315,6 +369,7 @@ function buildBagItem(
   categoryMap: ReadonlyMap<string, string>,
   branchOverrideMap: ReadonlyMap<string, BranchProductOverrideRow>,
   branchVariantOverrideMap: ReadonlyMap<string, BranchProductVariantOverrideRow>,
+  comboComponentsMap: ReadonlyMap<string, readonly ComboComponentAvailabilityRow[]>,
   modifierSelections: readonly ShoppingBagModifierSelection[] = []
 ): ShoppingBagItem | null {
   if (product.status !== "active") {
@@ -333,6 +388,10 @@ function buildBagItem(
       return null
     }
   } else if (branchOverride && branchOverride.availability_status !== "available") {
+    return null
+  }
+
+  if (product.is_combo && !isComboComponentsAvailable(product.id, comboComponentsMap, branchOverrideMap, branchVariantOverrideMap)) {
     return null
   }
 
@@ -383,7 +442,7 @@ export async function getCustomerBagItems(
 
   const productIds = [...new Set(bagItemsResult.data.map((item) => item.product_id))]
   const variantIds = [...new Set(bagItemsResult.data.map((item) => item.product_variant_id).filter((value): value is string => Boolean(value)))]
-  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(supabase, context.tenantId, branchId, productIds, variantIds)
+  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap, comboComponentsMap } = await loadBranchProductMaps(supabase, context.tenantId, branchId, productIds, variantIds)
   const bagItemIds = bagItemsResult.data.map((item) => item.id)
   const bagItemModifiersResult = bagItemIds.length
     ? await supabase
@@ -421,7 +480,7 @@ export async function getCustomerBagItems(
       return []
     }
 
-    const bagItem = buildBagItem(item.id, tenantSlug, branchId, item.quantity, product, item.product_variant_id ? productVariantMap.get(item.product_variant_id) ?? null : null, categoryMap, branchOverrideMap, branchVariantOverrideMap, bagItemModifiersMap.get(item.id) ?? [])
+    const bagItem = buildBagItem(item.id, tenantSlug, branchId, item.quantity, product, item.product_variant_id ? productVariantMap.get(item.product_variant_id) ?? null : null, categoryMap, branchOverrideMap, branchVariantOverrideMap, comboComponentsMap, bagItemModifiersMap.get(item.id) ?? [])
 
     return bagItem ? [bagItem] : []
   })
@@ -451,7 +510,7 @@ export async function addCustomerBagItem(
     return { ok: false, error: getClosedBranchBagError(context) }
   }
 
-  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(
+  const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap, comboComponentsMap } = await loadBranchProductMaps(
     supabase,
     context.tenantId,
     input.branchId,
@@ -526,7 +585,7 @@ export async function addCustomerBagItem(
   const quantityToAdd = Math.max(input.quantity ?? 1, 1)
   const nextQuantity = (existingItemResult.data?.quantity ?? 0) + quantityToAdd
   const bagItemId = existingItemResult.data?.id ?? crypto.randomUUID()
-  const bagItem = buildBagItem(bagItemId, input.tenantSlug, input.branchId, nextQuantity, product, productVariant, categoryMap, branchOverrideMap, branchVariantOverrideMap, modifierSelections)
+  const bagItem = buildBagItem(bagItemId, input.tenantSlug, input.branchId, nextQuantity, product, productVariant, categoryMap, branchOverrideMap, branchVariantOverrideMap, comboComponentsMap, modifierSelections)
 
   if (!bagItem) {
     return { ok: false, error: "Este producto ya no esta disponible en esta sucursal." }
@@ -636,7 +695,7 @@ export async function replaceCustomerBagItem(
     currentBagItemResult.data.configuration_hash === nextConfigurationHash
 
   if (isSameBagLine) {
-    const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap } = await loadBranchProductMaps(
+    const { productMap, productVariantMap, categoryMap, branchOverrideMap, branchVariantOverrideMap, comboComponentsMap } = await loadBranchProductMaps(
       supabase,
       context.tenantId,
       input.branchId,
@@ -707,6 +766,7 @@ export async function replaceCustomerBagItem(
       categoryMap,
       branchOverrideMap,
       branchVariantOverrideMap,
+      comboComponentsMap,
       authoritativeModifierSelections
     )
 

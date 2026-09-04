@@ -30,6 +30,19 @@ export type CatalogProductMutationInput = {
   readonly primaryImageAlt?: string
   readonly branchOverrides?: readonly CatalogBranchOverrideInput[]
   readonly variantBranchOverrides?: readonly CatalogVariantBranchOverrideInput[]
+  readonly isCombo?: boolean
+  readonly comboComponents?: readonly CatalogComboComponentInput[]
+}
+
+// A combo's fixed composition: a plain (non-combo) product, optionally scoped to one of its
+// variants, at a fixed quantity. Never combines with the product's own variants -- a combo has
+// one composition and one price, enforced by the enforce_combo_product_has_no_variants DB
+// trigger.
+export type CatalogComboComponentInput = {
+  readonly componentProductId: string
+  readonly componentVariantId?: string | null
+  readonly quantity: number
+  readonly sortOrder: number
 }
 
 export type CatalogProductVariantInput = {

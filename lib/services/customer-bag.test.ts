@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { ShoppingBagModifierSelection } from "@/lib/domain/bag"
-import { buildConfigurationHash, validateModifierSelections } from "@/lib/services/customer-bag"
+import { buildConfigurationHash, isComboComponentsAvailable, validateModifierSelections } from "@/lib/services/customer-bag"
 
 function createSelection(overrides: Partial<ShoppingBagModifierSelection> = {}): ShoppingBagModifierSelection {
   return {
@@ -122,5 +122,48 @@ describe("validateModifierSelections", () => {
     )
 
     expect(result).toEqual({ ok: true })
+  })
+})
+
+describe("isComboComponentsAvailable", () => {
+  const comboComponentsMap = new Map([
+    [
+      "combo-1",
+      [
+        { combo_product_id: "combo-1", component_product_id: "product-burger", component_variant_id: null },
+        { combo_product_id: "combo-1", component_product_id: "product-soda", component_variant_id: "variant-soda-1l" },
+      ],
+    ],
+  ])
+
+  it("is available when a combo has no component rows at all", () => {
+    expect(isComboComponentsAvailable("combo-without-components", comboComponentsMap, new Map(), new Map())).toBe(true)
+  })
+
+  it("is available when no component has an override row (opt-out availability model)", () => {
+    expect(isComboComponentsAvailable("combo-1", comboComponentsMap, new Map(), new Map())).toBe(true)
+  })
+
+  it("is unavailable when a variant-less component's own override says paused", () => {
+    const branchOverrideMap = new Map([["product-burger", { product_id: "product-burger", availability_status: "paused" as const, price_override: null }]])
+
+    expect(isComboComponentsAvailable("combo-1", comboComponentsMap, branchOverrideMap, new Map())).toBe(false)
+  })
+
+  it("is unavailable when a component that specifies a variant has that variant paused", () => {
+    const branchVariantOverrideMap = new Map([
+      ["variant-soda-1l", { product_variant_id: "variant-soda-1l", availability_status: "out_of_stock" as const, price_override: null }],
+    ])
+
+    expect(isComboComponentsAvailable("combo-1", comboComponentsMap, new Map(), branchVariantOverrideMap)).toBe(false)
+  })
+
+  it("is available only once every component individually resolves available", () => {
+    const branchOverrideMap = new Map([["product-burger", { product_id: "product-burger", availability_status: "available" as const, price_override: null }]])
+    const branchVariantOverrideMap = new Map([
+      ["variant-soda-1l", { product_variant_id: "variant-soda-1l", availability_status: "available" as const, price_override: null }],
+    ])
+
+    expect(isComboComponentsAvailable("combo-1", comboComponentsMap, branchOverrideMap, branchVariantOverrideMap)).toBe(true)
   })
 })

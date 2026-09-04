@@ -393,6 +393,11 @@ export function KitchenBoard({ tenantSlug, orders, currentMembershipId, currentS
                                                      ))}
                                                    </div>
                                                  ) : null}
+                                                 {item.comboComponents.length > 0 ? (
+                                                   <p className="mt-1 text-xs text-muted-foreground">
+                                                     Incluye: {item.comboComponents.map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`).join(", ")}
+                                                   </p>
+                                                 ) : null}
                                                  {isItemPending ? <p className="mt-1 text-xs text-amber-700">Guardando cambio...</p> : null}
                                                </div>
                                               <span className="font-medium text-muted-foreground">x{item.quantity}</span>

@@ -669,7 +669,7 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
         },
         CustomerOrderDetailItem: {
           type: "object",
-          required: ["id", "productName", "categoryName", "quantity", "unitPrice", "lineTotal", "modifiers"],
+          required: ["id", "productName", "categoryName", "quantity", "unitPrice", "lineTotal", "modifiers", "comboComponents"],
           properties: {
             id: { type: "string", format: "uuid" },
             productName: { type: "string" },
@@ -685,6 +685,19 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
                 properties: {
                   modifierGroupName: { type: "string" },
                   modifierOptionName: { type: "string" },
+                },
+              },
+            },
+            comboComponents: {
+              type: "array",
+              description: "Read-only snapshot of what a combo line included at order time -- empty for a non-combo item.",
+              items: {
+                type: "object",
+                required: ["componentProductName", "componentVariantName", "quantity"],
+                properties: {
+                  componentProductName: { type: "string" },
+                  componentVariantName: buildNullableSchema({ type: "string" }),
+                  quantity: { type: "integer" },
                 },
               },
             },

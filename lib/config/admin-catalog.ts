@@ -14,6 +14,15 @@ export type CatalogBranchStatus = {
   readonly prepTime: string
 }
 
+export type CatalogComboComponent = {
+  readonly id: string
+  readonly componentProductId: string
+  readonly componentProductName: string
+  readonly componentVariantId: string | null
+  readonly componentVariantName: string | null
+  readonly quantity: number
+}
+
 export type CatalogProduct = {
   readonly id: string
   readonly name: string
@@ -35,6 +44,8 @@ export type CatalogProduct = {
   readonly modifierGroups: readonly string[]
   readonly tags: readonly string[]
   readonly branchStatuses: readonly CatalogBranchStatus[]
+  readonly isCombo: boolean
+  readonly comboComponents: readonly CatalogComboComponent[]
 }
 
 export type CatalogCategory = {

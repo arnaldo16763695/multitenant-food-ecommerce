@@ -41,6 +41,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 type ProductStatus = CatalogProduct["status"]
 
+type ComboComponentFormValue = {
+  readonly id: string
+  readonly componentProductId: string
+  readonly componentVariantId: string | null
+  readonly quantity: number
+  readonly sortOrder: number
+}
+
 type ProductFormValues = {
   readonly id: string
   readonly name: string
@@ -66,6 +74,8 @@ type ProductFormValues = {
     priceOverride: string
     prepTimeMinutes: string
   }[]
+  readonly isCombo: boolean
+  readonly comboComponents: readonly ComboComponentFormValue[]
 }
 
 type VariantBranchOverrideFormValue = {
@@ -135,6 +145,14 @@ function buildFormValues(product: CatalogProduct, branches: readonly CatalogBran
         prepTimeMinutes: branchOverride?.prepTimeMinutes ?? "",
       }
     }),
+    isCombo: product.isCombo,
+    comboComponents: product.comboComponents.map((component, index) => ({
+      id: component.id,
+      componentProductId: component.componentProductId,
+      componentVariantId: component.componentVariantId,
+      quantity: component.quantity,
+      sortOrder: index,
+    })),
   }
 }
 
@@ -157,6 +175,8 @@ function buildEmptyProduct(index: number, branches: readonly CatalogBranchOption
       priceOverride: "",
       prepTimeMinutes: "",
     })),
+    isCombo: false,
+    comboComponents: [],
   }
 }
 
@@ -211,6 +231,38 @@ export function AdminCatalogProducts({
 
   const categoryOptions = React.useMemo(() => initialCategories.map((category) => category.name), [initialCategories])
   const modifierGroupOptions = initialModifierGroups
+
+  // A combo's components must be plain (non-combo) products, and never itself -- mirrors the
+  // DB trigger's own constraints so the picker can't offer an invalid choice in the first place.
+  const comboComponentProductOptions = React.useMemo(
+    () => products.filter((product) => !product.isCombo && product.id !== productFormValues.id),
+    [products, productFormValues.id]
+  )
+
+  // Purely a reference number for the person setting the combo's price -- never validated or
+  // enforced, since combo pricing stays a manual, usually-discounted decision.
+  const comboComponentsPriceHint = React.useMemo(() => {
+    if (!productFormValues.isCombo || !productFormValues.comboComponents.length) {
+      return null
+    }
+
+    const total = productFormValues.comboComponents.reduce((sum, component) => {
+      const componentProduct = comboComponentProductOptions.find((product) => product.id === component.componentProductId)
+
+      if (!componentProduct) {
+        return sum
+      }
+
+      const priceLabel = component.componentVariantId
+        ? componentProduct.variants.find((variant) => variant.id === component.componentVariantId)?.basePrice ?? componentProduct.basePrice
+        : componentProduct.basePrice
+      const price = Number(priceLabel.replace(/[^0-9.-]+/g, "")) || 0
+
+      return sum + price * component.quantity
+    }, 0)
+
+    return `$ ${total.toFixed(2)}`
+  }, [comboComponentProductOptions, productFormValues.comboComponents, productFormValues.isCombo])
 
   const filteredProducts = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -369,6 +421,67 @@ export function AdminCatalogProducts({
     }))
   }
 
+  function handleIsComboToggle(checked: boolean) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      isCombo: checked,
+      // A combo can't also have its own size/presentation variants -- enforced server-side and
+      // by a DB trigger, so clear them here too instead of silently submitting stale data that
+      // would only fail on save.
+      variants: checked ? [] : currentValues.variants,
+    }))
+  }
+
+  function addComboComponentRow() {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      comboComponents: [
+        ...currentValues.comboComponents,
+        {
+          id: `draft-combo-component-${currentValues.comboComponents.length + 1}`,
+          componentProductId: "",
+          componentVariantId: null,
+          quantity: 1,
+          sortOrder: currentValues.comboComponents.length,
+        },
+      ],
+    }))
+  }
+
+  function handleComboComponentChange(index: number, field: "componentProductId" | "componentVariantId" | "quantity", value: string) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      comboComponents: currentValues.comboComponents.map((component, currentIndex) => {
+        if (currentIndex !== index) {
+          return component
+        }
+
+        if (field === "quantity") {
+          return { ...component, quantity: Math.max(Number(value) || 1, 1) }
+        }
+
+        if (field === "componentProductId") {
+          // Changing the component product invalidates whatever variant was selected for the
+          // previous one.
+          return { ...component, componentProductId: value, componentVariantId: null }
+        }
+
+        return { ...component, componentVariantId: value || null }
+      }),
+    }))
+  }
+
+  function removeComboComponentRow(index: number) {
+    setFormErrorMessage("")
+    setProductFormValues((currentValues) => ({
+      ...currentValues,
+      comboComponents: currentValues.comboComponents.filter((_, currentIndex) => currentIndex !== index).map((component, currentIndex) => ({ ...component, sortOrder: currentIndex })),
+    }))
+  }
+
   function handleDefaultVariantChange(index: number) {
     setFormErrorMessage("")
     setProductFormValues((currentValues) => ({
@@ -407,6 +520,11 @@ export function AdminCatalogProducts({
       return
     }
 
+    if (productFormValues.isCombo && !productFormValues.comboComponents.some((component) => component.componentProductId)) {
+      setFormErrorMessage("Un combo debe tener al menos un componente.")
+      return
+    }
+
     startSavingProduct(async () => {
       const formData = new FormData()
       formData.set("name", productFormValues.name)
@@ -417,6 +535,20 @@ export function AdminCatalogProducts({
       formData.set("primaryImagePath", productFormValues.primaryImagePath)
       formData.set("primaryImageAlt", productFormValues.primaryImageAlt)
       formData.set("modifierGroupIds", JSON.stringify(productFormValues.modifierGroupIds))
+      formData.set("isCombo", String(productFormValues.isCombo))
+      formData.set(
+        "comboComponents",
+        JSON.stringify(
+          productFormValues.comboComponents
+            .filter((component) => component.componentProductId)
+            .map((component) => ({
+              componentProductId: component.componentProductId,
+              componentVariantId: component.componentVariantId,
+              quantity: component.quantity,
+              sortOrder: component.sortOrder,
+            }))
+        )
+      )
       formData.set(
         "variants",
         JSON.stringify(
@@ -733,6 +865,9 @@ export function AdminCatalogProducts({
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Precio base</span>
                 <Input value={productFormValues.basePrice} onChange={(event) => handleFieldChange("basePrice", event.target.value)} placeholder="Ej. $ 11.90" disabled={!canEditGlobalCatalog} />
+                {comboComponentsPriceHint ? (
+                  <span className="text-xs text-muted-foreground">Suma de componentes sin descuento: {comboComponentsPriceHint}</span>
+                ) : null}
               </label>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium text-card-foreground">Estado</span>
@@ -747,6 +882,22 @@ export function AdminCatalogProducts({
                 </select>
               </label>
             </div>
+
+            <label className="flex items-start gap-3 rounded-[1rem] border border-border bg-secondary/20 px-3.5 py-3 text-sm text-card-foreground">
+              <input
+                type="checkbox"
+                checked={productFormValues.isCombo}
+                onChange={(event) => handleIsComboToggle(event.target.checked)}
+                disabled={!canEditGlobalCatalog}
+              />
+              <span>
+                <span className="block font-medium">Es un combo</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Un combo se arma con cantidades fijas de otros productos del catálogo (ej. 5 hamburguesas + 1 refresco de litro). Su
+                  disponibilidad se sincroniza automáticamente: si un componente se pausa, el combo también deja de mostrarse.
+                </span>
+              </span>
+            </label>
 
             <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
@@ -782,6 +933,11 @@ export function AdminCatalogProducts({
               )}
             </div>
 
+            {productFormValues.isCombo ? (
+              <div className="rounded-[1rem] border border-dashed border-border p-3.5 text-sm text-muted-foreground">
+                Los combos no pueden tener tamaños/variantes propias -- una composición fija equivale a un precio.
+              </div>
+            ) : (
             <div className="rounded-[1rem] border border-border p-3.5">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -873,6 +1029,90 @@ export function AdminCatalogProducts({
                 </div>
               )}
             </div>
+            )}
+
+            {productFormValues.isCombo ? (
+              <div className="rounded-[1rem] border border-border p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-card-foreground">Componentes del combo</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Define qué productos y en qué cantidad forman este combo. La disponibilidad se calcula automáticamente a partir de estos componentes.
+                    </p>
+                  </div>
+                  {canEditGlobalCatalog ? (
+                    <Button type="button" variant="outline" className="h-8 rounded-lg px-3 text-sm" onClick={addComboComponentRow}>
+                      <Plus />
+                      Agregar componente
+                    </Button>
+                  ) : null}
+                </div>
+
+                {productFormValues.comboComponents.length > 0 ? (
+                  <div className="mt-3 grid gap-2.5">
+                    {productFormValues.comboComponents.map((component, index) => {
+                      const componentProduct = comboComponentProductOptions.find((product) => product.id === component.componentProductId)
+
+                      return (
+                        <div key={component.id} className="grid gap-2.5 rounded-[0.9rem] border border-border bg-secondary/20 p-3 md:grid-cols-[1.4fr_1fr_0.7fr_auto] md:items-end">
+                          <label className="grid gap-2 text-sm">
+                            <span className="font-medium text-card-foreground">Producto</span>
+                            <select
+                              value={component.componentProductId}
+                              onChange={(event) => handleComboComponentChange(index, "componentProductId", event.target.value)}
+                              disabled={!canEditGlobalCatalog}
+                              className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <option value="">Selecciona un producto</option>
+                              {comboComponentProductOptions.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-sm">
+                            <span className="font-medium text-card-foreground">Variante</span>
+                            <select
+                              value={component.componentVariantId ?? ""}
+                              onChange={(event) => handleComboComponentChange(index, "componentVariantId", event.target.value)}
+                              disabled={!canEditGlobalCatalog || !componentProduct?.hasVariants}
+                              className="h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                            >
+                              <option value="">{componentProduct?.hasVariants ? "Cualquiera" : "Sin variantes"}</option>
+                              {(componentProduct?.variants ?? []).map((variant) => (
+                                <option key={variant.id} value={variant.id}>
+                                  {variant.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-2 text-sm">
+                            <span className="font-medium text-card-foreground">Cantidad</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={component.quantity}
+                              onChange={(event) => handleComboComponentChange(index, "quantity", event.target.value)}
+                              disabled={!canEditGlobalCatalog}
+                            />
+                          </label>
+                          {canEditGlobalCatalog ? (
+                            <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeComboComponentRow(index)}>
+                              <Trash2 />
+                            </Button>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-[0.9rem] border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">
+                    Agrega al menos un componente para poder guardar este combo.
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             <div className="grid gap-3 md:grid-cols-[0.9fr_1.1fr]">
               <label className="grid gap-2 text-sm">

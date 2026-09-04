@@ -25,6 +25,7 @@ import {
   type CatalogProductVariantInput,
   type CatalogProductStatus,
   type CatalogVariantBranchOverrideInput,
+  type CatalogComboComponentInput,
 } from "@/lib/domain/catalog"
 
 type CatalogModuleData = {
@@ -46,6 +47,7 @@ type ProductRow = {
   category_id: string | null
   primary_image_path: string | null
   primary_image_alt: string | null
+  is_combo: boolean
 }
 type BranchRow = { id: string; name: string }
 type ModifierGroupRow = { id: string; name: string; selection_type: "single" | "multiple"; modifier_kind: "ingredient" | "addon" | "choice"; min_select: number; max_select: number }
@@ -65,6 +67,14 @@ type BranchProductVariantOverrideRow = {
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
   prep_time_minutes: number | null
+}
+type ProductComboComponentRow = {
+  id: string
+  combo_product_id: string
+  component_product_id: string
+  component_variant_id: string | null
+  quantity: number
+  sort_order: number
 }
 
 type ProductAuditRow = {
@@ -136,6 +146,13 @@ function mapCatalogPayloadForAudit(payload: CatalogProductMutationInput) {
       availabilityStatus: override.availabilityStatus,
       priceOverride: normalizeCatalogPrice(override.priceOverride),
       prepTimeMinutes: normalizePrepTimeMinutes(override.prepTimeMinutes),
+    })),
+    isCombo: Boolean(payload.isCombo),
+    comboComponents: (payload.comboComponents ?? []).map((component) => ({
+      componentProductId: component.componentProductId,
+      componentVariantId: component.componentVariantId ?? null,
+      quantity: component.quantity,
+      sortOrder: component.sortOrder,
     })),
   }
 }
@@ -746,11 +763,106 @@ async function syncProductModifierGroups(
   return { ok: true }
 }
 
+// Delete-all-then-insert-all instead of syncProductVariants' id-preserving upsert: components
+// have no child rows keyed by their own id (unlike variants, which own
+// branch_product_variant_overrides), so there's nothing to preserve identity for, and an
+// unconditional full insert handles a changed quantity for free.
+async function syncProductComboComponents(
+  supabase: SupabaseClient,
+  tenantId: string,
+  comboProductId: string,
+  comboComponents?: readonly CatalogComboComponentInput[]
+): Promise<CatalogMutationResult> {
+  const nextComponents = (comboComponents ?? []).filter((component) => component.componentProductId)
+
+  if (nextComponents.length === 0) {
+    const deleteResult = await supabase.from("product_combo_components").delete().eq("combo_product_id", comboProductId)
+
+    if (deleteResult.error) {
+      return { ok: false, error: deleteResult.error.message }
+    }
+
+    return { ok: true }
+  }
+
+  // Never trust client-supplied component ids directly -- only accept plain (non-combo)
+  // products that actually belong to this tenant.
+  const componentProductIds = [...new Set(nextComponents.map((component) => component.componentProductId))]
+  const componentProductsResult = await supabase
+    .from("products")
+    .select("id, is_combo")
+    .eq("tenant_id", tenantId)
+    .in("id", componentProductIds)
+    .returns<{ id: string; is_combo: boolean }[]>()
+
+  if (componentProductsResult.error) {
+    return { ok: false, error: componentProductsResult.error.message }
+  }
+
+  const componentProducts = componentProductsResult.data ?? []
+
+  if (componentProducts.length !== componentProductIds.length) {
+    return { ok: false, error: "Uno o más productos seleccionados como componentes ya no están disponibles." }
+  }
+
+  if (componentProducts.some((product) => product.is_combo)) {
+    return { ok: false, error: "Un combo no puede tener otro combo como componente." }
+  }
+
+  const componentVariantIds = [
+    ...new Set(nextComponents.map((component) => component.componentVariantId).filter((value): value is string => Boolean(value))),
+  ]
+
+  if (componentVariantIds.length > 0) {
+    const componentVariantsResult = await supabase
+      .from("product_variants")
+      .select("id, product_id")
+      .in("id", componentVariantIds)
+      .returns<{ id: string; product_id: string }[]>()
+
+    if (componentVariantsResult.error) {
+      return { ok: false, error: componentVariantsResult.error.message }
+    }
+
+    const variantProductMap = new Map((componentVariantsResult.data ?? []).map((variant) => [variant.id, variant.product_id]))
+    const hasMismatchedVariant = nextComponents.some(
+      (component) => component.componentVariantId && variantProductMap.get(component.componentVariantId) !== component.componentProductId
+    )
+
+    if (hasMismatchedVariant) {
+      return { ok: false, error: "Una de las variantes seleccionadas no pertenece al producto elegido." }
+    }
+  }
+
+  const deleteResult = await supabase.from("product_combo_components").delete().eq("combo_product_id", comboProductId)
+
+  if (deleteResult.error) {
+    return { ok: false, error: deleteResult.error.message }
+  }
+
+  const insertResult = await supabase.from("product_combo_components").insert(
+    nextComponents.map((component, index) => ({
+      tenant_id: tenantId,
+      combo_product_id: comboProductId,
+      component_product_id: component.componentProductId,
+      component_variant_id: component.componentVariantId || null,
+      quantity: component.quantity,
+      sort_order: component.sortOrder ?? index,
+    }))
+  )
+
+  if (insertResult.error) {
+    return { ok: false, error: insertResult.error.message }
+  }
+
+  return { ok: true }
+}
+
 export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, tenantId: string): Promise<CatalogModuleData> {
   const [branchesResult, categoriesResult, productsResult, modifierGroupsResult, modifierGroupOptionsResult, productVariantsResult] = await Promise.all([
     supabase.from("branches").select("id, name").eq("tenant_id", tenantId).returns<BranchRow[]>(),
     supabase.from("categories").select("id, name, is_visible, image_path, sort_order").eq("tenant_id", tenantId).order("sort_order", { ascending: true }).returns<CategoryRow[]>(),
-    supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
+    supabase.from("products").select("id, name, description, base_price, status, tags, category_id, primary_image_path, primary_image_alt, is_combo").eq("tenant_id", tenantId).order("name", { ascending: true }).returns<ProductRow[]>(),
     supabase.from("modifier_groups").select("id, name, selection_type, modifier_kind, min_select, max_select").eq("tenant_id", tenantId).eq("is_active", true).order("name", { ascending: true }).returns<ModifierGroupRow[]>(),
     supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, default_selected, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
     supabase.from("product_variants").select("id, product_id, name, base_price, is_default, is_active, sort_order").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order", { ascending: true }).returns<ProductVariantRow[]>(),
@@ -770,7 +882,7 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
   const productIds = products.map((product) => product.id)
   const variantIds = productVariants.map((variant) => variant.id)
 
-  const [productModifierGroupsResult, branchProductOverridesResult, branchVariantOverridesResult] = await Promise.all([
+  const [productModifierGroupsResult, branchProductOverridesResult, branchVariantOverridesResult, comboComponentsResult] = await Promise.all([
     productIds.length
       ? supabase.from("product_modifier_groups").select("product_id, modifier_group_id").in("product_id", productIds).returns<ProductModifierGroupRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: ProductModifierGroupRow[]; error: null }),
@@ -788,15 +900,24 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
           .in("product_variant_id", variantIds)
           .returns<BranchProductVariantOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
+    productIds.length
+      ? supabase
+          .from("product_combo_components")
+          .select("id, combo_product_id, component_product_id, component_variant_id, quantity, sort_order")
+          .in("combo_product_id", productIds)
+          .order("sort_order", { ascending: true })
+          .returns<ProductComboComponentRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ProductComboComponentRow[]; error: null }),
   ])
 
-  if (productModifierGroupsResult.error || branchProductOverridesResult.error || branchVariantOverridesResult.error) {
+  if (productModifierGroupsResult.error || branchProductOverridesResult.error || branchVariantOverridesResult.error || comboComponentsResult.error) {
     return EMPTY_CATALOG_MODULE
   }
 
   const productModifierGroups = productModifierGroupsResult.data ?? []
   const branchProductOverrides = branchProductOverridesResult.data ?? []
   const branchVariantOverrides = branchVariantOverridesResult.data ?? []
+  const comboComponents = comboComponentsResult.data ?? []
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]))
   const branchMap = new Map(branches.map((branch) => [branch.id, branch]))
@@ -830,6 +951,17 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
     return map
   }, new Map())
 
+  const comboComponentsMap = comboComponents.reduce<Map<string, ProductComboComponentRow[]>>((map, component) => {
+    const currentValue = map.get(component.combo_product_id) ?? []
+    map.set(component.combo_product_id, [...currentValue, component])
+    return map
+  }, new Map())
+
+  // Every combo component is itself a tenant product, already present in `products`/
+  // `productVariants` above -- no extra query needed to resolve names for display.
+  const productNameMap = new Map(products.map((product) => [product.id, product.name]))
+  const productVariantNameMap = new Map(productVariants.map((variant) => [variant.id, variant.name]))
+
   const mappedProducts: CatalogProduct[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -853,6 +985,15 @@ export async function getCatalogModuleFromSupabase(supabase: SupabaseClient, ten
       .map((modifierGroupId) => modifierGroupMap.get(modifierGroupId)?.name)
       .filter((value): value is string => Boolean(value)),
     branchStatuses: mapBranchOverridesToStatuses(branchMap, branchProductOverridesMap.get(product.id) ?? [], product.base_price),
+    isCombo: product.is_combo,
+    comboComponents: (comboComponentsMap.get(product.id) ?? []).map((component) => ({
+      id: component.id,
+      componentProductId: component.component_product_id,
+      componentProductName: productNameMap.get(component.component_product_id) ?? "Producto",
+      componentVariantId: component.component_variant_id,
+      componentVariantName: component.component_variant_id ? (productVariantNameMap.get(component.component_variant_id) ?? null) : null,
+      quantity: component.quantity,
+    })),
   }))
 
   const mappedCategories: CatalogCategory[] = categories.map((category) => ({
@@ -922,6 +1063,14 @@ export async function createCatalogProductWithOptions(
     return { ok: false, error: "Completa nombre, categoria y precio base valido." }
   }
 
+  if (payload.isCombo && (payload.variants ?? []).length > 0) {
+    return { ok: false, error: "Un combo no puede tener tamaños/variantes propias." }
+  }
+
+  if (payload.isCombo && !(payload.comboComponents ?? []).length) {
+    return { ok: false, error: "Un combo debe tener al menos un componente." }
+  }
+
   const [categoryValidationResult, productSlug] = await Promise.all([
     validateProductCategory(supabase, tenantId, payload.category),
     resolveUniqueSlug(supabase, tenantId, payload.name),
@@ -945,6 +1094,7 @@ export async function createCatalogProductWithOptions(
       primary_image_path: payload.primaryImagePath?.trim() || null,
       primary_image_alt: payload.primaryImageAlt?.trim() || null,
       tags: ["New"],
+      is_combo: Boolean(payload.isCombo),
     })
     .select("id")
     .single<{ id: string }>()
@@ -963,6 +1113,17 @@ export async function createCatalogProductWithOptions(
 
   if (!variantsResult.ok) {
     return variantsResult
+  }
+
+  const comboComponentsResult = await syncProductComboComponents(
+    supabase,
+    tenantId,
+    insertResult.data.id,
+    payload.isCombo ? payload.comboComponents : []
+  )
+
+  if (!comboComponentsResult.ok) {
+    return comboComponentsResult
   }
 
   const variantBranchOverridesResult = await upsertBranchProductVariantOverrides(supabase, tenantId, insertResult.data.id, payload.variantBranchOverrides)
@@ -1007,6 +1168,14 @@ export async function updateCatalogProduct(
     return { ok: false, error: "Completa nombre, categoria y precio base valido." }
   }
 
+  if (payload.isCombo && (payload.variants ?? []).length > 0) {
+    return { ok: false, error: "Un combo no puede tener tamaños/variantes propias." }
+  }
+
+  if (payload.isCombo && !(payload.comboComponents ?? []).length) {
+    return { ok: false, error: "Un combo debe tener al menos un componente." }
+  }
+
   const [categoryValidationResult, productSlug] = await Promise.all([
     validateProductCategory(supabase, tenantId, payload.category),
     resolveUniqueSlug(supabase, tenantId, payload.name, productId),
@@ -1014,6 +1183,22 @@ export async function updateCatalogProduct(
 
   if (!categoryValidationResult.ok) {
     return { ok: false, error: categoryValidationResult.error }
+  }
+
+  // Ordering note: enforce_combo_product_has_no_variants fires on products.update of is_combo
+  // and checks whether the product CURRENTLY has variant rows; enforce_variant_target_product_
+  // is_not_combo fires on product_variants insert and checks the product's CURRENT is_combo
+  // value. Turning a normal product into a combo needs its old variants cleared before is_combo
+  // flips to true (payload.variants is already validated empty in that case, so this is a
+  // delete-only, trigger-safe call); turning a combo back into a normal product with new
+  // variants needs is_combo flipped to false before those variants are inserted. Sync variants
+  // before the products update only in the "becoming a combo" direction.
+  if (payload.isCombo) {
+    const variantsResult = await syncProductVariants(supabase, tenantId, productId, payload.variants)
+
+    if (!variantsResult.ok) {
+      return variantsResult
+    }
   }
 
   const updateResult = await supabase
@@ -1027,6 +1212,7 @@ export async function updateCatalogProduct(
       status: toCatalogDbStatus(payload.status),
       primary_image_path: payload.primaryImagePath?.trim() || null,
       primary_image_alt: payload.primaryImageAlt?.trim() || null,
+      is_combo: Boolean(payload.isCombo),
     })
     .eq("id", productId)
     .eq("tenant_id", tenantId)
@@ -1035,16 +1221,24 @@ export async function updateCatalogProduct(
     return { ok: false, error: updateResult.error.message }
   }
 
+  if (!payload.isCombo) {
+    const variantsResult = await syncProductVariants(supabase, tenantId, productId, payload.variants)
+
+    if (!variantsResult.ok) {
+      return variantsResult
+    }
+  }
+
+  const comboComponentsResult = await syncProductComboComponents(supabase, tenantId, productId, payload.isCombo ? payload.comboComponents : [])
+
+  if (!comboComponentsResult.ok) {
+    return comboComponentsResult
+  }
+
   const branchOverridesResult = await upsertBranchProductOverrides(supabase, tenantId, productId, payload.branchOverrides)
 
   if (!branchOverridesResult.ok) {
     return branchOverridesResult
-  }
-
-  const variantsResult = await syncProductVariants(supabase, tenantId, productId, payload.variants)
-
-  if (!variantsResult.ok) {
-    return variantsResult
   }
 
   const variantBranchOverridesResult = await upsertBranchProductVariantOverrides(supabase, tenantId, productId, payload.variantBranchOverrides)
@@ -1129,11 +1323,11 @@ export async function duplicateCatalogProduct(
 ): Promise<CatalogMutationResult> {
   const productResult = await supabase
     .from("products")
-    .select("name, description, base_price, category_id")
+    .select("name, description, base_price, category_id, is_combo")
     .eq("id", productId)
     .eq("tenant_id", tenantId)
     .limit(1)
-    .maybeSingle<{ name: string; description: string; base_price: number; category_id: string | null }>()
+    .maybeSingle<{ name: string; description: string; base_price: number; category_id: string | null; is_combo: boolean }>()
 
   if (productResult.error || !productResult.data) {
     return { ok: false, error: "No encontramos el producto a duplicar." }
@@ -1153,6 +1347,7 @@ export async function duplicateCatalogProduct(
       base_price: productResult.data.base_price,
       status: "draft",
       tags: ["Copy"],
+      is_combo: productResult.data.is_combo,
     })
     .select("id")
     .single<{ id: string }>()
@@ -1211,6 +1406,35 @@ export async function duplicateCatalogProduct(
 
   if (!variantsResult.ok) {
     return variantsResult
+  }
+
+  // Without this, duplicating a combo silently produces an empty combo shell that always shows
+  // as "available" until an admin notices and re-adds its components by hand.
+  const sourceComboComponentsResult = await supabase
+    .from("product_combo_components")
+    .select("component_product_id, component_variant_id, quantity, sort_order")
+    .eq("combo_product_id", productId)
+    .order("sort_order", { ascending: true })
+    .returns<Pick<ProductComboComponentRow, "component_product_id" | "component_variant_id" | "quantity" | "sort_order">[]>()
+
+  if (sourceComboComponentsResult.error) {
+    return { ok: false, error: sourceComboComponentsResult.error.message }
+  }
+
+  const comboComponentsResult = await syncProductComboComponents(
+    supabase,
+    tenantId,
+    insertResult.data.id,
+    (sourceComboComponentsResult.data ?? []).map((component) => ({
+      componentProductId: component.component_product_id,
+      componentVariantId: component.component_variant_id,
+      quantity: component.quantity,
+      sortOrder: component.sort_order,
+    }))
+  )
+
+  if (!comboComponentsResult.ok) {
+    return comboComponentsResult
   }
 
   await writeAuditEvent(supabase, {

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache"
 
 import { requireAdminAccess } from "@/lib/auth/admin"
 import { canManageCatalogMaster } from "@/lib/auth/permissions"
-import { type CatalogBranchOverrideInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput, type CatalogVariantBranchOverrideInput } from "@/lib/domain/catalog"
+import { type CatalogBranchOverrideInput, type CatalogComboComponentInput, type CatalogMutationResult, type CatalogProductMutationInput, type CatalogProductVariantInput, type CatalogVariantBranchOverrideInput } from "@/lib/domain/catalog"
 import { buildAuditActor, type AuditActor } from "@/lib/services/audit"
 import {
   createCatalogProduct,
@@ -128,6 +128,41 @@ function parseVariants(formData: FormData): readonly CatalogProductVariantInput[
   }
 }
 
+function parseComboComponents(formData: FormData): readonly CatalogComboComponentInput[] {
+  const rawValue = formData.get("comboComponents")
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue
+      .filter((value): value is CatalogComboComponentInput => {
+        return (
+          Boolean(value) &&
+          typeof value === "object" &&
+          typeof value.componentProductId === "string" &&
+          typeof value.quantity === "number" &&
+          typeof value.sortOrder === "number"
+        )
+      })
+      .map((value) => ({
+        componentProductId: value.componentProductId,
+        componentVariantId: typeof value.componentVariantId === "string" ? value.componentVariantId : null,
+        quantity: value.quantity,
+        sortOrder: value.sortOrder,
+      }))
+  } catch {
+    return []
+  }
+}
+
 function parseModifierGroupIds(formData: FormData): readonly string[] {
   const rawValue = formData.get("modifierGroupIds")
 
@@ -237,6 +272,8 @@ export async function createProductWithImageAction(tenantSlug: string, formData:
     primaryImagePath,
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
     branchOverrides: parseBranchOverrides(formData),
+    isCombo: formData.get("isCombo") === "true",
+    comboComponents: parseComboComponents(formData),
   }
 
   const result = await createCatalogProductWithOptions(
@@ -328,6 +365,8 @@ export async function updateProductWithImageAction(productId: string, tenantSlug
     primaryImageAlt: String(formData.get("primaryImageAlt") ?? ""),
     branchOverrides: parseBranchOverrides(formData),
     variantBranchOverrides: parseVariantBranchOverrides(formData),
+    isCombo: formData.get("isCombo") === "true",
+    comboComponents: parseComboComponents(formData),
   }
 
   const result = canManageCatalogMaster(access.membership.role)

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { canAccessAdminSection } from "@/lib/auth/permissions"
 import type { AuditActor } from "@/lib/services/audit"
-import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderItemComboComponent, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 import { writeAuditEvent } from "@/lib/services/audit"
 
@@ -14,6 +14,7 @@ type ProductRow = {
   base_price: number
   category_id: string | null
   status: "active" | "draft"
+  is_combo: boolean
 }
 
 type ProductVariantRow = {
@@ -33,6 +34,24 @@ type BranchProductVariantOverrideRow = {
   product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | null
+}
+
+type ComboComponentRow = {
+  combo_product_id: string
+  component_product_id: string
+  component_variant_id: string | null
+  quantity: number
+}
+
+type ComboComponentNameRow = {
+  id: string
+  name: string
+}
+
+type ComboComponentVariantNameRow = {
+  id: string
+  name: string
+  product_id: string
 }
 type CategoryRow = {
   id: string
@@ -170,6 +189,7 @@ type KitchenOrderItemPreview = {
     modifierOptionName: string
     modifierKind: "ingredient" | "addon" | "choice"
   }[]
+  comboComponents: readonly OrderItemComboComponent[]
 }
 
 type OrderItemModifierRow = {
@@ -177,6 +197,13 @@ type OrderItemModifierRow = {
   modifier_group_name_snapshot: string
   modifier_option_name_snapshot: string
   modifier_kind_snapshot: "ingredient" | "addon" | "choice"
+}
+
+type OrderItemComboComponentRow = {
+  order_item_id: string
+  component_product_name_snapshot: string
+  component_variant_name_snapshot: string | null
+  quantity: number
 }
 
 type OrderItemCountRow = {
@@ -826,7 +853,7 @@ export async function createStorefrontOrder(
   const variantIds = [...new Set(input.items.map((item) => item.productVariantId).filter((value): value is string => Boolean(value)))]
   const productsResult = await supabase
     .from("products")
-    .select("id, name, base_price, category_id, status")
+    .select("id, name, base_price, category_id, status, is_combo")
     .eq("tenant_id", tenantResult.data.id)
     .in("id", productIds)
     .returns<ProductRow[]>()
@@ -846,7 +873,8 @@ export async function createStorefrontOrder(
   }
 
   const categoryIds = products.map((product) => product.category_id).filter((value): value is string => Boolean(value))
-  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+  const comboProductIds = products.filter((product) => product.is_combo).map((product) => product.id)
+  const [productVariantsResult, categoriesResult, branchOverridesResult, branchVariantOverridesResult, comboComponentsResult] = await Promise.all([
     variantIds.length
       ? supabase.from("product_variants").select("id, product_id, name, base_price, is_active").in("id", variantIds).returns<ProductVariantRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: ProductVariantRow[]; error: null }),
@@ -869,10 +897,27 @@ export async function createStorefrontOrder(
           .in("product_variant_id", variantIds)
           .returns<BranchProductVariantOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
+    comboProductIds.length
+      ? supabase
+          .from("product_combo_components")
+          .select("combo_product_id, component_product_id, component_variant_id, quantity")
+          .in("combo_product_id", comboProductIds)
+          .order("sort_order", { ascending: true })
+          .returns<ComboComponentRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ComboComponentRow[]; error: null }),
   ])
 
-  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
-    return { ok: false, error: productVariantsResult.error?.message ?? categoriesResult.error?.message ?? branchOverridesResult.error?.message ?? branchVariantOverridesResult.error?.message ?? "No pudimos validar la sucursal activa." }
+  if (productVariantsResult.error || categoriesResult.error || branchOverridesResult.error || branchVariantOverridesResult.error || comboComponentsResult.error) {
+    return {
+      ok: false,
+      error:
+        productVariantsResult.error?.message ??
+        categoriesResult.error?.message ??
+        branchOverridesResult.error?.message ??
+        branchVariantOverridesResult.error?.message ??
+        comboComponentsResult.error?.message ??
+        "No pudimos validar la sucursal activa.",
+    }
   }
 
   const productMap = new Map(products.map((product) => [product.id, product]))
@@ -880,6 +925,11 @@ export async function createStorefrontOrder(
   const categoryMap = new Map((categoriesResult.data ?? []).map((category) => [category.id, category.name]))
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
   const branchVariantOverrideMap = new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override]))
+  const comboComponentsMap = (comboComponentsResult.data ?? []).reduce<Map<string, ComboComponentRow[]>>((map, component) => {
+    const currentComponents = map.get(component.combo_product_id) ?? []
+    map.set(component.combo_product_id, [...currentComponents, component])
+    return map
+  }, new Map())
 
   if (variantIds.length !== productVariantMap.size) {
     return { ok: false, error: "Una o más variantes ya no están disponibles." }
@@ -934,6 +984,24 @@ export async function createStorefrontOrder(
     return map
   }, new Map())
 
+  // A combo is unavailable if its own override says so, OR if any one of its components is
+  // unavailable -- reuses the branch override maps already loaded above, since a combo's
+  // components are just other products/variants of this same tenant+branch. Mirrors the
+  // identical check in lib/data/public-storefront.ts and lib/services/customer-bag.ts.
+  function isComboComponentUnavailable(comboProductId: string) {
+    const components = comboComponentsMap.get(comboProductId) ?? []
+
+    return components.some((component) => {
+      if (component.component_variant_id) {
+        const variantOverride = branchVariantOverrideMap.get(component.component_variant_id)
+        return variantOverride ? variantOverride.availability_status !== "available" : false
+      }
+
+      const productOverride = branchOverrideMap.get(component.component_product_id)
+      return productOverride ? productOverride.availability_status !== "available" : false
+    })
+  }
+
   if (
     input.items.some((item) => {
       if (item.productVariantId) {
@@ -944,10 +1012,58 @@ export async function createStorefrontOrder(
       }
 
       const branchOverride = branchOverrideMap.get(item.productId)
-      return branchOverride ? branchOverride.availability_status !== "available" : false
+      const isProductUnavailable = branchOverride ? branchOverride.availability_status !== "available" : false
+
+      if (isProductUnavailable) {
+        return true
+      }
+
+      const product = productMap.get(item.productId)
+      return product?.is_combo ? isComboComponentUnavailable(item.productId) : false
     })
   ) {
     return { ok: false, error: "Uno o más productos ya no están disponibles en esta sucursal." }
+  }
+
+  // The cart only has the combo's OWN product row loaded (via productMap/productVariantMap
+  // above) -- its components are other products/variants never otherwise fetched in this
+  // request, so their names need a small dedicated lookup for the order snapshot.
+  const allComboComponents = comboProductIds.flatMap((comboProductId) => comboComponentsMap.get(comboProductId) ?? [])
+  const missingComponentProductIds = [...new Set(allComboComponents.map((component) => component.component_product_id).filter((id) => !productMap.has(id)))]
+  const missingComponentVariantIds = [
+    ...new Set(allComboComponents.map((component) => component.component_variant_id).filter((id): id is string => id != null && !productVariantMap.has(id))),
+  ]
+
+  const [componentProductNamesResult, componentVariantNamesResult] = await Promise.all([
+    missingComponentProductIds.length
+      ? supabase.from("products").select("id, name").in("id", missingComponentProductIds).returns<ComboComponentNameRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ComboComponentNameRow[]; error: null }),
+    missingComponentVariantIds.length
+      ? supabase.from("product_variants").select("id, name, product_id").in("id", missingComponentVariantIds).returns<ComboComponentVariantNameRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ComboComponentVariantNameRow[]; error: null }),
+  ])
+
+  if (componentProductNamesResult.error || componentVariantNamesResult.error) {
+    return { ok: false, error: componentProductNamesResult.error?.message ?? componentVariantNamesResult.error?.message ?? "No pudimos validar los componentes del combo." }
+  }
+
+  const componentProductNameMap = new Map<string, string>([
+    ...products.map((product): [string, string] => [product.id, product.name]),
+    ...(componentProductNamesResult.data ?? []).map((product): [string, string] => [product.id, product.name]),
+  ])
+  const componentVariantNameMap = new Map<string, string>([
+    ...(productVariantsResult.data ?? []).map((variant): [string, string] => [variant.id, variant.name]),
+    ...(componentVariantNamesResult.data ?? []).map((variant): [string, string] => [variant.id, variant.name]),
+  ])
+
+  function buildComboComponentsSnapshot(comboProductId: string) {
+    return (comboComponentsMap.get(comboProductId) ?? []).map((component) => ({
+      component_product_name_snapshot: componentProductNameMap.get(component.component_product_id) ?? "Producto",
+      component_variant_name_snapshot: component.component_variant_id ? componentVariantNameMap.get(component.component_variant_id) ?? null : null,
+      // Fixed per-combo-unit composition quantity (e.g. 5) -- never multiplied by the order
+      // line's own quantity.
+      quantity: component.quantity,
+    }))
   }
 
   const orderItemsPayload: {
@@ -960,6 +1076,7 @@ export async function createStorefrontOrder(
     quantity: number
     line_total: number
     modifiers: readonly ResolvedOrderModifier[]
+    combo_components: readonly { component_product_name_snapshot: string; component_variant_name_snapshot: string | null; quantity: number }[]
     notes: null
   }[] = []
 
@@ -1000,6 +1117,7 @@ export async function createStorefrontOrder(
       quantity: item.quantity,
       line_total: Number((unitPrice * item.quantity).toFixed(2)),
       modifiers: modifierValidationResult.modifiers,
+      combo_components: product.is_combo ? buildComboComponentsSnapshot(product.id) : [],
       notes: null,
     })
   }
@@ -1463,6 +1581,27 @@ export async function getKitchenOrders(
     return map
   }, new Map())
 
+  const orderItemComboComponentsResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_combo_components")
+        .select("order_item_id, component_product_name_snapshot, component_variant_name_snapshot, quantity")
+        .in("order_item_id", orderItemIds)
+        .returns<OrderItemComboComponentRow[]>()
+    : { data: [], error: null }
+
+  const orderItemComboComponentsMap = (orderItemComboComponentsResult.data ?? []).reduce<Map<string, OrderItemComboComponent[]>>((map, component) => {
+    const currentComponents = map.get(component.order_item_id) ?? []
+    map.set(component.order_item_id, [
+      ...currentComponents,
+      {
+        componentProductName: component.component_product_name_snapshot,
+        componentVariantName: component.component_variant_name_snapshot,
+        quantity: component.quantity,
+      },
+    ])
+    return map
+  }, new Map())
+
   const itemCountMap = orderItems.reduce<Map<string, number>>((map, item) => {
     map.set(item.order_id, (map.get(item.order_id) ?? 0) + item.quantity)
     return map
@@ -1478,6 +1617,7 @@ export async function getKitchenOrders(
         quantity: item.quantity,
         prepStatus: item.prep_status,
         modifiers: orderItemModifiersMap.get(item.id) ?? [],
+        comboComponents: orderItemComboComponentsMap.get(item.id) ?? [],
       },
     ])
     return map
@@ -2102,7 +2242,15 @@ export async function getAdminOrderDetail(
     .order("created_at", { ascending: false })
     .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
 
-  if (itemsResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error) {
+  const orderItemComboComponentsResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_combo_components")
+        .select("order_item_id, component_product_name_snapshot, component_variant_name_snapshot, quantity")
+        .in("order_item_id", orderItemIds)
+        .returns<OrderItemComboComponentRow[]>()
+    : { data: [], error: null }
+
+  if (itemsResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error || orderItemComboComponentsResult.error) {
     return null
   }
 
@@ -2116,6 +2264,19 @@ export async function getAdminOrderDetail(
         modifierGroupName: modifier.modifier_group_name_snapshot,
         modifierOptionName: modifier.modifier_option_name_snapshot,
         modifierKind: modifier.modifier_kind_snapshot,
+      },
+    ])
+    return map
+  }, new Map())
+
+  const orderItemComboComponentsMap = (orderItemComboComponentsResult.data ?? []).reduce<Map<string, OrderItemComboComponent[]>>((map, component) => {
+    const currentComponents = map.get(component.order_item_id) ?? []
+    map.set(component.order_item_id, [
+      ...currentComponents,
+      {
+        componentProductName: component.component_product_name_snapshot,
+        componentVariantName: component.component_variant_name_snapshot,
+        quantity: component.quantity,
       },
     ])
     return map
@@ -2160,6 +2321,7 @@ export async function getAdminOrderDetail(
       lineTotal: Number(item.line_total),
       notes: item.notes,
       modifiers: orderItemModifiersMap.get(item.id) ?? [],
+      comboComponents: orderItemComboComponentsMap.get(item.id) ?? [],
     })),
   }
 }
@@ -2239,7 +2401,15 @@ export async function getCustomerOrderDetail(
     .order("created_at", { ascending: false })
     .returns<AdminOrderPaymentReceiptSubmissionRow[]>()
 
-  if (paymentResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error) {
+  const orderItemComboComponentsResult = orderItemIds.length
+    ? await supabase
+        .from("order_item_combo_components")
+        .select("order_item_id, component_product_name_snapshot, component_variant_name_snapshot, quantity")
+        .in("order_item_id", orderItemIds)
+        .returns<OrderItemComboComponentRow[]>()
+    : { data: [], error: null }
+
+  if (paymentResult.error || receiptSubmissionsResult.error || orderItemModifiersResult.error || orderItemComboComponentsResult.error) {
     return null
   }
 
@@ -2253,6 +2423,19 @@ export async function getCustomerOrderDetail(
         modifierGroupName: modifier.modifier_group_name_snapshot,
         modifierOptionName: modifier.modifier_option_name_snapshot,
         modifierKind: modifier.modifier_kind_snapshot,
+      },
+    ])
+    return map
+  }, new Map())
+
+  const orderItemComboComponentsMap = (orderItemComboComponentsResult.data ?? []).reduce<Map<string, OrderItemComboComponent[]>>((map, component) => {
+    const currentComponents = map.get(component.order_item_id) ?? []
+    map.set(component.order_item_id, [
+      ...currentComponents,
+      {
+        componentProductName: component.component_product_name_snapshot,
+        componentVariantName: component.component_variant_name_snapshot,
+        quantity: component.quantity,
       },
     ])
     return map
@@ -2283,6 +2466,7 @@ export async function getCustomerOrderDetail(
       unitPrice: Number(item.unit_price_snapshot),
       lineTotal: Number(item.line_total),
       modifiers: orderItemModifiersMap.get(item.id) ?? [],
+      comboComponents: orderItemComboComponentsMap.get(item.id) ?? [],
     })),
   }
 }

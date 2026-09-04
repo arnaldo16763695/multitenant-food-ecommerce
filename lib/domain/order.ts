@@ -133,6 +133,12 @@ export function formatPaymentStatus(status: PaymentStatus) {
   }
 }
 
+export type OrderItemComboComponent = {
+  readonly componentProductName: string
+  readonly componentVariantName: string | null
+  readonly quantity: number
+}
+
 export type CustomerOrderDetailItem = {
   readonly id: string
   readonly productName: string
@@ -145,6 +151,7 @@ export type CustomerOrderDetailItem = {
     modifierOptionName: string
     modifierKind: "ingredient" | "addon" | "choice"
   }[]
+  readonly comboComponents: readonly OrderItemComboComponent[]
 }
 
 export type CustomerOrderDetail = {
@@ -180,6 +187,7 @@ export type AdminOrderDetailItem = {
     modifierOptionName: string
     modifierKind: "ingredient" | "addon" | "choice"
   }[]
+  readonly comboComponents: readonly OrderItemComboComponent[]
 }
 
 export type PaymentReceiptSubmissionSummary = {
@@ -241,5 +249,6 @@ export type KitchenOrderSummary = {
       modifierOptionName: string
       modifierKind: "ingredient" | "addon" | "choice"
     }[]
+    comboComponents: readonly OrderItemComboComponent[]
   }[]
 }

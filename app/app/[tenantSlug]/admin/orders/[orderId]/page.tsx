@@ -351,6 +351,11 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
                                 ))}
                               </div>
                             ) : null}
+                            {item.comboComponents.length > 0 ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Incluye: {item.comboComponents.map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`).join(", ")}
+                              </p>
+                            ) : null}
                             {item.notes ? <p className="mt-1 text-xs text-muted-foreground">{item.notes}</p> : null}
                           </div>
                         </TableCell>

@@ -165,6 +165,11 @@ export default async function StorefrontOrderPage({ params }: StorefrontOrderPag
                             ))}
                           </div>
                         ) : null}
+                        {item.comboComponents.length > 0 ? (
+                          <p className="mt-2 text-xs text-stone-500">
+                            Incluye: {item.comboComponents.map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`).join(", ")}
+                          </p>
+                        ) : null}
                       </div>
                       <span className="font-semibold text-stone-950">$ {item.lineTotal.toFixed(2)}</span>
                     </div>

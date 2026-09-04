@@ -90,6 +90,7 @@ type ProductRow = {
   category_id: string | null
   primary_image_path: string | null
   status: "active" | "draft"
+  is_combo: boolean
 }
 
 type ProductVariantRow = {
@@ -140,6 +141,12 @@ type BranchProductVariantOverrideRow = {
   product_variant_id: string
   availability_status: "available" | "paused" | "out_of_stock"
   price_override: number | string | null
+}
+
+type ComboComponentAvailabilityRow = {
+  combo_product_id: string
+  component_product_id: string
+  component_variant_id: string | null
 }
 
 function getStoragePublicUrl(path: string | null) {
@@ -306,7 +313,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
     supabase
       .from("products")
-      .select("id, name, description, base_price, category_id, primary_image_path, status")
+      .select("id, name, description, base_price, category_id, primary_image_path, status, is_combo")
       .eq("tenant_id", tenant.id)
       .eq("status", "active")
       .order("name", { ascending: true })
@@ -352,7 +359,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
   const productIds = products.map((product) => product.id)
   const variantIds = productVariants.map((variant) => variant.id)
 
-  const [branchOverridesResult, branchVariantOverridesResult] = await Promise.all([
+  const [branchOverridesResult, branchVariantOverridesResult, comboComponentsResult] = await Promise.all([
     activeBranch && productIds.length
       ? supabase
           .from("branch_product_overrides")
@@ -369,14 +376,43 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
           .in("product_variant_id", variantIds)
           .returns<BranchProductVariantOverrideRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: BranchProductVariantOverrideRow[]; error: null }),
+    productIds.length
+      ? supabase
+          .from("product_combo_components")
+          .select("combo_product_id, component_product_id, component_variant_id")
+          .in("combo_product_id", productIds)
+          .returns<ComboComponentAvailabilityRow[]>()
+      : Promise.resolve({ data: [], error: null } as { data: ComboComponentAvailabilityRow[]; error: null }),
   ])
 
-  if (branchesResult.error || categoriesResult.error || productsResult.error || productVariantsResult.error || modifierGroupsResult.error || productModifierGroupsResult.error || modifierGroupOptionsResult.error || branchOverridesResult.error || branchVariantOverridesResult.error) {
+  if (branchesResult.error || categoriesResult.error || productsResult.error || productVariantsResult.error || modifierGroupsResult.error || productModifierGroupsResult.error || modifierGroupOptionsResult.error || branchOverridesResult.error || branchVariantOverridesResult.error || comboComponentsResult.error) {
     return null
   }
 
   const branchOverrideMap = new Map((branchOverridesResult.data ?? []).map((override) => [override.product_id, override]))
   const branchVariantOverrideMap = new Map((branchVariantOverridesResult.data ?? []).map((override) => [override.product_variant_id, override]))
+  const comboComponentsMap = (comboComponentsResult.data ?? []).reduce<Map<string, ComboComponentAvailabilityRow[]>>((map, component) => {
+    const currentComponents = map.get(component.combo_product_id) ?? []
+    map.set(component.combo_product_id, [...currentComponents, component])
+    return map
+  }, new Map())
+
+  // A combo is available only when its own override (if any) says available AND every one of
+  // its components resolves available -- reusing the same override maps already loaded above,
+  // since combo components are just other products/variants of this same tenant+branch.
+  function isComboComponentsAvailable(comboProductId: string) {
+    const components = comboComponentsMap.get(comboProductId) ?? []
+
+    return components.every((component) => {
+      if (component.component_variant_id) {
+        const variantOverride = branchVariantOverrideMap.get(component.component_variant_id)
+        return variantOverride ? variantOverride.availability_status === "available" : true
+      }
+
+      const productOverride = branchOverrideMap.get(component.component_product_id)
+      return productOverride ? productOverride.availability_status === "available" : true
+    })
+  }
   const modifierGroupMap = new Map(modifierGroups.map((group) => [group.id, group]))
   const productModifierGroupsMap = productModifierGroups.reduce<Map<string, string[]>>((map, relation) => {
     const currentGroups = map.get(relation.product_id) ?? []
@@ -406,7 +442,13 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
       }
 
       const branchOverride = branchOverrideMap.get(product.id)
-      return branchOverride ? branchOverride.availability_status === "available" : true
+      const baseAvailable = branchOverride ? branchOverride.availability_status === "available" : true
+
+      if (!product.is_combo || !baseAvailable) {
+        return baseAvailable
+      }
+
+      return isComboComponentsAvailable(product.id)
     })
     .map((product) => {
       const variantsForProduct = productVariantsMap.get(product.id) ?? []
