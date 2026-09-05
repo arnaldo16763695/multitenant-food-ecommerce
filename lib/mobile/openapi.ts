@@ -398,7 +398,7 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
         },
         StorefrontProduct: {
           type: "object",
-          required: ["id", "name", "description", "basePrice", "hasVariants", "variants", "modifierGroups", "category", "imageUrl"],
+          required: ["id", "name", "description", "basePrice", "hasVariants", "variants", "modifierGroups", "category", "imageUrl", "comboComponents"],
           properties: {
             id: { type: "string", format: "uuid" },
             name: { type: "string" },
@@ -415,6 +415,19 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
             category: { type: "string" },
             imageUrl: buildNullableSchema({ type: "string", format: "uri" }),
+            comboComponents: {
+              type: "array",
+              description: "What this product includes when it is a combo -- empty for a regular (non-combo) product.",
+              items: {
+                type: "object",
+                required: ["componentProductName", "componentVariantName", "quantity"],
+                properties: {
+                  componentProductName: { type: "string" },
+                  componentVariantName: buildNullableSchema({ type: "string" }),
+                  quantity: { type: "integer" },
+                },
+              },
+            },
           },
         },
         Storefront: {
