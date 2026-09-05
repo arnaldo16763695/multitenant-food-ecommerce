@@ -162,9 +162,16 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
               </div>
               <div className="min-w-0">
                 <p className="mt-1.5 line-clamp-3 text-xs leading-5 text-stone-600 sm:mt-2 sm:text-sm sm:leading-6">{item.description}</p>
+                {item.comboComponents.length > 0 ? (
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-stone-500 sm:text-xs">
+                    <span className="font-semibold text-stone-700">Incluye: </span>
+                    {item.comboComponents
+                      .map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`)
+                      .join(", ")}
+                  </p>
+                ) : null}
               </div>
               <div className="mt-4 flex flex-1 flex-col justify-end gap-2.5 sm:mt-5 sm:gap-3">
-                <p className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-400 sm:text-xs sm:tracking-[0.24em]">{item.category}</p>
                 {customerSession ? (
                   <Button
                     size="sm"

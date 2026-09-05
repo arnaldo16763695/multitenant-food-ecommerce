@@ -259,7 +259,12 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                   </Button>
                 </div>
               ) : (
-                items.map((item) => (
+                items.map((item) => {
+                  // Combo composition isn't part of the persisted bag item snapshot -- look it up
+                  // from the already-loaded menu, same as editingProduct does for the edit sheet.
+                  const comboComponents = menu.find((product) => product.id === item.productId)?.comboComponents ?? []
+
+                  return (
                   <article key={item.id} className="rounded-[1.5rem] border border-stone-200 bg-stone-50/80 p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
@@ -270,6 +275,14 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                           </span>
                         </div>
                         <p className="max-w-xl text-sm leading-6 text-stone-600">{item.description}</p>
+                        {comboComponents.length > 0 ? (
+                          <p className="max-w-xl text-xs leading-5 text-stone-500">
+                            <span className="font-semibold text-stone-700">Incluye: </span>
+                            {comboComponents
+                              .map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`)
+                              .join(", ")}
+                          </p>
+                        ) : null}
                         {item.modifierSelections.length > 0 ? (
                           <div className="flex flex-wrap gap-2 text-xs text-stone-500">
                             {item.modifierSelections.map((selection) => (
@@ -306,7 +319,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                       </div>
                     </div>
                   </article>
-                ))
+                  )
+                })
               )}
             </CardContent>
           </Card>
