@@ -105,7 +105,7 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
 
           <div className="hidden items-center gap-2 self-end md:flex lg:self-auto">
             <Button asChild variant="outline" className={`rounded-full px-4 transition-transform ${isBagAnimating ? "animate-bag-attention" : ""}`}>
-              <Link href={bagHref}>
+              <Link href={bagHref} data-bag-fly-target>
                 <ShoppingBag className={isBagAnimating ? "text-orange-600" : undefined} />
                 Bolsa
                 <span className={`rounded-full bg-stone-950 px-2 py-0.5 text-xs font-semibold text-white transition-colors ${isBagAnimating ? "bg-orange-600" : ""}`}>
@@ -199,6 +199,7 @@ export function StorefrontHeader({ tenantSlug, brandName, brandLogoImageUrl, bra
             href={bagHref}
             aria-label="Bolsa"
             aria-current={isBagActive ? "page" : undefined}
+            data-bag-fly-target
           >
             <ShoppingBag className="size-4.5" />
             <span className={`absolute top-1.5 right-1.5 min-w-4 rounded-full px-1 text-center text-[10px] font-semibold text-white ${isBagAnimating ? "bg-orange-600" : "bg-stone-950"}`}>

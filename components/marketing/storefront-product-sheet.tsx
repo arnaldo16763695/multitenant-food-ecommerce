@@ -6,6 +6,7 @@ import { Minus, Plus, ShoppingBag } from "lucide-react"
 
 import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
+import { flyProductToBag } from "@/lib/storefront/fly-to-bag"
 import { formatExclusionAction, formatModifierGroupTitle, isExclusionGroup } from "@/lib/storefront/modifier-display"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -77,6 +78,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
   const [selectedOptionsByGroup, setSelectedOptionsByGroup] = React.useState<Record<string, string[]>>({})
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const imageContainerRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     if (open) {
@@ -190,6 +192,12 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       return
     }
 
+    // Capture the flight before closing the sheet -- the clone lives in a fixed body-level
+    // node, so it keeps animating on top of the sheet's own closing transition underneath it.
+    if (imageContainerRef.current) {
+      flyProductToBag(imageContainerRef.current, product.imageUrl)
+    }
+
     upsertItem(optimisticItem)
     onItemAdded(optimisticItem)
     onOpenChange(false)
@@ -245,7 +253,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
 
         <div className="flex flex-1 flex-col gap-6 px-6 py-6">
           <div className="grid gap-4 md:grid-cols-[0.9fr_1.1fr]">
-            <div className="flex aspect-square items-center justify-center overflow-hidden rounded-[1.5rem] border border-stone-200 bg-stone-50 p-4">
+            <div ref={imageContainerRef} className="flex aspect-square items-center justify-center overflow-hidden rounded-[1.5rem] border border-stone-200 bg-stone-50 p-4">
               {product.imageUrl ? <Image alt={product.name} className="h-full w-full object-contain" height={520} src={product.imageUrl} unoptimized width={520} /> : null}
             </div>
             <div>
