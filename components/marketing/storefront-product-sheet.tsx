@@ -44,6 +44,11 @@ type StorefrontProductSheetProps = {
         priceDeltaLabel: string
       }[]
     }[]
+    readonly comboComponents: readonly {
+      componentProductName: string
+      componentVariantName: string | null
+      quantity: number
+    }[]
   }
   readonly open: boolean
   readonly onOpenChange: (nextOpen: boolean) => void
@@ -246,6 +251,14 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">{product.category}</p>
               <p className="mt-3 text-sm leading-7 text-stone-600">{product.description}</p>
+              {product.comboComponents.length > 0 ? (
+                <p className="mt-3 text-sm leading-6 text-stone-700">
+                  <span className="font-semibold text-stone-950">Incluye: </span>
+                  {product.comboComponents
+                    .map((component) => `${component.quantity}x ${component.componentProductName}${component.componentVariantName ? ` (${component.componentVariantName})` : ""}`)
+                    .join(", ")}
+                </p>
+              ) : null}
             </div>
           </div>
 

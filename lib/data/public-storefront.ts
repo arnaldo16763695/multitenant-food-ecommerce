@@ -55,6 +55,11 @@ type TenantProduct = {
   }[]
   readonly category: string
   readonly imageUrl: string | null
+  readonly comboComponents: readonly {
+    componentProductName: string
+    componentVariantName: string | null
+    quantity: number
+  }[]
 }
 
 type PublicStorefrontData = {
@@ -147,6 +152,7 @@ type ComboComponentAvailabilityRow = {
   combo_product_id: string
   component_product_id: string
   component_variant_id: string | null
+  quantity: number
 }
 
 function getStoragePublicUrl(path: string | null) {
@@ -247,6 +253,7 @@ function getDemoStorefrontData(): PublicStorefrontData {
         ],
         category: "Burgers",
         imageUrl: null,
+        comboComponents: [],
       },
       {
         id: "demo-fries",
@@ -258,6 +265,7 @@ function getDemoStorefrontData(): PublicStorefrontData {
         modifierGroups: [],
         category: "Acompanantes",
         imageUrl: null,
+        comboComponents: [],
       },
     ],
     shareUrl: buildShareUrl(tenant),
@@ -379,8 +387,9 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     productIds.length
       ? supabase
           .from("product_combo_components")
-          .select("combo_product_id, component_product_id, component_variant_id")
+          .select("combo_product_id, component_product_id, component_variant_id, quantity")
           .in("combo_product_id", productIds)
+          .order("sort_order", { ascending: true })
           .returns<ComboComponentAvailabilityRow[]>()
       : Promise.resolve({ data: [], error: null } as { data: ComboComponentAvailabilityRow[]; error: null }),
   ])
@@ -429,6 +438,19 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     map.set(variant.product_id, [...currentVariants, variant])
     return map
   }, new Map())
+
+  // Every combo component is itself a tenant product already fetched above -- no extra query
+  // needed to resolve names for display.
+  const productNameMap = new Map(products.map((product) => [product.id, product.name]))
+  const variantNameMap = new Map(productVariants.map((variant) => [variant.id, variant.name]))
+
+  function buildComboComponentsSnapshot(comboProductId: string) {
+    return (comboComponentsMap.get(comboProductId) ?? []).map((component) => ({
+      componentProductName: productNameMap.get(component.component_product_id) ?? "Producto",
+      componentVariantName: component.component_variant_id ? variantNameMap.get(component.component_variant_id) ?? null : null,
+      quantity: component.quantity,
+    }))
+  }
 
   const menu: TenantProduct[] = products
     .filter((product) => {
@@ -502,6 +524,7 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
           })),
         category: product.category_id ? categoryMap.get(product.category_id) ?? "Menu" : "Menu",
         imageUrl: getStoragePublicUrl(product.primary_image_path),
+        comboComponents: product.is_combo ? buildComboComponentsSnapshot(product.id) : [],
       }
     })
 

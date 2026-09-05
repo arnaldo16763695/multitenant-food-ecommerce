@@ -38,6 +38,11 @@ type StorefrontMenuItem = {
   }[]
   readonly category: string
   readonly imageUrl?: string | null
+  readonly comboComponents: readonly {
+    componentProductName: string
+    componentVariantName: string | null
+    quantity: number
+  }[]
 }
 
 type StorefrontMenuGridProps = {

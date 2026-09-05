@@ -60,6 +60,11 @@ type StorefrontBagViewProps = {
     }[]
     category: string
     imageUrl?: string | null
+    comboComponents: readonly {
+      componentProductName: string
+      componentVariantName: string | null
+      quantity: number
+    }[]
   }[]
 }
 
