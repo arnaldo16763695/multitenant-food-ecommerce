@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { Newsreader } from "next/font/google"
 import { Clock3, Flame, MapPinned, ShoppingBag } from "lucide-react"
 
 import type { CustomerAccountContext } from "@/lib/auth/customer"
@@ -8,12 +7,6 @@ import { StorefrontBranchEntry } from "@/components/marketing/storefront-branch-
 import { StorefrontBranchSelector } from "@/components/marketing/storefront-branch-selector"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontMenuGrid } from "@/components/marketing/storefront-menu-grid"
-
-const displayFont = Newsreader({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-})
 
 type TenantShellProps = {
   readonly tenantSlug: string
@@ -136,7 +129,7 @@ export function TenantShell({
 
               <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
                 <div className="max-w-3xl space-y-5">
-                  <h1 className={`${displayFont.className} text-5xl leading-[0.92] font-medium tracking-tight sm:text-6xl lg:text-7xl`}>
+                  <h1 className="text-5xl leading-[0.92] font-medium tracking-tight sm:text-6xl lg:text-7xl">
                     {title}
                   </h1>
                   <p className="max-w-2xl text-base leading-8 text-stone-200 sm:text-lg">{description}</p>
