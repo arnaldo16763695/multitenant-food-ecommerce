@@ -47,7 +47,7 @@
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
   --color-border: var(--border);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-roboto);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -88,7 +88,7 @@
 }
 
 body {
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-roboto), sans-serif;
 }
 
 * {
