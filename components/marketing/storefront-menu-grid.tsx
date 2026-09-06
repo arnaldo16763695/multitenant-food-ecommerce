@@ -3,12 +3,38 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ShoppingBag } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Search, ShoppingBag, X } from "lucide-react"
 
 import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
 import { useHydrateShoppingBagBranch, useShoppingBagStore } from "@/lib/storefront/bag-store"
+
+// Debounce delay for the "q" search param -- matches the delay already established for the
+// admin orders search box (components/admin/admin-orders-table.tsx), kept in sync so both
+// search inputs in the app feel consistent.
+const SEARCH_DEBOUNCE_MS = 220
+
+// Diacritic-insensitive, case-insensitive comparison so a search for "cafe" also matches the
+// accented product name -- Spanish menu names commonly carry accents that a customer typing on
+// a phone often skips.
+// Strips combining diacritical marks (Unicode block U+0300-U+036F) by code point range rather
+// than a regex escape, to keep this file free of raw combining-mark bytes in source.
+const COMBINING_DIACRITICS_RANGE_START = 0x0300
+const COMBINING_DIACRITICS_RANGE_END = 0x036f
+
+function normalizeSearchText(value: string) {
+  return Array.from(value.normalize("NFD"))
+    .filter((char) => {
+      const codePoint = char.codePointAt(0) ?? 0
+      return codePoint < COMBINING_DIACRITICS_RANGE_START || codePoint > COMBINING_DIACRITICS_RANGE_END
+    })
+    .join("")
+    .toLowerCase()
+    .trim()
+}
 
 type StorefrontMenuItem = {
   readonly id: string
@@ -59,6 +85,9 @@ type StorefrontMenuGridProps = {
 }
 
 export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession = false, initialBagItems = [], branchOperationalStatus = null }: StorefrontMenuGridProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const [sheetProductId, setSheetProductId] = React.useState<string | null>(null)
   useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
@@ -69,19 +98,63 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
   )
   const categories = React.useMemo(() => ["Todas", ...new Set(menu.map((item) => item.category))], [menu])
   const [activeCategory, setActiveCategory] = React.useState("Todas")
+
+  // searchInput updates on every keystroke so the box itself feels responsive; searchQuery is
+  // the debounced value that actually drives filtering and the shareable "q" URL param, so
+  // fast typing doesn't re-filter the grid or touch the URL on every single character.
+  const [searchInput, setSearchInput] = React.useState(searchParams.get("q") ?? "")
+  const [searchQuery, setSearchQuery] = React.useState(searchParams.get("q") ?? "")
+
+  React.useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setSearchQuery(searchInput)
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timeout)
+  }, [searchInput])
+
+  // Keep local state in sync with the URL for back/forward navigation and for a shared link
+  // landing directly on a "?q=..." search result.
+  React.useEffect(() => {
+    const urlQuery = searchParams.get("q") ?? ""
+    setSearchInput(urlQuery)
+    setSearchQuery(urlQuery)
+  }, [searchParams])
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    const trimmedQuery = searchQuery.trim()
+
+    if (trimmedQuery) {
+      params.set("q", trimmedQuery)
+    } else {
+      params.delete("q")
+    }
+
+    const nextQuery = params.toString()
+    const currentQuery = searchParams.toString()
+
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
+    }
+  }, [pathname, router, searchParams, searchQuery])
+
   const categoryCountMap = React.useMemo(() => {
     return menu.reduce<Map<string, number>>((map, item) => {
       map.set(item.category, (map.get(item.category) ?? 0) + 1)
       return map
     }, new Map())
   }, [menu])
+  const normalizedSearchQuery = normalizeSearchText(searchQuery)
   const visibleItems = React.useMemo(() => {
-    if (activeCategory === "Todas") {
-      return menu
+    const byCategory = activeCategory === "Todas" ? menu : menu.filter((item) => item.category === activeCategory)
+
+    if (!normalizedSearchQuery) {
+      return byCategory
     }
 
-    return menu.filter((item) => item.category === activeCategory)
-  }, [activeCategory, menu])
+    return byCategory.filter((item) => normalizeSearchText(item.name).includes(normalizedSearchQuery))
+  }, [activeCategory, menu, normalizedSearchQuery])
   const sheetProduct = React.useMemo(() => visibleItems.find((item) => item.id === sheetProductId) ?? menu.find((item) => item.id === sheetProductId) ?? null, [menu, sheetProductId, visibleItems])
   const branchAcceptingOrders = branchOperationalStatus?.acceptingOrders ?? true
 
@@ -90,13 +163,34 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
       <div className="sticky top-3 z-20 -mx-2 px-2">
         <div className="overflow-hidden rounded-[1.7rem] border border-orange-200/70 bg-white/88 shadow-[0_16px_40px_rgba(120,53,15,0.1)] backdrop-blur-xl">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-orange-300/70 to-transparent" />
-          <div className="flex items-center justify-between gap-3 border-b border-stone-200/70 px-4 py-3">
+          <div className="flex flex-col gap-3 border-b border-stone-200/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-700">Categorias</p>
               <p className="mt-1 text-sm text-stone-600">Filtra el menu sin perder el contexto mientras haces scroll.</p>
             </div>
-            <div className="hidden rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700 sm:inline-flex">
-              {activeCategory === "Todas" ? `${menu.length} visibles` : `${visibleItems.length} en ${activeCategory}`}
+            <div className="flex items-center gap-3">
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-stone-400" />
+                <Input
+                  className="h-10 rounded-full border-stone-200 bg-stone-50/80 pr-9 pl-9 text-sm focus-visible:border-orange-300 focus-visible:ring-orange-300/40"
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Buscar en el menu"
+                  value={searchInput}
+                />
+                {searchInput ? (
+                  <button
+                    type="button"
+                    aria-label="Limpiar busqueda"
+                    onClick={() => setSearchInput("")}
+                    className="absolute top-1/2 right-3 -translate-y-1/2 text-stone-400 transition hover:text-stone-700"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="hidden shrink-0 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700 sm:inline-flex">
+                {activeCategory === "Todas" ? `${visibleItems.length} visibles` : `${visibleItems.length} en ${activeCategory}`}
+              </div>
             </div>
           </div>
 
@@ -199,8 +293,12 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
       {!visibleItems.length ? (
         <div className="rounded-[1.8rem] border border-dashed border-stone-300 bg-white/80 px-6 py-12 text-center shadow-[0_18px_50px_rgba(120,53,15,0.06)]">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-700">Sin resultados</p>
-          <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">No hay productos en esta categoria ahora mismo.</h3>
-          <p className="mt-3 text-sm leading-7 text-stone-600">Prueba otra categoria para seguir explorando el menu.</p>
+          <h3 className="mt-4 text-2xl font-semibold tracking-tight text-stone-950">
+            {searchQuery.trim() ? `No encontramos "${searchQuery.trim()}" en el menu.` : "No hay productos en esta categoria ahora mismo."}
+          </h3>
+          <p className="mt-3 text-sm leading-7 text-stone-600">
+            {searchQuery.trim() ? "Revisa la ortografia o prueba con otro termino." : "Prueba otra categoria para seguir explorando el menu."}
+          </p>
         </div>
       ) : null}
 
