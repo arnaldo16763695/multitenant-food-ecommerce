@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/dialog"
 import { LocalizedDateTime } from "@/components/ui/localized-date-time"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { OrderStatusProgress } from "@/components/admin/order-status-progress"
 
 type OrderQueueFilter = "all" | "needs_review" | "rejected" | "ready_to_confirm" | "confirmed"
 
@@ -562,7 +561,6 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                         </option>
                       ))}
                     </select>
-                    <OrderStatusProgress status={order.status as OrderStatus} />
                     {readyToConfirm ? <div className="mt-1 text-[11px] font-medium text-emerald-700">Listo para confirmar pedido y pago</div> : null}
                     {order.assignedStaffName ? <div className="mt-1 text-[11px] text-muted-foreground">Tomada por {order.assignedStaffName}</div> : null}
                   </TableCell>
