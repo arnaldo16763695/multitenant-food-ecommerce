@@ -3,7 +3,7 @@
 import * as React from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Eye, Search } from "lucide-react"
+import { Eye, LoaderCircle, Search } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import {
@@ -160,6 +160,10 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isPending, startTransition] = React.useTransition()
   const [receiptOrderId, setReceiptOrderId] = React.useState<string | null>(null)
+  // Which order + control is actually in flight, so the spinner lands on the exact select/button
+  // the operator just touched -- isPending alone is shared across every row and action, so a
+  // single boolean can't tell one row's change from another's.
+  const [pendingChange, setPendingChange] = React.useState<{ orderId: string; kind: "status" | "payment" | "assignment" } | null>(null)
   const [searchQuery, setSearchQuery] = React.useState(searchParams.get("q") ?? "")
   const [queueFilter, setQueueFilter] = React.useState<OrderQueueFilter>(parseQueueFilter(searchParams.get("queue")))
   const [paymentFilter, setPaymentFilter] = React.useState<PaymentStatus | "all">(parsePaymentFilter(searchParams.get("payment")))
@@ -328,46 +332,61 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
 
   function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
+    setPendingChange({ orderId, kind: "status" })
 
     startTransition(async () => {
-      const result = await updateAdminOrderStatusAction(tenantSlug, orderId, nextStatus)
+      try {
+        const result = await updateAdminOrderStatusAction(tenantSlug, orderId, nextStatus)
 
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos actualizar la orden.")
-        return
+        if (!result.ok) {
+          setErrorMessage(result.error ?? "No pudimos actualizar la orden.")
+          return
+        }
+
+        router.refresh()
+      } finally {
+        setPendingChange(null)
       }
-
-      router.refresh()
     })
   }
 
   function handlePaymentStatusChange(orderId: string, nextPaymentStatus: PaymentStatus) {
     setErrorMessage("")
+    setPendingChange({ orderId, kind: "payment" })
 
     startTransition(async () => {
-      const result = await updateAdminOrderPaymentStatusAction(tenantSlug, orderId, nextPaymentStatus)
+      try {
+        const result = await updateAdminOrderPaymentStatusAction(tenantSlug, orderId, nextPaymentStatus)
 
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos actualizar el pago.")
-        return
+        if (!result.ok) {
+          setErrorMessage(result.error ?? "No pudimos actualizar el pago.")
+          return
+        }
+
+        router.refresh()
+      } finally {
+        setPendingChange(null)
       }
-
-      router.refresh()
     })
   }
 
   function handleReleaseAssignment(orderId: string) {
     setErrorMessage("")
+    setPendingChange({ orderId, kind: "assignment" })
 
     startTransition(async () => {
-      const result = await releaseAdminOrderAssignmentAction(tenantSlug, orderId)
+      try {
+        const result = await releaseAdminOrderAssignmentAction(tenantSlug, orderId)
 
-      if (!result.ok) {
-        setErrorMessage(result.error ?? "No pudimos liberar la asignación.")
-        return
+        if (!result.ok) {
+          setErrorMessage(result.error ?? "No pudimos liberar la asignación.")
+          return
+        }
+
+        router.refresh()
+      } finally {
+        setPendingChange(null)
       }
-
-      router.refresh()
     })
   }
 
@@ -489,6 +508,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               const selectablePaymentStatuses = getSelectablePaymentStatuses(order.paymentStatus)
               const paymentEditable = canEditPaymentStatus(order)
               const readyToConfirm = isReadyToConfirm(order)
+              const isPaymentStatusPending = pendingChange?.orderId === order.id && pendingChange.kind === "payment"
+              const isOrderStatusPending = pendingChange?.orderId === order.id && pendingChange.kind === "status"
+              const isAssignmentPending = pendingChange?.orderId === order.id && pendingChange.kind === "assignment"
 
               return (
                 <TableRow key={order.id}>
@@ -496,18 +518,21 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                   <TableCell className="px-3 py-2 text-muted-foreground">{order.customerName}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">{order.branchName}</TableCell>
                   <TableCell className="px-3 py-2">
-                    <select
-                      className="h-8 min-w-32 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                      value={order.paymentStatus}
-                      disabled={isPending || selectablePaymentStatuses.length === 1 || !paymentEditable}
-                      onChange={(event) => handlePaymentStatusChange(order.id, event.target.value as PaymentStatus)}
-                    >
-                      {selectablePaymentStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {formatPaymentStatus(status)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 min-w-32 rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        value={order.paymentStatus}
+                        disabled={isPending || selectablePaymentStatuses.length === 1 || !paymentEditable}
+                        onChange={(event) => handlePaymentStatusChange(order.id, event.target.value as PaymentStatus)}
+                      >
+                        {selectablePaymentStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {formatPaymentStatus(status)}
+                          </option>
+                        ))}
+                      </select>
+                      {isPaymentStatusPending ? <LoaderCircle className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
+                    </div>
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       {order.paymentMethod ? formatManualPaymentMethod(order.paymentMethod) : "Sin método"}
                     </div>
@@ -547,20 +572,23 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                     )}
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <select
-                      className={`h-8 min-w-40 rounded-lg px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 ${
-                        readyToConfirm ? "border-emerald-300 bg-emerald-50/70 text-emerald-950" : "border-input bg-transparent"
-                      }`}
-                      value={order.status}
-                      disabled={isPending || selectableStatuses.length === 1}
-                      onChange={(event) => handleStatusChange(order.id, event.target.value as OrderStatus)}
-                    >
-                      {selectableStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {formatOrderStatusOption(status, order.status)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className={`h-8 min-w-40 rounded-lg px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 ${
+                          readyToConfirm ? "border-emerald-300 bg-emerald-50/70 text-emerald-950" : "border-input bg-transparent"
+                        }`}
+                        value={order.status}
+                        disabled={isPending || selectableStatuses.length === 1}
+                        onChange={(event) => handleStatusChange(order.id, event.target.value as OrderStatus)}
+                      >
+                        {selectableStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {formatOrderStatusOption(status, order.status)}
+                          </option>
+                        ))}
+                      </select>
+                      {isOrderStatusPending ? <LoaderCircle className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
+                    </div>
                     {readyToConfirm ? <div className="mt-1 text-[11px] font-medium text-emerald-700">Listo para confirmar pedido y pago</div> : null}
                     {order.assignedStaffName ? <div className="mt-1 text-[11px] text-muted-foreground">Tomada por {order.assignedStaffName}</div> : null}
                   </TableCell>
@@ -577,6 +605,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                            disabled={isPending}
                            onClick={() => handleReleaseAssignment(order.id)}
                          >
+                           {isAssignmentPending ? <LoaderCircle className="animate-spin" /> : null}
                            Liberar asignación
                          </Button>
                        ) : null}
