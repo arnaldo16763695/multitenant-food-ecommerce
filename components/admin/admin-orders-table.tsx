@@ -168,6 +168,33 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
   const [branchFilter, setBranchFilter] = React.useState<string>(searchParams.get("branch") ?? "all")
   const [persistedSearchQuery, setPersistedSearchQuery] = React.useState(searchParams.get("q") ?? "")
 
+  // Pins each order's sort priority the first time it's seen, so an in-place status edit (by
+  // this operator, or another one via realtime refresh) doesn't yank the row to a new position
+  // under someone's cursor. A brand-new order still enters the queue at its real, live priority;
+  // switching a filter is a deliberate new "view", so it resets the pins and re-sorts fresh.
+  // State (not a ref) because the sort below reads it during render -- refs can't be read there.
+  const [pinnedPriorities, setPinnedPriorities] = React.useState<Map<string, number>>(new Map())
+
+  React.useEffect(() => {
+    setPinnedPriorities(new Map())
+  }, [queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
+
+  React.useEffect(() => {
+    setPinnedPriorities((current) => {
+      const next = new Map(current)
+      let didChange = false
+
+      for (const order of orders) {
+        if (!next.has(order.id)) {
+          next.set(order.id, getOrderPriority(order))
+          didChange = true
+        }
+      }
+
+      return didChange ? next : current
+    })
+  }, [orders])
+
   const branchOptions = React.useMemo(
     () => ["all", ...new Set(orders.map((order) => order.branchName).filter(Boolean))],
     [orders]
@@ -253,7 +280,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
 
     return [...orders]
       .sort((left, right) => {
-        const priorityDelta = getOrderPriority(left) - getOrderPriority(right)
+        const leftPriority = pinnedPriorities.get(left.id) ?? getOrderPriority(left)
+        const rightPriority = pinnedPriorities.get(right.id) ?? getOrderPriority(right)
+        const priorityDelta = leftPriority - rightPriority
 
         if (priorityDelta !== 0) {
           return priorityDelta
@@ -295,7 +324,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
           .toLowerCase()
           .includes(normalizedQuery)
       })
-  }, [orders, searchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter])
+  }, [orders, searchQuery, queueFilter, paymentFilter, statusFilter, receiptFilter, branchFilter, pinnedPriorities])
 
   function handleStatusChange(orderId: string, nextStatus: OrderStatus) {
     setErrorMessage("")
