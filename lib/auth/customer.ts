@@ -17,6 +17,7 @@ export type CustomerAccountContext = {
     email: string | null
     phone: string | null
     marketingOptIn: boolean
+    whatsappOptIn: boolean
   }
 }
 
@@ -32,6 +33,7 @@ type CustomerRow = {
   email: string | null
   phone: string | null
   marketing_opt_in: boolean
+  whatsapp_opt_in: boolean
 }
 
 async function provisionMissingCustomerAccount(input: {
@@ -112,7 +114,7 @@ export async function getCustomerAccountContext(): Promise<CustomerAccountContex
     return null
   }
 
-  let customerResult = await supabase.from("customers").select("id, full_name, email, phone, marketing_opt_in").eq("profile_id", profileResult.data.id).limit(1).maybeSingle<CustomerRow>()
+  let customerResult = await supabase.from("customers").select("id, full_name, email, phone, marketing_opt_in, whatsapp_opt_in").eq("profile_id", profileResult.data.id).limit(1).maybeSingle<CustomerRow>()
 
   if (customerResult.error || !customerResult.data) {
     await provisionMissingCustomerAccount({
@@ -123,7 +125,7 @@ export async function getCustomerAccountContext(): Promise<CustomerAccountContex
       phone: typeof user.user_metadata.phone === "string" ? user.user_metadata.phone : null,
     })
 
-    customerResult = await supabase.from("customers").select("id, full_name, email, phone, marketing_opt_in").eq("profile_id", profileResult.data.id).limit(1).maybeSingle<CustomerRow>()
+    customerResult = await supabase.from("customers").select("id, full_name, email, phone, marketing_opt_in, whatsapp_opt_in").eq("profile_id", profileResult.data.id).limit(1).maybeSingle<CustomerRow>()
   }
 
   if (customerResult.error || !customerResult.data) {
@@ -146,6 +148,7 @@ export async function getCustomerAccountContext(): Promise<CustomerAccountContex
       email: customerResult.data.email,
       phone: customerResult.data.phone,
       marketingOptIn: customerResult.data.marketing_opt_in,
+      whatsappOptIn: customerResult.data.whatsapp_opt_in,
     },
   }
 }

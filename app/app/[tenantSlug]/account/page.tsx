@@ -1,5 +1,6 @@
 import Link from "next/link"
 
+import { WhatsappOptInToggle } from "@/app/app/[tenantSlug]/account/whatsapp-opt-in-toggle"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 
@@ -43,8 +44,9 @@ export default async function StorefrontAccountPage({ params }: StorefrontAccoun
               </div>
               <div className="rounded-[1.5rem] bg-stone-50 p-5">
                 <p className="text-sm font-semibold text-stone-950">Preferencias</p>
-                <div className="mt-3 space-y-2 text-sm text-stone-600">
+                <div className="mt-3 space-y-3 text-sm text-stone-600">
                   <p>Marketing: {customerContext.customer.marketingOptIn ? "Aceptado" : "No suscrito"}</p>
+                  <WhatsappOptInToggle tenantSlug={tenantSlug} initialOptIn={customerContext.customer.whatsappOptIn} />
                   <p>Cuenta global: activa</p>
                 </div>
               </div>

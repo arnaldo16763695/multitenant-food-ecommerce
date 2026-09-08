@@ -202,6 +202,13 @@ This file guides coding agents working in `C:\Users\Vit\Desktop\apps\vz-food`.
 - Before proposing database changes, inspect the latest Supabase migrations and the remote schema snapshot instead of inferring the schema from application code alone.
 - When adding a new Supabase migration, keep the CLI-generated filename prefix intact. A filename like `20260413_000014_name.sql` is invalid for version tracking because Supabase will parse only the segment before the first underscore.
 
+## Customer Notifications
+
+- Customer order-event notifications are **outbound only** (email via Resend + WhatsApp via the Meta Cloud API). No in-app centre, no realtime listener, no native push. Order-status handling is untouched by this feature.
+- All fan-out goes through `dispatchOrderNotification` (`lib/services/notifications.ts`), called best-effort next to the relevant `writeAuditEvent` in `lib/services/orders.ts` — never add a second dispatch path. It must never throw or block the order mutation (same contract as `writeAuditEvent`).
+- WhatsApp uses **Model A**: one platform-owned WhatsApp Business Account / number for every tenant; the tenant name is a template parameter, not the sender. Credentials (`WHATSAPP_*` env) resolve only in `getWhatsappConfig()` — keep that the single seam so a future per-tenant (Model B) sender is a one-function change. Only the 4 types in `WHATSAPP_NOTIFICATION_TYPES` go to WhatsApp, gated on `customers.whatsapp_opt_in`; each needs an approved Meta template named after the type.
+- The `notifications` table is a service-role-only delivery log for idempotency (`uq_notifications_order_type_dedupe`; a `23505` on insert means "already sent" → skip every channel) and per-channel audit. It is deliberately not in the realtime publication and has no customer RLS.
+
 ## Mobile API Boundary
 
 - Native mobile (`Android`/`iOS`) is `customer-only`. Do not build mobile API scope for `admin`, `kitchen`, `platform`, or `staff` unless the product requirement explicitly changes.

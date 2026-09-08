@@ -3,8 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { canAccessAdminSection } from "@/lib/auth/permissions"
 import type { AuditActor } from "@/lib/services/audit"
 import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderItemComboComponent, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import type { OrderNotificationType } from "@/lib/domain/notification"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 import { writeAuditEvent } from "@/lib/services/audit"
+import { dispatchOrderNotification } from "@/lib/services/notifications"
 
 type TenantRow = { id: string }
 type BranchRow = { id: string; name: string }
@@ -357,7 +359,7 @@ async function updateLatestPaymentReceiptSubmissionReview(
     readonly rejectionReason?: string | null
     readonly reviewedByProfileId?: string | null
   }
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; submissionId?: string }> {
   const submissionResult = await supabase
     .from("payment_receipt_submissions")
     .select("id")
@@ -390,7 +392,7 @@ async function updateLatestPaymentReceiptSubmissionReview(
     return { ok: false, error: updateResult.error.message }
   }
 
-  return { ok: true }
+  return { ok: true, submissionId: submissionResult.data.id }
 }
 
 function mapPaymentReceiptSubmission(row: PaymentReceiptSubmissionRow): PaymentReceiptSubmissionSummary {
@@ -517,11 +519,22 @@ export async function rejectManualPayment(
 
   const orderResult = await supabase
     .from("orders")
-    .select("id, branch_id, order_number, status, payment_status")
+    .select("id, branch_id, order_number, status, payment_status, customer_id, customer_email, customer_name, customer_phone, fulfillment_type")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ id: string; branch_id: string; order_number: number; status: OrderStatus; payment_status: PaymentStatus }>()
+    .maybeSingle<{
+      id: string
+      branch_id: string
+      order_number: number
+      status: OrderStatus
+      payment_status: PaymentStatus
+      customer_id: string | null
+      customer_email: string | null
+      customer_name: string | null
+      customer_phone: string | null
+      fulfillment_type: "pickup" | "delivery"
+    }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden." }
@@ -552,7 +565,7 @@ export async function rejectManualPayment(
   })
 
   if (!submissionReviewResult.ok) {
-    return submissionReviewResult
+    return { ok: false, error: submissionReviewResult.error }
   }
 
   const orderUpdateResult = await supabase
@@ -587,6 +600,25 @@ export async function rejectManualPayment(
       orderNumber: orderResult.data.order_number,
     },
   })
+
+  // Only notify when a still-pending submission was actually rejected. A double-click reject
+  // finds no pending submission (submissionId is undefined) and must not re-notify; a genuine
+  // reject after a customer resubmission targets a new submission id -> new dedupe key -> a
+  // second notification, which is intended.
+  if (submissionReviewResult.submissionId) {
+    await dispatchOrderNotification(supabase, {
+      tenantId,
+      orderId,
+      orderNumber: orderResult.data.order_number,
+      fulfillmentType: orderResult.data.fulfillment_type,
+      customerId: orderResult.data.customer_id,
+      customerEmail: orderResult.data.customer_email,
+      customerName: orderResult.data.customer_name,
+      customerPhone: orderResult.data.customer_phone,
+      type: "payment_rejected",
+      dedupeKey: submissionReviewResult.submissionId,
+    })
+  }
 
   return { ok: true }
 }
@@ -1167,6 +1199,18 @@ export async function createStorefrontOrder(
       branchName: branchResult.data.name,
       channel: input.auditActor?.surface === "mobile_api" ? "mobile_api" : "storefront",
     },
+  })
+
+  await dispatchOrderNotification(supabase, {
+    tenantId: tenantResult.data.id,
+    orderId: orderResult.data.order_id,
+    orderNumber: orderResult.data.order_number,
+    fulfillmentType: input.fulfillmentType,
+    customerId: input.customerId ?? null,
+    customerEmail: input.customer.email.trim() || null,
+    customerName: input.customer.fullName.trim() || null,
+    customerPhone: input.customer.phone.trim() || null,
+    type: "order_received",
   })
 
   return {
@@ -1935,11 +1979,21 @@ export async function updateAdminOrderStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   const orderResult = await supabase
     .from("orders")
-    .select("status, branch_id, order_number, payment_status")
+    .select("status, branch_id, order_number, payment_status, customer_id, customer_email, customer_name, customer_phone, fulfillment_type")
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
-    .maybeSingle<{ status: OrderStatus; branch_id: string; order_number: number; payment_status: PaymentStatus }>()
+    .maybeSingle<{
+      status: OrderStatus
+      branch_id: string
+      order_number: number
+      payment_status: PaymentStatus
+      customer_id: string | null
+      customer_email: string | null
+      customer_name: string | null
+      customer_phone: string | null
+      fulfillment_type: "pickup" | "delivery"
+    }>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: "No encontramos la orden." }
@@ -2041,6 +2095,34 @@ export async function updateAdminOrderStatus(
       orderNumber: orderResult.data.order_number,
     },
   })
+
+  // Notify the customer of the milestones that matter to them. This covers both the admin and
+  // the kitchen surfaces because updateKitchenOrderStatusAction routes through this function.
+  // `confirmed` is only reachable from `pending_payment`, so it also stands in for "payment
+  // accepted". Implicit confirmed<->in_preparation flips done by assign/release do not pass
+  // through here and intentionally do not notify.
+  const notificationTypeByStatus: Partial<Record<OrderStatus, OrderNotificationType>> = {
+    confirmed: "order_confirmed",
+    in_preparation: "order_in_preparation",
+    ready: "order_ready",
+    fulfilled: "order_fulfilled",
+    cancelled: "order_cancelled",
+  }
+  const notificationType = notificationTypeByStatus[nextStatus]
+
+  if (notificationType) {
+    await dispatchOrderNotification(supabase, {
+      tenantId,
+      orderId,
+      orderNumber: orderResult.data.order_number,
+      fulfillmentType: orderResult.data.fulfillment_type,
+      customerId: orderResult.data.customer_id,
+      customerEmail: orderResult.data.customer_email,
+      customerName: orderResult.data.customer_name,
+      customerPhone: orderResult.data.customer_phone,
+      type: notificationType,
+    })
+  }
 
   return { ok: true }
 }

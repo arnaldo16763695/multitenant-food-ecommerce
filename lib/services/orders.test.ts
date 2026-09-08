@@ -1,8 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { CheckoutBagItemModifierInput } from "@/lib/domain/order"
 import { ensureKitchenAssignmentAccess, getOwnedPendingPaymentOrder, updateAdminOrderStatus, validateAndPriceItemModifiers } from "@/lib/services/orders"
+
+const { dispatchOrderNotification } = vi.hoisted(() => ({ dispatchOrderNotification: vi.fn() }))
+
+vi.mock("@/lib/services/notifications", () => ({
+  dispatchOrderNotification,
+}))
+
+beforeEach(() => {
+  dispatchOrderNotification.mockReset()
+})
 
 // A minimal stand-in for the `.from("orders").select(...).eq(...).eq(...).limit(1).maybeSingle()`
 // chain ensureKitchenAssignmentAccess runs after its role gate. Used only to prove a call reached
@@ -24,7 +34,16 @@ function createOrderLookupSupabaseStub(): SupabaseClient {
 // "order_items" (canKitchenMarkOrderReady's own prep-status check). rpc is a spy so a test can
 // assert the mutation never ran when the ready-gate rejects the transition.
 function createReadyGateSupabaseStub(
-  orderRow: { status: string; branch_id: string; order_number: number; payment_status: string },
+  orderRow: {
+    status: string
+    branch_id: string
+    order_number: number
+    payment_status: string
+    customer_id?: string | null
+    customer_email?: string | null
+    customer_name?: string | null
+    fulfillment_type?: "pickup" | "delivery"
+  },
   orderItems: readonly { prep_status: "pending" | "ready" }[]
 ) {
   const ordersChain = {
@@ -296,6 +315,51 @@ describe("updateAdminOrderStatus", () => {
       expect.objectContaining({ p_from_status: "in_preparation", p_to_status: "ready" })
     )
     expect(result).toEqual({ ok: true })
+  })
+
+  it("dispatches an order_ready customer notification only after the transition RPC succeeds", async () => {
+    const { client, rpc } = createReadyGateSupabaseStub(
+      {
+        status: "in_preparation",
+        branch_id: "branch-1",
+        order_number: 42,
+        payment_status: "paid",
+        customer_id: "customer-1",
+        customer_email: "cliente@example.com",
+        customer_name: "Cliente Uno",
+        fulfillment_type: "pickup",
+      },
+      [{ prep_status: "ready" }, { prep_status: "ready" }]
+    )
+    rpc.mockResolvedValue({ data: true, error: null })
+
+    await updateAdminOrderStatus(client, "tenant-1", "order-1", "ready")
+
+    expect(dispatchOrderNotification).toHaveBeenCalledTimes(1)
+    expect(dispatchOrderNotification).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        orderId: "order-1",
+        type: "order_ready",
+        customerId: "customer-1",
+        customerEmail: "cliente@example.com",
+        fulfillmentType: "pickup",
+      })
+    )
+  })
+
+  it("does not dispatch a notification for a no-op transition", async () => {
+    const { client, rpc } = createReadyGateSupabaseStub(
+      { status: "ready", branch_id: "branch-1", order_number: 42, payment_status: "paid" },
+      [{ prep_status: "ready" }]
+    )
+
+    const result = await updateAdminOrderStatus(client, "tenant-1", "order-1", "ready")
+
+    expect(result).toEqual({ ok: true })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(dispatchOrderNotification).not.toHaveBeenCalled()
   })
 })
 

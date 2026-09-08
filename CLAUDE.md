@@ -90,6 +90,33 @@ statements; grep all migrations for the real, current table set)
   transition and where it becomes visible (kitchen board vs. admin orders vs. customer order
   page) — this is a named expectation in `AGENTS.md`'s SDD section, not optional polish.
 
+### Customer notifications (added 2026-09-07)
+
+Outbound-only avisos to the customer on order events — **email + WhatsApp**, no in-app UI, no
+push. The order-status handling itself is unchanged.
+
+- **Hook**: `dispatchOrderNotification` (`lib/services/notifications.ts`) is called best-effort
+  next to each customer-relevant `writeAuditEvent` in `lib/services/orders.ts` —
+  `createStorefrontOrder` (`order_received`), `updateAdminOrderStatus` (covers admin + kitchen:
+  `order_confirmed` / `order_in_preparation` / `order_ready` / `order_fulfilled` /
+  `order_cancelled`), `rejectManualPayment` (`payment_rejected`). Same swallow-errors contract
+  as `writeAuditEvent`.
+- **Channels**: email (Resend) for all 7 types; WhatsApp for the 4 in
+  `WHATSAPP_NOTIFICATION_TYPES` (`order_confirmed`, `order_ready`, `payment_rejected`,
+  `order_cancelled`), gated on `customers.whatsapp_opt_in` + a phone that normalizes via
+  `lib/notifications/phone.ts`.
+- **WhatsApp = Meta Cloud API direct, Model A**: one platform-owned WhatsApp Business Account /
+  number for every tenant (env: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`,
+  `WHATSAPP_API_VERSION`, `WHATSAPP_TEMPLATE_LANG`). Tenant name rides as template param
+  `{{3}}`. Credentials resolve in `getWhatsappConfig()` — the single seam for a future
+  per-tenant (Model B) sender. 4 Meta templates named after the types must be approved by the
+  platform owner before prod.
+- **Table** `notifications` (`20260907225246_*`): service-role-only delivery log — idempotency
+  via `uq_notifications_order_type_dedupe` (a `23505` on insert ⇒ skip all channels) plus
+  `email_status` / `whatsapp_status`. **Not** realtime, **no** `replica identity full`, no
+  customer RLS. `customers.whatsapp_opt_in` (`20260907234055_*`, default true) with a toggle on
+  the "Mi cuenta" page.
+
 ## Local tooling
 
 - Third-party agent skills live in `.agents/skills/` (gitignored, managed by an external
