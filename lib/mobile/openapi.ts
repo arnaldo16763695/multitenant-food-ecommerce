@@ -564,6 +564,18 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             quantity: { type: "integer" },
           },
         },
+        ShoppingBagConfigurationsMutationResult: {
+          type: "object",
+          required: ["ok"],
+          properties: {
+            ok: { type: "boolean" },
+            error: { type: "string" },
+            items: {
+              type: "array",
+              items: buildSchemaRef("ShoppingBagItem"),
+            },
+          },
+        },
         ClearBagResponse: {
           type: "object",
           required: ["ok", "quantity"],
@@ -608,6 +620,47 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             modifierSelections: {
               type: "array",
               items: buildSchemaRef("ModifierSelectionInput"),
+            },
+          },
+        },
+        ShoppingBagConfigurationInput: {
+          type: "object",
+          required: ["quantity"],
+          properties: {
+            quantity: { type: "integer", minimum: 1 },
+            modifierSelections: {
+              type: "array",
+              items: buildSchemaRef("ModifierSelectionInput"),
+            },
+          },
+        },
+        AddBagItemConfigurationsRequest: {
+          type: "object",
+          required: ["branchId", "productId", "configurations"],
+          properties: {
+            branchId: { type: "string", format: "uuid" },
+            productId: { type: "string", format: "uuid" },
+            productVariantId: buildNullableSchema({ type: "string", format: "uuid" }),
+            configurations: {
+              type: "array",
+              minItems: 1,
+              items: buildSchemaRef("ShoppingBagConfigurationInput"),
+              description: "One entry per distinct quantity+modifiers combination the customer built for this product (e.g. 2x sin cebolla + 1x sin mostaza).",
+            },
+          },
+        },
+        ReplaceBagItemConfigurationsRequest: {
+          type: "object",
+          required: ["branchId", "productId", "configurations"],
+          properties: {
+            branchId: { type: "string", format: "uuid" },
+            productId: { type: "string", format: "uuid" },
+            productVariantId: buildNullableSchema({ type: "string", format: "uuid" }),
+            configurations: {
+              type: "array",
+              minItems: 1,
+              items: buildSchemaRef("ShoppingBagConfigurationInput"),
+              description: "Replaces the bag line identified by bagItemId with these configurations -- more than one entry splits it into multiple independent bag lines.",
             },
           },
         },
@@ -1257,6 +1310,56 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
           },
         },
       },
+      "/storefront/{tenantSlug}/bag/items/configurations": {
+        post: {
+          tags: ["Bag"],
+          operationId: "addMobileBagItemConfigurations",
+          summary: "Add multiple quantity+modifier combinations of the same product to the bag at once",
+          security: buildBearerSecurity(),
+          parameters: [
+            {
+              name: "tenantSlug",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: buildSchemaRef("AddBagItemConfigurationsRequest"),
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "Every configuration was added successfully, one bag line per configuration.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ShoppingBagConfigurationsMutationResult"),
+                },
+              },
+            },
+            400: {
+              description: "Invalid payload or bag mutation rejected -- if any configuration fails to save, every earlier configuration in this call is rolled back.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
       "/storefront/{tenantSlug}/bag/items/{bagItemId}": {
         patch: {
           tags: ["Bag"],
@@ -1400,6 +1503,62 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
             400: {
               description: "Missing branchId or mutation rejected.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/storefront/{tenantSlug}/bag/items/{bagItemId}/configurations": {
+        patch: {
+          tags: ["Bag"],
+          operationId: "replaceMobileBagItemConfigurations",
+          summary: "Split a bag item into multiple quantity+modifier combinations",
+          security: buildBearerSecurity(),
+          parameters: [
+            {
+              name: "tenantSlug",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+            {
+              name: "bagItemId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: buildSchemaRef("ReplaceBagItemConfigurationsRequest"),
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "The bag item was replaced by one bag line per configuration.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ShoppingBagConfigurationsMutationResult"),
+                },
+              },
+            },
+            400: {
+              description: "Invalid payload or mutation rejected -- if any configuration fails to save, the original bag item is restored.",
               content: {
                 "application/json": {
                   schema: buildSchemaRef("ErrorResponse"),
