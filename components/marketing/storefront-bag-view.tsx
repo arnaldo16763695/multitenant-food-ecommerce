@@ -18,7 +18,7 @@ import { StorefrontProductSheet } from "@/components/marketing/storefront-produc
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
-import { formatModifierSelectionLabel, isExclusionGroup } from "@/lib/storefront/modifier-display"
+import { formatExclusionAction, isExclusionGroup } from "@/lib/storefront/modifier-display"
 import { useToastStore } from "@/lib/ui/toast-store"
 
 type StorefrontBagViewProps = {
@@ -268,12 +268,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                   <article key={item.id} className="rounded-[1.5rem] border border-stone-200 bg-stone-50/80 p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-stone-950">{item.name}</p>
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-stone-600">
-                            {item.category}
-                          </span>
-                        </div>
+                        <p className="font-semibold text-stone-950">{item.name}</p>
                         <p className="max-w-xl text-sm leading-6 text-stone-600">{item.description}</p>
                         {comboComponents.length > 0 ? (
                           <p className="max-w-xl text-xs leading-5 text-stone-500">
@@ -294,7 +289,7 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
                                     : "rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-800"
                                 }
                               >
-                                {formatModifierSelectionLabel(selection)}
+                                {isExclusionGroup(selection.modifierKind) ? formatExclusionAction(selection.modifierOptionName) : selection.modifierOptionName}
                               </span>
                             ))}
                           </div>
