@@ -1,13 +1,15 @@
 "use server"
 
 import { getCustomerAccountContext } from "@/lib/auth/customer"
-import type { ShoppingBagModifierSelection } from "@/lib/domain/bag"
+import type { ShoppingBagConfiguration, ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import {
   addCustomerBagItem,
+  addCustomerBagItemConfigurations,
   clearCustomerBranchBag,
   decrementCustomerBagItem,
   replaceCustomerBagItem,
+  replaceCustomerBagItemConfigurations,
   removeCustomerBagItem,
 } from "@/lib/services/customer-bag"
 
@@ -19,6 +21,14 @@ type CustomerBagMutationPayload = {
   readonly productVariantId?: string | null
   readonly quantity?: number
   readonly modifierSelections?: readonly ShoppingBagModifierSelection[]
+}
+
+type CustomerBagConfigurationsMutationPayload = {
+  readonly tenantSlug: string
+  readonly branchId: string
+  readonly productId: string
+  readonly productVariantId?: string | null
+  readonly configurations: readonly ShoppingBagConfiguration[]
 }
 
 type ClearCustomerBagPayload = {
@@ -45,6 +55,28 @@ export async function addCustomerBagItemAction(payload: CustomerBagMutationPaylo
     productVariantId: payload.productVariantId,
     quantity: payload.quantity,
     modifierSelections: payload.modifierSelections,
+    customerId: customerContext.customer.id,
+  })
+}
+
+export async function addCustomerBagItemConfigurationsAction(payload: CustomerBagConfigurationsMutationPayload) {
+  const customerContext = await getCustomerAccountContext()
+  const supabase = createSupabaseAdminClient()
+
+  if (!customerContext) {
+    return { ok: false, error: "Inicia sesión para agregar productos a tu bolsa." }
+  }
+
+  if (!supabase) {
+    return { ok: false, error: "Supabase no está configurado en este entorno." }
+  }
+
+  return addCustomerBagItemConfigurations(supabase, {
+    tenantSlug: payload.tenantSlug,
+    branchId: payload.branchId,
+    productId: payload.productId,
+    productVariantId: payload.productVariantId,
+    configurations: payload.configurations,
     customerId: customerContext.customer.id,
   })
 }
@@ -132,6 +164,29 @@ export async function replaceCustomerBagItemAction(payload: Required<Pick<Custom
     productVariantId: payload.productVariantId,
     quantity: payload.quantity,
     modifierSelections: payload.modifierSelections,
+    customerId: customerContext.customer.id,
+  })
+}
+
+export async function replaceCustomerBagItemConfigurationsAction(payload: CustomerBagConfigurationsMutationPayload & { readonly bagItemId: string }) {
+  const customerContext = await getCustomerAccountContext()
+  const supabase = createSupabaseAdminClient()
+
+  if (!customerContext) {
+    return { ok: false, error: "Inicia sesión para editar tu bolsa." }
+  }
+
+  if (!supabase) {
+    return { ok: false, error: "Supabase no está configurado en este entorno." }
+  }
+
+  return replaceCustomerBagItemConfigurations(supabase, {
+    bagItemId: payload.bagItemId,
+    tenantSlug: payload.tenantSlug,
+    branchId: payload.branchId,
+    productId: payload.productId,
+    productVariantId: payload.productVariantId,
+    configurations: payload.configurations,
     customerId: customerContext.customer.id,
   })
 }

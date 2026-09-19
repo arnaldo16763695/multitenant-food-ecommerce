@@ -30,3 +30,17 @@ export type ShoppingBagMutationResult = {
   readonly item?: ShoppingBagItem
   readonly quantity?: number
 }
+
+// A distinct quantity + modifier combination the customer wants for one product/variant --
+// e.g. "2 sin cebolla" and "1 sin mostaza" are two configurations of the same burger. Each
+// configuration is persisted as its own customer_bag_items row (see buildConfigurationHash).
+export type ShoppingBagConfiguration = {
+  readonly quantity: number
+  readonly modifierSelections: readonly ShoppingBagModifierSelection[]
+}
+
+export type ShoppingBagConfigurationsMutationResult = {
+  readonly ok: boolean
+  readonly error?: string
+  readonly items?: readonly ShoppingBagItem[]
+}

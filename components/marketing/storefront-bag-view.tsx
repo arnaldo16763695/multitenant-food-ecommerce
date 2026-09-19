@@ -9,10 +9,10 @@ import {
   clearCustomerBranchBagAction,
   decrementCustomerBagItemAction,
   removeCustomerBagItemAction,
-  replaceCustomerBagItemAction,
+  replaceCustomerBagItemConfigurationsAction,
 } from "@/app/app/[tenantSlug]/bag/actions"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
-import type { ShoppingBagItem } from "@/lib/domain/bag"
+import type { ShoppingBagConfiguration, ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
 import { Button } from "@/components/ui/button"
@@ -181,27 +181,57 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
     setIsClearing(false)
   }
 
-  async function handleReplaceItem(updatedItem: ShoppingBagItem) {
-    const currentItem = items.find((item) => item.id === editingItemId)
+  async function handleReplaceConfigurations(input: {
+    readonly originalItemId: string
+    readonly productId: string
+    readonly productVariantId: string | null
+    readonly configurations: readonly ShoppingBagConfiguration[]
+  }) {
+    const currentItem = items.find((item) => item.id === input.originalItemId)
 
     if (!currentItem) {
       return
     }
 
-    upsertItem({ ...updatedItem, id: currentItem.id })
-    setEditingItemId(null)
+    // currentItem.unitPrice already bakes in its own modifierSelections' priceDelta -- strip
+    // that out to get the plain per-unit base price, then reapply each configuration's own
+    // deltas so the optimistic rows show a price close to what the server will confirm.
+    const baseUnitPrice = currentItem.unitPrice - currentItem.modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)
+    const computeUnitPrice = (selections: readonly ShoppingBagModifierSelection[]) =>
+      Number((baseUnitPrice + selections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
 
-    const result = await replaceCustomerBagItemAction({
-      bagItemId: currentItem.id,
-      tenantSlug,
-      branchId: activeBranchId,
-      productId: updatedItem.productId,
-      productVariantId: updatedItem.productVariantId,
-      quantity: updatedItem.quantity,
-      modifierSelections: updatedItem.modifierSelections,
+    const optimisticItems = input.configurations.map((configuration) => {
+      const unitPrice = computeUnitPrice(configuration.modifierSelections)
+
+      return {
+        ...currentItem,
+        id: `optimistic-config-${crypto.randomUUID()}`,
+        quantity: configuration.quantity,
+        modifierSelections: configuration.modifierSelections,
+        unitPrice,
+        unitPriceLabel: `$ ${unitPrice.toFixed(2)}`,
+      }
     })
 
-    if (!result.ok || !result.item) {
+    removeItem(currentItem.id, tenantSlug, activeBranchId)
+    for (const item of optimisticItems) {
+      upsertItem(item)
+    }
+    setEditingItemId(null)
+
+    const result = await replaceCustomerBagItemConfigurationsAction({
+      bagItemId: input.originalItemId,
+      tenantSlug,
+      branchId: activeBranchId,
+      productId: input.productId,
+      productVariantId: input.productVariantId,
+      configurations: input.configurations,
+    })
+
+    if (!result.ok || !result.items) {
+      for (const item of optimisticItems) {
+        removeItem(item.id, tenantSlug, activeBranchId)
+      }
       upsertItem(currentItem)
       pushToast({
         title: "No pudimos actualizar la configuración",
@@ -211,11 +241,15 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
       return
     }
 
-    removeItem(currentItem.id, tenantSlug, activeBranchId)
-    upsertItem(result.item)
+    for (const item of optimisticItems) {
+      removeItem(item.id, tenantSlug, activeBranchId)
+    }
+    for (const item of result.items) {
+      upsertItem(item)
+    }
     pushToast({
       title: "Configuración actualizada",
-      description: result.item.name,
+      description: result.items.length > 1 ? `${result.items.length} combinaciones guardadas` : (result.items[0]?.name ?? currentItem.name),
       variant: "success",
     })
   }
@@ -362,7 +396,8 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
             product={editingProduct}
             open={Boolean(editingItemId)}
             onOpenChange={(nextOpen) => setEditingItemId(nextOpen ? editingItem.id : null)}
-            onItemAdded={handleReplaceItem}
+            onItemAdded={upsertItem}
+            onConfigurationsReplaced={handleReplaceConfigurations}
             initialItem={editingItem}
             submitLabel="Guardar cambios"
             branchOperationalStatus={branchOperationalStatus}

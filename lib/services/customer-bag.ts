@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult } from "@/lib/domain/bag"
+import type { ShoppingBagConfiguration, ShoppingBagConfigurationsMutationResult, ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult } from "@/lib/domain/bag"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 
 type TenantRow = {
@@ -31,6 +31,12 @@ type CustomerBagItemModifierRow = {
     id: string
     name: string
   } | null
+}
+
+type CustomerBagItemModifierSnapshotRow = {
+  modifier_group_id: string
+  modifier_option_id: string
+  price_delta_snapshot: number
 }
 
 type ProductRow = {
@@ -486,6 +492,33 @@ export async function getCustomerBagItems(
   })
 }
 
+async function peekBagItemByConfiguration(
+  supabase: SupabaseClient,
+  input: {
+    readonly tenantId: string
+    readonly branchId: string
+    readonly customerId: string
+    readonly productId: string
+    readonly productVariantId?: string | null
+    readonly configurationHash: string
+  }
+): Promise<{ id: string; quantity: number } | null> {
+  let query = supabase
+    .from("customer_bag_items")
+    .select("id, quantity")
+    .eq("customer_id", input.customerId)
+    .eq("tenant_id", input.tenantId)
+    .eq("branch_id", input.branchId)
+    .eq("product_id", input.productId)
+    .eq("configuration_hash", input.configurationHash)
+    .limit(1)
+
+  query = input.productVariantId ? query.eq("product_variant_id", input.productVariantId) : query.is("product_variant_id", null)
+
+  const result = await query.maybeSingle<{ id: string; quantity: number }>()
+  return result.data ?? null
+}
+
 export async function addCustomerBagItem(
   supabase: SupabaseClient,
   input: {
@@ -810,6 +843,222 @@ export async function replaceCustomerBagItem(
   }
 
   return addResult
+}
+
+// Uber-Eats-style multi-configuration add: the customer can build several distinct
+// quantity+modifier combinations for the same product/variant in one sheet visit (e.g. "2 sin
+// cebolla" + "1 sin mostaza") and confirm them together. Each configuration becomes/merges into
+// its own customer_bag_items row via the ordinary addCustomerBagItem path -- no schema change,
+// since configuration_hash already lets the same product exist as multiple bag lines. If a later
+// configuration fails to save, every earlier configuration in this same call is rolled back in
+// reverse order so the bag never ends up with only part of what the customer asked for.
+export async function addCustomerBagItemConfigurations(
+  supabase: SupabaseClient,
+  input: {
+    readonly tenantSlug: string
+    readonly branchId: string
+    readonly customerId: string
+    readonly productId: string
+    readonly productVariantId?: string | null
+    readonly configurations: readonly ShoppingBagConfiguration[]
+  }
+): Promise<ShoppingBagConfigurationsMutationResult> {
+  const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
+
+  if (!context.ok) {
+    return context
+  }
+
+  const configurations = input.configurations.filter((configuration) => configuration.quantity > 0)
+
+  if (configurations.length === 0) {
+    return { ok: false, error: "Selecciona al menos una unidad para agregar." }
+  }
+
+  const rollbackSteps: Array<() => Promise<void>> = []
+  const items: ShoppingBagItem[] = []
+
+  for (const configuration of configurations) {
+    const preSnapshot = await peekBagItemByConfiguration(supabase, {
+      tenantId: context.tenantId,
+      branchId: input.branchId,
+      customerId: input.customerId,
+      productId: input.productId,
+      productVariantId: input.productVariantId,
+      configurationHash: buildConfigurationHash(configuration.modifierSelections),
+    })
+
+    const result = await addCustomerBagItem(supabase, {
+      tenantSlug: input.tenantSlug,
+      branchId: input.branchId,
+      customerId: input.customerId,
+      productId: input.productId,
+      productVariantId: input.productVariantId,
+      quantity: configuration.quantity,
+      modifierSelections: configuration.modifierSelections,
+    })
+
+    if (!result.ok || !result.item) {
+      for (const rollback of rollbackSteps.reverse()) {
+        await rollback()
+      }
+
+      return { ok: false, error: result.error ?? "No pudimos guardar una de las combinaciones." }
+    }
+
+    const resultItemId = result.item.id
+    rollbackSteps.push(async () => {
+      if (preSnapshot) {
+        await supabase.from("customer_bag_items").update({ quantity: preSnapshot.quantity }).eq("id", preSnapshot.id)
+      } else {
+        await supabase.from("customer_bag_items").delete().eq("id", resultItemId)
+      }
+    })
+
+    items.push(result.item)
+  }
+
+  return { ok: true, items }
+}
+
+// Edit-flow counterpart to addCustomerBagItemConfigurations. Rather than special-casing "the
+// first configuration keeps the original row" (which would need to handle replaceCustomerBagItem
+// possibly moving that row to a different id internally), this always removes the original line
+// first and rebuilds every configuration -- including an unchanged one -- through the same
+// addCustomerBagItemConfigurations-style loop. That keeps rollback uniform: if anything fails,
+// every completed step (including the delete) is undone in reverse, ending with the original row
+// restored byte-for-byte from its snapshot.
+export async function replaceCustomerBagItemConfigurations(
+  supabase: SupabaseClient,
+  input: {
+    readonly bagItemId: string
+    readonly tenantSlug: string
+    readonly branchId: string
+    readonly customerId: string
+    readonly productId: string
+    readonly productVariantId?: string | null
+    readonly configurations: readonly ShoppingBagConfiguration[]
+  }
+): Promise<ShoppingBagConfigurationsMutationResult> {
+  const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
+
+  if (!context.ok) {
+    return context
+  }
+
+  const originalSnapshotResult = await supabase
+    .from("customer_bag_items")
+    .select("id, product_id, product_variant_id, quantity, configuration_hash")
+    .eq("id", input.bagItemId)
+    .eq("customer_id", input.customerId)
+    .eq("tenant_id", context.tenantId)
+    .limit(1)
+    .maybeSingle<CustomerBagItemRow>()
+
+  if (originalSnapshotResult.error || !originalSnapshotResult.data) {
+    return { ok: false, error: "No encontramos el item original de la bolsa." }
+  }
+
+  const originalModifiersResult = await supabase
+    .from("customer_bag_item_modifiers")
+    .select("modifier_group_id, modifier_option_id, price_delta_snapshot")
+    .eq("customer_bag_item_id", input.bagItemId)
+    .returns<CustomerBagItemModifierSnapshotRow[]>()
+
+  if (originalModifiersResult.error) {
+    return { ok: false, error: originalModifiersResult.error.message }
+  }
+
+  const originalSnapshot = originalSnapshotResult.data
+  const originalModifierRows = originalModifiersResult.data ?? []
+  const configurations = input.configurations.filter((configuration) => configuration.quantity > 0)
+
+  const removeResult = await removeCustomerBagItem(supabase, {
+    bagItemId: input.bagItemId,
+    tenantSlug: input.tenantSlug,
+    branchId: input.branchId,
+    customerId: input.customerId,
+    productId: input.productId,
+    productVariantId: input.productVariantId,
+  })
+
+  if (!removeResult.ok) {
+    return removeResult
+  }
+
+  const rollbackSteps: Array<() => Promise<void>> = [
+    async () => {
+      await supabase.from("customer_bag_items").insert({
+        id: originalSnapshot.id,
+        customer_id: input.customerId,
+        tenant_id: context.tenantId,
+        branch_id: input.branchId,
+        product_id: originalSnapshot.product_id,
+        product_variant_id: originalSnapshot.product_variant_id,
+        configuration_hash: originalSnapshot.configuration_hash,
+        quantity: originalSnapshot.quantity,
+      })
+
+      if (originalModifierRows.length > 0) {
+        await supabase.from("customer_bag_item_modifiers").insert(
+          originalModifierRows.map((row) => ({
+            customer_bag_item_id: originalSnapshot.id,
+            modifier_group_id: row.modifier_group_id,
+            modifier_option_id: row.modifier_option_id,
+            price_delta_snapshot: row.price_delta_snapshot,
+          }))
+        )
+      }
+    },
+  ]
+
+  if (configurations.length === 0) {
+    return { ok: true, items: [] }
+  }
+
+  const items: ShoppingBagItem[] = []
+
+  for (const configuration of configurations) {
+    const preSnapshot = await peekBagItemByConfiguration(supabase, {
+      tenantId: context.tenantId,
+      branchId: input.branchId,
+      customerId: input.customerId,
+      productId: input.productId,
+      productVariantId: input.productVariantId,
+      configurationHash: buildConfigurationHash(configuration.modifierSelections),
+    })
+
+    const result = await addCustomerBagItem(supabase, {
+      tenantSlug: input.tenantSlug,
+      branchId: input.branchId,
+      customerId: input.customerId,
+      productId: input.productId,
+      productVariantId: input.productVariantId,
+      quantity: configuration.quantity,
+      modifierSelections: configuration.modifierSelections,
+    })
+
+    if (!result.ok || !result.item) {
+      for (const rollback of rollbackSteps.reverse()) {
+        await rollback()
+      }
+
+      return { ok: false, error: result.error ?? "No pudimos guardar una de las combinaciones." }
+    }
+
+    const resultItemId = result.item.id
+    rollbackSteps.push(async () => {
+      if (preSnapshot) {
+        await supabase.from("customer_bag_items").update({ quantity: preSnapshot.quantity }).eq("id", preSnapshot.id)
+      } else {
+        await supabase.from("customer_bag_items").delete().eq("id", resultItemId)
+      }
+    })
+
+    items.push(result.item)
+  }
+
+  return { ok: true, items }
 }
 
 export async function decrementCustomerBagItem(
