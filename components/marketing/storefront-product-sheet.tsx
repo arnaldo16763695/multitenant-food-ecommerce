@@ -244,7 +244,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
           productId: product.id,
           productVariantId: selectedVariant?.id ?? null,
           baseQuantity: baseSplitQuantity,
-          baseModifierSelections,
+          baseModifierSelections: baselineModifierSelections,
           customQuantity,
           customModifierSelections: modifierSelections,
         })
@@ -285,7 +285,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
         productId: product.id,
         productVariantId: selectedVariant?.id ?? null,
         baseQuantity: baseSplitQuantity,
-        baseModifierSelections,
+        baseModifierSelections: baselineModifierSelections,
         customQuantity,
         customModifierSelections: modifierSelections,
       })
