@@ -31,34 +31,3 @@ export function formatModifierSelectionLabel(selection: DisplayableModifierSelec
 
   return `${formatModifierGroupTitle(selection.modifierGroupName, selection.modifierKind)}: ${selection.modifierOptionName}`
 }
-
-type IdentifiableModifierSelection = DisplayableModifierSelection & {
-  readonly modifierGroupId: string
-  readonly modifierOptionId: string
-}
-
-function modifierSelectionKey(selection: IdentifiableModifierSelection) {
-  return `${selection.modifierGroupId}:${selection.modifierOptionId}`
-}
-
-// Used by the bag-split prompt to phrase its question around the one modifier the customer just
-// touched (e.g. `Sin cebolla`) instead of generic copy. Returns a label only when exactly one
-// selection differs from the baseline -- if the customer changed multiple modifiers at once, the
-// caller should fall back to generic "tu personalización" copy rather than naming just one of them.
-export function describeModifierSelectionChange(
-  baselineSelections: readonly IdentifiableModifierSelection[],
-  currentSelections: readonly IdentifiableModifierSelection[]
-): string | null {
-  const baselineKeys = new Set(baselineSelections.map(modifierSelectionKey))
-  const currentKeys = new Set(currentSelections.map(modifierSelectionKey))
-
-  const added = currentSelections.filter((selection) => !baselineKeys.has(modifierSelectionKey(selection)))
-  const removed = baselineSelections.filter((selection) => !currentKeys.has(modifierSelectionKey(selection)))
-  const changed = [...added, ...removed]
-
-  if (changed.length !== 1) {
-    return null
-  }
-
-  return formatModifierSelectionLabel(changed[0])
-}

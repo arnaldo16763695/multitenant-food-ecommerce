@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult, ShoppingBagSplitMutationResult } from "@/lib/domain/bag"
+import type { ShoppingBagItem, ShoppingBagModifierSelection, ShoppingBagMutationResult } from "@/lib/domain/bag"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 
 type TenantRow = {
@@ -31,12 +31,6 @@ type CustomerBagItemModifierRow = {
     id: string
     name: string
   } | null
-}
-
-type CustomerBagItemModifierSnapshotRow = {
-  modifier_group_id: string
-  modifier_option_id: string
-  price_delta_snapshot: number
 }
 
 type ProductRow = {
@@ -492,33 +486,6 @@ export async function getCustomerBagItems(
   })
 }
 
-async function peekBagItemByConfiguration(
-  supabase: SupabaseClient,
-  input: {
-    readonly tenantId: string
-    readonly branchId: string
-    readonly customerId: string
-    readonly productId: string
-    readonly productVariantId?: string | null
-    readonly configurationHash: string
-  }
-): Promise<{ id: string; quantity: number } | null> {
-  let query = supabase
-    .from("customer_bag_items")
-    .select("id, quantity")
-    .eq("customer_id", input.customerId)
-    .eq("tenant_id", input.tenantId)
-    .eq("branch_id", input.branchId)
-    .eq("product_id", input.productId)
-    .eq("configuration_hash", input.configurationHash)
-    .limit(1)
-
-  query = input.productVariantId ? query.eq("product_variant_id", input.productVariantId) : query.is("product_variant_id", null)
-
-  const result = await query.maybeSingle<{ id: string; quantity: number }>()
-  return result.data ?? null
-}
-
 export async function addCustomerBagItem(
   supabase: SupabaseClient,
   input: {
@@ -683,79 +650,6 @@ export async function addCustomerBagItem(
   }
 }
 
-// Splits one "add to bag" action into two independent bag lines when the customer only wants a
-// modifier customization applied to some of the units they're adding (e.g. 1 of 3 "sin cebolla").
-// Both lines are created via the ordinary addCustomerBagItem path -- no new schema or RPC needed,
-// since distinct modifier configurations already live as distinct customer_bag_items rows
-// (unique on configuration_hash). If the second insert fails, the first is rolled back explicitly
-// so the customer never ends up with extra base-config quantity but no record of the customization
-// they asked for.
-export async function addCustomerBagItemSplit(
-  supabase: SupabaseClient,
-  input: {
-    readonly tenantSlug: string
-    readonly branchId: string
-    readonly customerId: string
-    readonly productId: string
-    readonly productVariantId?: string | null
-    readonly baseQuantity: number
-    readonly baseModifierSelections: readonly ShoppingBagModifierSelection[]
-    readonly customQuantity: number
-    readonly customModifierSelections: readonly ShoppingBagModifierSelection[]
-  }
-): Promise<ShoppingBagSplitMutationResult> {
-  const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
-
-  if (!context.ok) {
-    return context
-  }
-
-  const baseSnapshot = await peekBagItemByConfiguration(supabase, {
-    tenantId: context.tenantId,
-    branchId: input.branchId,
-    customerId: input.customerId,
-    productId: input.productId,
-    productVariantId: input.productVariantId,
-    configurationHash: buildConfigurationHash(input.baseModifierSelections),
-  })
-
-  const baseResult = await addCustomerBagItem(supabase, {
-    tenantSlug: input.tenantSlug,
-    branchId: input.branchId,
-    customerId: input.customerId,
-    productId: input.productId,
-    productVariantId: input.productVariantId,
-    quantity: input.baseQuantity,
-    modifierSelections: input.baseModifierSelections,
-  })
-
-  if (!baseResult.ok || !baseResult.item) {
-    return baseResult
-  }
-
-  const customResult = await addCustomerBagItem(supabase, {
-    tenantSlug: input.tenantSlug,
-    branchId: input.branchId,
-    customerId: input.customerId,
-    productId: input.productId,
-    productVariantId: input.productVariantId,
-    quantity: input.customQuantity,
-    modifierSelections: input.customModifierSelections,
-  })
-
-  if (!customResult.ok || !customResult.item) {
-    if (baseSnapshot) {
-      await supabase.from("customer_bag_items").update({ quantity: baseSnapshot.quantity }).eq("id", baseSnapshot.id)
-    } else {
-      await supabase.from("customer_bag_items").delete().eq("id", baseResult.item.id)
-    }
-
-    return { ok: false, error: customResult.error ?? "No pudimos guardar la personalización de una unidad." }
-  }
-
-  return { ok: true, baseItem: baseResult.item, customItem: customResult.item }
-}
-
 export async function replaceCustomerBagItem(
   supabase: SupabaseClient,
   input: {
@@ -916,107 +810,6 @@ export async function replaceCustomerBagItem(
   }
 
   return addResult
-}
-
-// Edit-flow counterpart to addCustomerBagItemSplit: shrinks the existing bag line back to its
-// original configuration at a reduced quantity, then adds the customized units as a new line.
-// Rolls back the shrink (quantity + modifier rows) if the second step fails, so a failed split
-// never leaves the original line silently smaller with the customization lost.
-export async function replaceCustomerBagItemSplit(
-  supabase: SupabaseClient,
-  input: {
-    readonly bagItemId: string
-    readonly tenantSlug: string
-    readonly branchId: string
-    readonly customerId: string
-    readonly productId: string
-    readonly productVariantId?: string | null
-    readonly baseQuantity: number
-    readonly baseModifierSelections: readonly ShoppingBagModifierSelection[]
-    readonly customQuantity: number
-    readonly customModifierSelections: readonly ShoppingBagModifierSelection[]
-  }
-): Promise<ShoppingBagSplitMutationResult> {
-  const context = await resolveBranchContext(supabase, input.tenantSlug, input.branchId)
-
-  if (!context.ok) {
-    return context
-  }
-
-  const originalSnapshotResult = await supabase
-    .from("customer_bag_items")
-    .select("id, quantity, configuration_hash")
-    .eq("id", input.bagItemId)
-    .eq("customer_id", input.customerId)
-    .limit(1)
-    .maybeSingle<CustomerBagItemRow>()
-
-  if (originalSnapshotResult.error || !originalSnapshotResult.data) {
-    return { ok: false, error: "No encontramos el item original de la bolsa." }
-  }
-
-  const originalModifiersResult = await supabase
-    .from("customer_bag_item_modifiers")
-    .select("modifier_group_id, modifier_option_id, price_delta_snapshot")
-    .eq("customer_bag_item_id", input.bagItemId)
-    .returns<CustomerBagItemModifierSnapshotRow[]>()
-
-  if (originalModifiersResult.error) {
-    return { ok: false, error: originalModifiersResult.error.message }
-  }
-
-  const originalSnapshot = originalSnapshotResult.data
-  const originalModifierRows = originalModifiersResult.data ?? []
-
-  const replaceResult = await replaceCustomerBagItem(supabase, {
-    bagItemId: input.bagItemId,
-    tenantSlug: input.tenantSlug,
-    branchId: input.branchId,
-    customerId: input.customerId,
-    productId: input.productId,
-    productVariantId: input.productVariantId,
-    quantity: input.baseQuantity,
-    modifierSelections: input.baseModifierSelections,
-  })
-
-  if (!replaceResult.ok || !replaceResult.item) {
-    return replaceResult
-  }
-
-  const addResult = await addCustomerBagItem(supabase, {
-    tenantSlug: input.tenantSlug,
-    branchId: input.branchId,
-    customerId: input.customerId,
-    productId: input.productId,
-    productVariantId: input.productVariantId,
-    quantity: input.customQuantity,
-    modifierSelections: input.customModifierSelections,
-    excludeBagItemId: input.bagItemId,
-  })
-
-  if (!addResult.ok || !addResult.item) {
-    await supabase
-      .from("customer_bag_items")
-      .update({ quantity: originalSnapshot.quantity, configuration_hash: originalSnapshot.configuration_hash })
-      .eq("id", input.bagItemId)
-
-    await supabase.from("customer_bag_item_modifiers").delete().eq("customer_bag_item_id", input.bagItemId)
-
-    if (originalModifierRows.length > 0) {
-      await supabase.from("customer_bag_item_modifiers").insert(
-        originalModifierRows.map((row) => ({
-          customer_bag_item_id: input.bagItemId,
-          modifier_group_id: row.modifier_group_id,
-          modifier_option_id: row.modifier_option_id,
-          price_delta_snapshot: row.price_delta_snapshot,
-        }))
-      )
-    }
-
-    return { ok: false, error: addResult.error ?? "No pudimos guardar la personalización de una unidad." }
-  }
-
-  return { ok: true, baseItem: replaceResult.item, customItem: addResult.item }
 }
 
 export async function decrementCustomerBagItem(

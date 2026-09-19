@@ -10,10 +10,9 @@ import {
   decrementCustomerBagItemAction,
   removeCustomerBagItemAction,
   replaceCustomerBagItemAction,
-  replaceCustomerBagItemSplitAction,
 } from "@/app/app/[tenantSlug]/bag/actions"
 import type { CustomerAccountContext } from "@/lib/auth/customer"
-import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
+import type { ShoppingBagItem } from "@/lib/domain/bag"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { StorefrontProductSheet } from "@/components/marketing/storefront-product-sheet"
 import { Button } from "@/components/ui/button"
@@ -221,82 +220,6 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
     })
   }
 
-  async function handleSplitItem(input: {
-    readonly originalItemId: string
-    readonly productId: string
-    readonly productVariantId: string | null
-    readonly baseQuantity: number
-    readonly baseModifierSelections: readonly ShoppingBagModifierSelection[]
-    readonly customQuantity: number
-    readonly customModifierSelections: readonly ShoppingBagModifierSelection[]
-  }) {
-    const currentItem = items.find((item) => item.id === input.originalItemId)
-
-    if (!currentItem) {
-      return
-    }
-
-    // The original item's unitPrice already bakes in its own modifierSelections' priceDelta --
-    // strip that out to get the plain per-unit base price, then reapply each split's own deltas
-    // so the optimistic rows show a price close to what the server will confirm.
-    const baseUnitPrice = currentItem.unitPrice - currentItem.modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)
-    const computeUnitPrice = (selections: readonly ShoppingBagModifierSelection[]) =>
-      Number((baseUnitPrice + selections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
-
-    const optimisticBaseUnitPrice = computeUnitPrice(input.baseModifierSelections)
-    const optimisticCustomUnitPrice = computeUnitPrice(input.customModifierSelections)
-    const optimisticCustomId = `optimistic-split-${crypto.randomUUID()}`
-
-    upsertItem({
-      ...currentItem,
-      quantity: input.baseQuantity,
-      modifierSelections: input.baseModifierSelections,
-      unitPrice: optimisticBaseUnitPrice,
-      unitPriceLabel: `$ ${optimisticBaseUnitPrice.toFixed(2)}`,
-    })
-    upsertItem({
-      ...currentItem,
-      id: optimisticCustomId,
-      quantity: input.customQuantity,
-      modifierSelections: input.customModifierSelections,
-      unitPrice: optimisticCustomUnitPrice,
-      unitPriceLabel: `$ ${optimisticCustomUnitPrice.toFixed(2)}`,
-    })
-    setEditingItemId(null)
-
-    const result = await replaceCustomerBagItemSplitAction({
-      bagItemId: input.originalItemId,
-      tenantSlug,
-      branchId: activeBranchId,
-      productId: input.productId,
-      productVariantId: input.productVariantId,
-      baseQuantity: input.baseQuantity,
-      baseModifierSelections: input.baseModifierSelections,
-      customQuantity: input.customQuantity,
-      customModifierSelections: input.customModifierSelections,
-    })
-
-    if (!result.ok || !result.baseItem || !result.customItem) {
-      upsertItem(currentItem)
-      removeItem(optimisticCustomId, tenantSlug, activeBranchId)
-      pushToast({
-        title: "No pudimos dividir la personalización",
-        description: result.error ?? "Intenta nuevamente.",
-        variant: "error",
-      })
-      return
-    }
-
-    removeItem(optimisticCustomId, tenantSlug, activeBranchId)
-    upsertItem(result.baseItem)
-    upsertItem(result.customItem)
-    pushToast({
-      title: "Personalización aplicada",
-      description: `${result.customItem.quantity} unidad personalizada agregada`,
-      variant: "success",
-    })
-  }
-
   return (
     <main className="relative isolate flex flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.16),_transparent_26%),linear-gradient(180deg,_#fffaf2_0%,_#fff4e6_40%,_#fffdfa_100%)]">
       <div className="pointer-events-none absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(120,53,15,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(120,53,15,0.07)_1px,transparent_1px)] [background-size:48px_48px]" />
@@ -445,7 +368,6 @@ export function StorefrontBagView({ tenantSlug, branchId, branchLabel, customerS
             open={Boolean(editingItemId)}
             onOpenChange={(nextOpen) => setEditingItemId(nextOpen ? editingItem.id : null)}
             onItemAdded={handleReplaceItem}
-            onItemSplit={handleSplitItem}
             initialItem={editingItem}
             submitLabel="Guardar cambios"
             branchOperationalStatus={branchOperationalStatus}
