@@ -90,6 +90,10 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
   const searchParams = useSearchParams()
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const [sheetProductId, setSheetProductId] = React.useState<string | null>(null)
+  // Keyed by product id so the sheet's "fly to bag" animation can start from the actual menu
+  // card behind it (still visible/mounted while the sheet is open) instead of a copy of the
+  // sheet's own image, which disappears the instant the sheet closes.
+  const cardImageRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
   useHydrateShoppingBagBranch(tenantSlug, branchId, initialBagItems)
   const storefrontHref = branchId ? `/app/${tenantSlug}?branch=${branchId}` : `/app/${tenantSlug}`
   const loginHref = React.useMemo(
@@ -233,7 +237,16 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
             key={item.id}
             className="group flex h-full flex-col rounded-[1.35rem] border border-stone-200 bg-white p-3 shadow-[0_12px_32px_rgba(28,25,23,0.06)] transition hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(28,25,23,0.1)] sm:rounded-[1.7rem] sm:p-5"
           >
-            <div className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-[1rem] border border-stone-200 bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.18),_transparent_38%),linear-gradient(180deg,_#f5f5f4_0%,_#fafaf9_100%)] p-2.5 sm:mb-4 sm:aspect-[5/4] sm:rounded-[1.35rem] sm:p-4">
+            <div
+              ref={(el) => {
+                if (el) {
+                  cardImageRefs.current.set(item.id, el)
+                } else {
+                  cardImageRefs.current.delete(item.id)
+                }
+              }}
+              className="mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-[1rem] border border-stone-200 bg-[radial-gradient(circle_at_top,_rgba(251,146,60,0.18),_transparent_38%),linear-gradient(180deg,_#f5f5f4_0%,_#fafaf9_100%)] p-2.5 sm:mb-4 sm:aspect-[5/4] sm:rounded-[1.35rem] sm:p-4"
+            >
               {item.imageUrl ? (
                 <Image
                   alt={item.name}
@@ -310,6 +323,7 @@ export function StorefrontMenuGrid({ tenantSlug, branchId, menu, customerSession
           open={Boolean(sheetProductId)}
           onOpenChange={(nextOpen) => setSheetProductId(nextOpen ? sheetProduct.id : null)}
           onItemAdded={upsertItem}
+          getFlySourceElement={() => cardImageRefs.current.get(sheetProduct.id) ?? null}
           branchOperationalStatus={branchOperationalStatus}
         />
       ) : null}

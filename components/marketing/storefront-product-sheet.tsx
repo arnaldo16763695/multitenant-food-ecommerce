@@ -62,6 +62,12 @@ type StorefrontProductSheetProps = {
   }) => void | Promise<void>
   readonly initialItem?: ShoppingBagItem | null
   readonly submitLabel?: string
+  // Resolves the still-visible menu card behind the sheet -- used as the start point for the
+  // "fly to bag" animation on confirm so the customer sees the actual card travel to the bag
+  // icon, rather than a copy of the sheet's own (about to disappear) product image. A getter
+  // (called from the confirm handler, not render) since refs can't be read during render.
+  // Falls back to the sheet's own image when not provided (e.g. no grid card in this context).
+  readonly getFlySourceElement?: () => HTMLElement | null
   readonly branchOperationalStatus?: {
     readonly acceptingOrders: boolean
     readonly closureLabel: string | null
@@ -80,7 +86,7 @@ type PendingConfiguration = {
   readonly modifierSelections: readonly ShoppingBagModifierSelection[]
 }
 
-export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, onConfigurationsReplaced, initialItem = null, submitLabel = "Confirmar y agregar", branchOperationalStatus = null }: StorefrontProductSheetProps) {
+export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, onConfigurationsReplaced, initialItem = null, submitLabel = "Confirmar y agregar", getFlySourceElement, branchOperationalStatus = null }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const pushToast = useToastStore((state) => state.pushToast)
@@ -262,10 +268,14 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       return
     }
 
-    // Capture the flight before closing the sheet -- the clone lives in a fixed body-level
-    // node, so it keeps animating on top of the sheet's own closing transition underneath it.
-    if (imageContainerRef.current) {
-      flyProductToBag(imageContainerRef.current, product.imageUrl)
+    // Prefer the still-visible menu card behind the sheet as the flight's start point -- the
+    // clone lives in a fixed body-level node, so it keeps animating on top of the sheet's own
+    // closing transition and reads as "the card itself travels to the bag" as the sheet slides
+    // away underneath it, rather than a copy of the sheet's own (about to disappear) image.
+    const flySource = getFlySourceElement?.() ?? imageContainerRef.current
+
+    if (flySource) {
+      flyProductToBag(flySource, product.imageUrl)
     }
 
     const optimisticItems = configurations.map((configuration) =>
