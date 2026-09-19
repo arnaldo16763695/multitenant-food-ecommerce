@@ -30,3 +30,10 @@ export type ShoppingBagMutationResult = {
   readonly item?: ShoppingBagItem
   readonly quantity?: number
 }
+
+export type ShoppingBagSplitMutationResult = {
+  readonly ok: boolean
+  readonly error?: string
+  readonly baseItem?: ShoppingBagItem
+  readonly customItem?: ShoppingBagItem
+}

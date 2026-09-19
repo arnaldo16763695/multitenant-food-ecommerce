@@ -4,10 +4,10 @@ import * as React from "react"
 import Image from "next/image"
 import { Minus, Plus, ShoppingBag } from "lucide-react"
 
-import { addCustomerBagItemAction } from "@/app/app/[tenantSlug]/bag/actions"
+import { addCustomerBagItemAction, addCustomerBagItemSplitAction } from "@/app/app/[tenantSlug]/bag/actions"
 import type { ShoppingBagItem, ShoppingBagModifierSelection } from "@/lib/domain/bag"
 import { flyProductToBag } from "@/lib/storefront/fly-to-bag"
-import { formatExclusionAction, formatModifierGroupTitle, isExclusionGroup } from "@/lib/storefront/modifier-display"
+import { describeModifierSelectionChange, formatExclusionAction, formatModifierGroupTitle, isExclusionGroup } from "@/lib/storefront/modifier-display"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useShoppingBagStore } from "@/lib/storefront/bag-store"
@@ -54,6 +54,15 @@ type StorefrontProductSheetProps = {
   readonly open: boolean
   readonly onOpenChange: (nextOpen: boolean) => void
   readonly onItemAdded: (item: ShoppingBagItem) => void | Promise<void>
+  readonly onItemSplit?: (input: {
+    readonly originalItemId: string
+    readonly productId: string
+    readonly productVariantId: string | null
+    readonly baseQuantity: number
+    readonly baseModifierSelections: readonly ShoppingBagModifierSelection[]
+    readonly customQuantity: number
+    readonly customModifierSelections: readonly ShoppingBagModifierSelection[]
+  }) => void | Promise<void>
   readonly initialItem?: ShoppingBagItem | null
   readonly submitLabel?: string
   readonly branchOperationalStatus?: {
@@ -68,7 +77,28 @@ function parsePriceLabel(value: string) {
   return Number.isFinite(numericValue) ? Number(numericValue.toFixed(2)) : 0
 }
 
-export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, initialItem = null, submitLabel = "Confirmar y agregar", branchOperationalStatus = null }: StorefrontProductSheetProps) {
+function mapOptionsByGroupToModifierSelections(
+  optionsByGroup: Record<string, string[]>,
+  modifierGroups: StorefrontProductSheetProps["product"]["modifierGroups"]
+): readonly ShoppingBagModifierSelection[] {
+  return modifierGroups.flatMap((group) => {
+    const selectedOptionIds = optionsByGroup[group.id] ?? []
+
+    return group.options
+      .filter((option) => selectedOptionIds.includes(option.id))
+      .map((option) => ({
+        modifierGroupId: group.id,
+        modifierGroupName: group.name,
+        modifierKind: group.modifierKind,
+        modifierOptionId: option.id,
+        modifierOptionName: option.name,
+        priceDelta: option.priceDelta,
+        priceDeltaLabel: option.priceDeltaLabel,
+      }))
+  })
+}
+
+export function StorefrontProductSheet({ tenantSlug, branchId, product, open, onOpenChange, onItemAdded, onItemSplit, initialItem = null, submitLabel = "Confirmar y agregar", branchOperationalStatus = null }: StorefrontProductSheetProps) {
   const upsertItem = useShoppingBagStore((state) => state.upsertItem)
   const removeItem = useShoppingBagStore((state) => state.removeItem)
   const pushToast = useToastStore((state) => state.pushToast)
@@ -76,6 +106,8 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
   const [selectedVariantId, setSelectedVariantId] = React.useState(defaultVariant?.id ?? "")
   const [quantity, setQuantity] = React.useState(1)
   const [selectedOptionsByGroup, setSelectedOptionsByGroup] = React.useState<Record<string, string[]>>({})
+  const [baselineOptionsByGroup, setBaselineOptionsByGroup] = React.useState<Record<string, string[]>>({})
+  const [customQuantity, setCustomQuantity] = React.useState(1)
   const [errorMessage, setErrorMessage] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const imageContainerRef = React.useRef<HTMLDivElement>(null)
@@ -84,49 +116,66 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     if (open) {
       setSelectedVariantId(initialItem?.productVariantId ?? defaultVariant?.id ?? "")
       setQuantity(initialItem?.quantity ?? 1)
-      setSelectedOptionsByGroup(
-        initialItem
-          ? initialItem.modifierSelections.reduce<Record<string, string[]>>((map, selection) => {
-              const currentSelections = map[selection.modifierGroupId] ?? []
-              return {
-                ...map,
-                [selection.modifierGroupId]: [...currentSelections, selection.modifierOptionId],
-              }
-            }, {})
-          : {}
-      )
+      const optionsByGroup = initialItem
+        ? initialItem.modifierSelections.reduce<Record<string, string[]>>((map, selection) => {
+            const currentSelections = map[selection.modifierGroupId] ?? []
+            return {
+              ...map,
+              [selection.modifierGroupId]: [...currentSelections, selection.modifierOptionId],
+            }
+          }, {})
+        : {}
+      setSelectedOptionsByGroup(optionsByGroup)
+      setBaselineOptionsByGroup(optionsByGroup)
+      setCustomQuantity(1)
       setErrorMessage("")
     }
   }, [defaultVariant?.id, initialItem, open])
 
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId) ?? defaultVariant
-  const modifierSelections = React.useMemo<readonly ShoppingBagModifierSelection[]>(() => {
-    return product.modifierGroups.flatMap((group) => {
-      const selectedOptionIds = selectedOptionsByGroup[group.id] ?? []
+  const modifierSelections = React.useMemo(
+    () => mapOptionsByGroupToModifierSelections(selectedOptionsByGroup, product.modifierGroups),
+    [product.modifierGroups, selectedOptionsByGroup]
+  )
+  const baselineModifierSelections = React.useMemo(
+    () => mapOptionsByGroupToModifierSelections(baselineOptionsByGroup, product.modifierGroups),
+    [product.modifierGroups, baselineOptionsByGroup]
+  )
+  const hasCustomization = React.useMemo(() => {
+    const groupIds = new Set([...Object.keys(selectedOptionsByGroup), ...Object.keys(baselineOptionsByGroup)])
 
-      return group.options
-        .filter((option) => selectedOptionIds.includes(option.id))
-        .map((option) => ({
-          modifierGroupId: group.id,
-          modifierGroupName: group.name,
-          modifierKind: group.modifierKind,
-          modifierOptionId: option.id,
-          modifierOptionName: option.name,
-          priceDelta: option.priceDelta,
-          priceDeltaLabel: option.priceDeltaLabel,
-        }))
+    return [...groupIds].some((groupId) => {
+      const current = [...(selectedOptionsByGroup[groupId] ?? [])].sort()
+      const baseline = [...(baselineOptionsByGroup[groupId] ?? [])].sort()
+      return current.length !== baseline.length || current.some((optionId, index) => optionId !== baseline[index])
     })
-  }, [product.modifierGroups, selectedOptionsByGroup])
+  }, [selectedOptionsByGroup, baselineOptionsByGroup])
+  const isSplitPromptVisible = hasCustomization && quantity > 1
+  const isSplitting = isSplitPromptVisible && customQuantity < quantity
+  const modifierChangeLabel = isSplitPromptVisible ? describeModifierSelectionChange(baselineModifierSelections, modifierSelections) : null
+
+  // Reset to the conservative default (1) whenever the prompt newly appears or disappears --
+  // otherwise a stale value from a previous customization could linger across an undo/redo.
+  React.useEffect(() => {
+    setCustomQuantity(1)
+  }, [isSplitPromptVisible])
+
+  // Keep the stepper's value valid if the customer lowers the overall quantity below it.
+  React.useEffect(() => {
+    setCustomQuantity((current) => Math.min(current, quantity))
+  }, [quantity])
+
   const totalLabel = React.useMemo(
     () => `$ ${((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)) * quantity).toFixed(2)}`,
     [modifierSelections, product.basePrice, quantity, selectedVariant?.basePrice]
   )
 
-  function buildOptimisticItem() {
-    const unitPrice = Number((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + modifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
+  function buildOptimisticItem(overrides?: { id?: string; quantity?: number; modifierSelections?: readonly ShoppingBagModifierSelection[] }) {
+    const activeModifierSelections = overrides?.modifierSelections ?? modifierSelections
+    const unitPrice = Number((parsePriceLabel(selectedVariant?.basePrice ?? product.basePrice) + activeModifierSelections.reduce((total, selection) => total + selection.priceDelta, 0)).toFixed(2))
 
     return {
-      id: initialItem?.id ?? `optimistic-${crypto.randomUUID()}`,
+      id: overrides?.id ?? initialItem?.id ?? `optimistic-${crypto.randomUUID()}`,
       productId: product.id,
       productVariantId: selectedVariant?.id ?? null,
       variantName: selectedVariant?.name ?? null,
@@ -137,8 +186,8 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       category: product.category,
       unitPrice,
       unitPriceLabel: `$ ${unitPrice.toFixed(2)}`,
-      quantity,
-      modifierSelections,
+      quantity: overrides?.quantity ?? quantity,
+      modifierSelections: activeModifierSelections,
     } satisfies ShoppingBagItem
   }
 
@@ -183,11 +232,26 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     }
 
     const optimisticItem = buildOptimisticItem()
+    const baseSplitQuantity = quantity - customQuantity
 
     if (initialItem) {
       setIsSubmitting(true)
       setErrorMessage("")
-      await onItemAdded(optimisticItem)
+
+      if (isSplitting && onItemSplit) {
+        await onItemSplit({
+          originalItemId: initialItem.id,
+          productId: product.id,
+          productVariantId: selectedVariant?.id ?? null,
+          baseQuantity: baseSplitQuantity,
+          baseModifierSelections,
+          customQuantity,
+          customModifierSelections: modifierSelections,
+        })
+      } else {
+        await onItemAdded(optimisticItem)
+      }
+
       setIsSubmitting(false)
       return
     }
@@ -198,16 +262,66 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
       flyProductToBag(imageContainerRef.current, product.imageUrl)
     }
 
+    if (isSplitting) {
+      const optimisticBaseItem = buildOptimisticItem({ id: `optimistic-${crypto.randomUUID()}`, quantity: baseSplitQuantity, modifierSelections: baselineModifierSelections })
+      const optimisticCustomItem = buildOptimisticItem({ id: `optimistic-${crypto.randomUUID()}`, quantity: customQuantity, modifierSelections })
+
+      upsertItem(optimisticBaseItem)
+      upsertItem(optimisticCustomItem)
+      onItemAdded(optimisticBaseItem)
+      onItemAdded(optimisticCustomItem)
+      onOpenChange(false)
+      pushToast({
+        title: "Agregado a la bolsa",
+        description: `${quantity} x ${optimisticItem.name} (${customQuantity} personalizada${customQuantity === 1 ? "" : "s"})`,
+        variant: "success",
+      })
+      setIsSubmitting(true)
+      setErrorMessage("")
+
+      const splitResult = await addCustomerBagItemSplitAction({
+        tenantSlug,
+        branchId,
+        productId: product.id,
+        productVariantId: selectedVariant?.id ?? null,
+        baseQuantity: baseSplitQuantity,
+        baseModifierSelections,
+        customQuantity,
+        customModifierSelections: modifierSelections,
+      })
+
+      if (!splitResult.ok || !splitResult.baseItem || !splitResult.customItem) {
+        removeItem(optimisticBaseItem.id, tenantSlug, branchId)
+        removeItem(optimisticCustomItem.id, tenantSlug, branchId)
+        onOpenChange(true)
+        pushToast({
+          title: "No pudimos agregar el producto",
+          description: splitResult.error ?? "Intenta nuevamente.",
+          variant: "error",
+        })
+        setErrorMessage(splitResult.error ?? "No pudimos agregar este producto a la bolsa.")
+        setIsSubmitting(false)
+        return
+      }
+
+      removeItem(optimisticBaseItem.id, tenantSlug, branchId)
+      removeItem(optimisticCustomItem.id, tenantSlug, branchId)
+      upsertItem(splitResult.baseItem)
+      upsertItem(splitResult.customItem)
+      onItemAdded(splitResult.baseItem)
+      onItemAdded(splitResult.customItem)
+      setIsSubmitting(false)
+      return
+    }
+
     upsertItem(optimisticItem)
     onItemAdded(optimisticItem)
     onOpenChange(false)
-    if (!initialItem) {
-      pushToast({
-        title: "Agregado a la bolsa",
-        description: `${optimisticItem.quantity} x ${optimisticItem.name}`,
-        variant: "success",
-      })
-    }
+    pushToast({
+      title: "Agregado a la bolsa",
+      description: `${optimisticItem.quantity} x ${optimisticItem.name}`,
+      variant: "success",
+    })
     setIsSubmitting(true)
     setErrorMessage("")
 
@@ -221,11 +335,7 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
     })
 
     if (!result.ok || !result.item) {
-      if (initialItem) {
-        upsertItem(initialItem)
-      } else {
-        removeItem(optimisticItem.id, tenantSlug, branchId)
-      }
+      removeItem(optimisticItem.id, tenantSlug, branchId)
       onOpenChange(true)
       pushToast({
         title: "No pudimos agregar el producto",
@@ -378,6 +488,24 @@ export function StorefrontProductSheet({ tenantSlug, branchId, product, open, on
                   </div>
                 </div>
               ))}
+            </section>
+          ) : null}
+
+          {isSplitPromptVisible ? (
+            <section className="space-y-3 rounded-[1.4rem] border border-orange-200 bg-orange-50/70 p-4">
+              <p className="text-sm font-semibold text-stone-950">
+                {modifierChangeLabel ? `¿A cuántas de las ${quantity} unidades aplicar "${modifierChangeLabel}"?` : `¿A cuántas de las ${quantity} unidades aplicar tu personalización?`}
+              </p>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="outline" size="icon-sm" onClick={() => setCustomQuantity((current) => Math.max(current - 1, 1))}>
+                  <Minus />
+                </Button>
+                <span className="min-w-10 text-center text-lg font-semibold text-stone-950">{customQuantity}</span>
+                <Button type="button" variant="outline" size="icon-sm" onClick={() => setCustomQuantity((current) => Math.min(current + 1, quantity))}>
+                  <Plus />
+                </Button>
+              </div>
+              {customQuantity < quantity ? <p className="text-xs text-stone-600">Las otras {quantity - customQuantity} quedarán sin cambios.</p> : null}
             </section>
           ) : null}
 
