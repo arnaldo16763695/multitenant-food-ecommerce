@@ -37,7 +37,8 @@ export async function POST(request: Request, context: MobileCheckoutRouteContext
   const phone = String(formData.get("phone") ?? "")
   const email = String(formData.get("email") ?? "")
   const notes = String(formData.get("notes") ?? "")
-  const fulfillmentType = String(formData.get("fulfillmentType") ?? "pickup")
+  const rawFulfillmentType = String(formData.get("fulfillmentType") ?? "pickup")
+  const deliveryAddressId = String(formData.get("deliveryAddressId") ?? "").trim() || null
   const paymentMethod = String(formData.get("paymentMethod") ?? "")
   const paymentProofFile = formData.get("paymentProof")
   const itemsPayload = String(formData.get("items") ?? "[]")
@@ -46,9 +47,11 @@ export async function POST(request: Request, context: MobileCheckoutRouteContext
     return mobileError(400, "branchId is required.")
   }
 
-  if (fulfillmentType !== "pickup") {
-    return mobileError(400, "Por ahora el checkout solo admite pickup.")
+  if (rawFulfillmentType !== "pickup" && rawFulfillmentType !== "delivery") {
+    return mobileError(400, "El tipo de entrega enviado no es valido.")
   }
+
+  const fulfillmentType = rawFulfillmentType
 
   if (!isManualPaymentMethod(paymentMethod)) {
     return mobileError(400, "Selecciona un metodo de pago valido para continuar.")
@@ -78,7 +81,8 @@ export async function POST(request: Request, context: MobileCheckoutRouteContext
     tenantSlug,
     branchId,
     customerId: authResult.customerContext.customer.id,
-    fulfillmentType: "pickup",
+    fulfillmentType,
+    deliveryAddressId,
     items,
     customer: {
       fullName,

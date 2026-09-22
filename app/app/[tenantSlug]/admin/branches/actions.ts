@@ -48,7 +48,31 @@ function getBranchLocationConstraintMessage(errorMessage: string) {
     return "La longitud debe estar entre -180 y 180."
   }
 
+  if (errorMessage.includes("branches_delivery_fee_non_negative_check")) {
+    return "La tarifa de delivery no puede ser negativa."
+  }
+
+  if (errorMessage.includes("branches_delivery_radius_check")) {
+    return "Define un radio de entrega mayor a 0 km para activar delivery."
+  }
+
   return null
+}
+
+function parseNonNegativeNumber(value: FormDataEntryValue | null, label: string) {
+  const normalizedValue = String(value ?? "").trim()
+
+  if (!normalizedValue) {
+    return { ok: true as const, value: 0 }
+  }
+
+  const parsedValue = Number(normalizedValue)
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    return { ok: false as const, error: `${label} debe ser un número mayor o igual a 0.` }
+  }
+
+  return { ok: true as const, value: parsedValue }
 }
 
 function canManageBranchStorefront(role: string) {
@@ -80,7 +104,7 @@ export async function updateBranchStorefrontHeroAction(
 
   const branchResult = await adminClient
     .from("branches")
-    .select("id, tenant_id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
+    .select("id, tenant_id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude, delivery_enabled, delivery_fee, delivery_radius_km")
     .eq("id", branchId)
     .limit(1)
     .maybeSingle<{
@@ -95,6 +119,9 @@ export async function updateBranchStorefrontHeroAction(
       country_code: string | null
       latitude: number | null
       longitude: number | null
+      delivery_enabled: boolean
+      delivery_fee: number
+      delivery_radius_km: number | null
     }>()
 
   if (branchResult.error || !branchResult.data || branchResult.data.tenant_id !== access.membership.tenantId) {
@@ -145,6 +172,28 @@ export async function updateBranchStorefrontHeroAction(
     return { ok: false, error: "La longitud debe estar entre -180 y 180." }
   }
 
+  const deliveryEnabled = formData.get("deliveryEnabled") === "on"
+  const deliveryFeeResult = parseNonNegativeNumber(formData.get("deliveryFee"), "La tarifa de delivery")
+
+  if (!deliveryFeeResult.ok) {
+    return { ok: false, error: deliveryFeeResult.error }
+  }
+
+  // Radius is required exactly when delivery is enabled -- mirrors branches_delivery_radius_check,
+  // validated here first so the customer gets a clean Spanish message instead of a raw DB error.
+  let deliveryRadiusKm: number | null = null
+
+  if (deliveryEnabled) {
+    const rawRadius = String(formData.get("deliveryRadiusKm") ?? "").trim()
+    const parsedRadius = Number(rawRadius)
+
+    if (!rawRadius || !Number.isFinite(parsedRadius) || parsedRadius <= 0) {
+      return { ok: false, error: "Define un radio de entrega mayor a 0 km para activar delivery." }
+    }
+
+    deliveryRadiusKm = parsedRadius
+  }
+
   if (heroImageUrl) {
     try {
       const parsedUrl = new URL(heroImageUrl)
@@ -168,6 +217,9 @@ export async function updateBranchStorefrontHeroAction(
       country_code: countryCode || null,
       latitude: latitudeResult.value,
       longitude: longitudeResult.value,
+      delivery_enabled: deliveryEnabled,
+      delivery_fee: deliveryFeeResult.value,
+      delivery_radius_km: deliveryRadiusKm,
     })
     .eq("id", branchId)
     .eq("tenant_id", access.membership.tenantId)
@@ -215,6 +267,9 @@ export async function updateBranchStorefrontHeroAction(
       countryCode: branchResult.data.country_code,
       latitude: branchResult.data.latitude,
       longitude: branchResult.data.longitude,
+      deliveryEnabled: branchResult.data.delivery_enabled,
+      deliveryFee: branchResult.data.delivery_fee,
+      deliveryRadiusKm: branchResult.data.delivery_radius_km,
     },
     afterData: {
       heroImageUrl: heroImageUrl || null,
@@ -225,6 +280,9 @@ export async function updateBranchStorefrontHeroAction(
       countryCode: countryCode || null,
       latitude: latitudeResult.value,
       longitude: longitudeResult.value,
+      deliveryEnabled,
+      deliveryFee: deliveryFeeResult.value,
+      deliveryRadiusKm,
     },
     metadata: {
       branchId,

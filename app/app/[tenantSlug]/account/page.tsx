@@ -50,6 +50,16 @@ export default async function StorefrontAccountPage({ params }: StorefrontAccoun
                   <p>Cuenta global: activa</p>
                 </div>
               </div>
+              <div className="rounded-[1.5rem] bg-stone-50 p-5 md:col-span-2">
+                <p className="text-sm font-semibold text-stone-950">Direcciones</p>
+                <p className="mt-2 text-sm text-stone-600">Administra tu libreta de direcciones para pedidos con delivery.</p>
+                <Link
+                  className="mt-3 inline-block rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-900 transition hover:border-stone-950"
+                  href={`/app/${tenantSlug}/account/addresses`}
+                >
+                  Mis direcciones
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="mt-6 rounded-[1.5rem] border border-dashed border-stone-300 px-6 py-8 text-sm text-stone-600">

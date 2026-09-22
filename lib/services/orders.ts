@@ -2,14 +2,36 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { canAccessAdminSection } from "@/lib/auth/permissions"
 import type { AuditActor } from "@/lib/services/audit"
-import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderItemComboComponent, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
+import type { AdminOrderDetail, AdminOrderSummary, CheckoutBagItemModifierInput, CreateOrderInput, CreateOrderResult, CustomerOrderDetail, CustomerOrderSummary, KitchenOrderSummary, ManualPaymentMethod, OrderDeliveryAddressSnapshot, OrderItemComboComponent, OrderStatus, PaymentReceiptSubmissionSummary, PaymentStatus, TenantManualPaymentSettings } from "@/lib/domain/order"
 import type { OrderNotificationType } from "@/lib/domain/notification"
+import { haversineDistanceMeters } from "@/lib/data/mobile-nearby-branches"
 import { getBranchOperationalStatusMap } from "@/lib/services/branch-schedule"
 import { writeAuditEvent } from "@/lib/services/audit"
 import { dispatchOrderNotification } from "@/lib/services/notifications"
 
 type TenantRow = { id: string }
-type BranchRow = { id: string; name: string }
+type BranchRow = {
+  id: string
+  name: string
+  delivery_enabled: boolean
+  delivery_fee: number
+  delivery_radius_km: number | null
+  latitude: number | null
+  longitude: number | null
+}
+type CustomerAddressRow = {
+  id: string
+  label: string
+  address_line_1: string
+  address_line_2: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country: string
+  latitude: number | null
+  longitude: number | null
+  delivery_notes: string | null
+}
 type ProductRow = {
   id: string
   name: string
@@ -112,6 +134,7 @@ type AdminOrderRow = {
     receipt_image_path: string | null
   }[] | null
   channel: string
+  fulfillment_type: "pickup" | "delivery"
   total_amount: number
   placed_at: string
   branches: {
@@ -213,6 +236,38 @@ type OrderItemCountRow = {
   quantity: number
 }
 
+type DeliveryAddressSnapshotRow = {
+  label: string
+  address_line_1: string
+  address_line_2: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country: string
+  latitude: number | null
+  longitude: number | null
+  delivery_notes: string | null
+} | null
+
+function mapDeliveryAddressSnapshot(row: DeliveryAddressSnapshotRow): OrderDeliveryAddressSnapshot | null {
+  if (!row) {
+    return null
+  }
+
+  return {
+    label: row.label,
+    addressLine1: row.address_line_1,
+    addressLine2: row.address_line_2,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postal_code,
+    country: row.country,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    deliveryNotes: row.delivery_notes,
+  }
+}
+
 type CustomerOrderDetailRow = {
   id: string
   order_number: number
@@ -221,6 +276,8 @@ type CustomerOrderDetailRow = {
   fulfillment_type: "pickup" | "delivery"
   total_amount: number
   subtotal_amount: number
+  delivery_fee: number
+  delivery_address_snapshot: DeliveryAddressSnapshotRow
   placed_at: string
   customer_name: string
   customer_phone: string | null
@@ -834,6 +891,47 @@ export function validateAndPriceItemModifiers(
   return { ok: true, modifiers }
 }
 
+// Pure so it's directly unit-testable (no Supabase I/O) -- mirrors validateAndPriceItemModifiers
+// in spirit. Distance is computed via haversineDistanceMeters (lib/data/mobile-nearby-branches.ts,
+// already used and tested for "nearby branches") between the branch and the delivery address;
+// reused here rather than reimplemented.
+export function validateDeliveryOrderPlacement(input: {
+  readonly branch: {
+    readonly deliveryEnabled: boolean
+    readonly deliveryFeeAmount: number
+    readonly deliveryRadiusKm: number | null
+    readonly latitude: number | null
+    readonly longitude: number | null
+  }
+  readonly address: {
+    readonly latitude: number | null
+    readonly longitude: number | null
+  }
+}): { ok: true; distanceKm: number } | { ok: false; error: string } {
+  if (!input.branch.deliveryEnabled) {
+    return { ok: false, error: "Esta sucursal no ofrece delivery por ahora. Cambia a pickup para continuar." }
+  }
+
+  if (input.address.latitude == null || input.address.longitude == null) {
+    return { ok: false, error: "Esta dirección no tiene ubicación guardada. Compártela al editarla para poder usarla en delivery." }
+  }
+
+  if (input.branch.latitude == null || input.branch.longitude == null) {
+    return { ok: false, error: "Esta sucursal no tiene ubicación configurada; no podemos calcular delivery." }
+  }
+
+  const distanceKm = haversineDistanceMeters({ latitude: input.branch.latitude, longitude: input.branch.longitude }, { latitude: input.address.latitude, longitude: input.address.longitude }) / 1000
+
+  if (input.branch.deliveryRadiusKm != null && distanceKm > input.branch.deliveryRadiusKm) {
+    return {
+      ok: false,
+      error: `Tu dirección está fuera del radio de entrega de esta sucursal (máx. ${input.branch.deliveryRadiusKm} km). Cambia a pickup o elige otra dirección.`,
+    }
+  }
+
+  return { ok: true, distanceKm }
+}
+
 export async function createStorefrontOrder(
   supabase: SupabaseClient,
   input: CreateOrderInput & {
@@ -856,7 +954,7 @@ export async function createStorefrontOrder(
 
   const branchResult = await supabase
     .from("branches")
-    .select("id, name")
+    .select("id, name, delivery_enabled, delivery_fee, delivery_radius_km, latitude, longitude")
     .eq("tenant_id", tenantResult.data.id)
     .eq("id", input.branchId)
     .eq("is_active", true)
@@ -879,6 +977,59 @@ export async function createStorefrontOrder(
 
   if (input.items.some((item) => item.tenantSlug !== input.tenantSlug || item.branchId !== input.branchId)) {
     return { ok: false, error: "La bolsa no coincide con la sucursal activa del checkout." }
+  }
+
+  let deliveryAddressSnapshot: OrderDeliveryAddressSnapshot | null = null
+  let deliveryFee = 0
+
+  if (input.fulfillmentType === "delivery") {
+    if (!input.deliveryAddressId) {
+      return { ok: false, error: "Selecciona una dirección de entrega para continuar." }
+    }
+
+    if (!input.customerId) {
+      return { ok: false, error: "Inicia sesión para continuar con un pedido a domicilio." }
+    }
+
+    const addressResult = await supabase
+      .from("customer_addresses")
+      .select("id, label, address_line_1, address_line_2, city, state, postal_code, country, latitude, longitude, delivery_notes")
+      .eq("id", input.deliveryAddressId)
+      .eq("customer_id", input.customerId)
+      .maybeSingle<CustomerAddressRow>()
+
+    if (addressResult.error || !addressResult.data) {
+      return { ok: false, error: "No encontramos la dirección seleccionada en tu cuenta." }
+    }
+
+    const placementResult = validateDeliveryOrderPlacement({
+      branch: {
+        deliveryEnabled: branchResult.data.delivery_enabled,
+        deliveryFeeAmount: Number(branchResult.data.delivery_fee),
+        deliveryRadiusKm: branchResult.data.delivery_radius_km,
+        latitude: branchResult.data.latitude,
+        longitude: branchResult.data.longitude,
+      },
+      address: { latitude: addressResult.data.latitude, longitude: addressResult.data.longitude },
+    })
+
+    if (!placementResult.ok) {
+      return { ok: false, error: placementResult.error }
+    }
+
+    deliveryFee = Number(branchResult.data.delivery_fee)
+    deliveryAddressSnapshot = {
+      label: addressResult.data.label,
+      addressLine1: addressResult.data.address_line_1,
+      addressLine2: addressResult.data.address_line_2,
+      city: addressResult.data.city,
+      state: addressResult.data.state,
+      postalCode: addressResult.data.postal_code,
+      country: addressResult.data.country,
+      latitude: addressResult.data.latitude,
+      longitude: addressResult.data.longitude,
+      deliveryNotes: addressResult.data.delivery_notes,
+    }
   }
 
   const productIds = [...new Set(input.items.map((item) => item.productId))]
@@ -1168,6 +1319,21 @@ export async function createStorefrontOrder(
       p_customer_notes: input.customer.notes?.trim() || null,
       p_subtotal: subtotal,
       p_items: orderItemsPayload,
+      p_delivery_address_snapshot: deliveryAddressSnapshot
+        ? {
+            label: deliveryAddressSnapshot.label,
+            address_line_1: deliveryAddressSnapshot.addressLine1,
+            address_line_2: deliveryAddressSnapshot.addressLine2,
+            city: deliveryAddressSnapshot.city,
+            state: deliveryAddressSnapshot.state,
+            postal_code: deliveryAddressSnapshot.postalCode,
+            country: deliveryAddressSnapshot.country,
+            latitude: deliveryAddressSnapshot.latitude,
+            longitude: deliveryAddressSnapshot.longitude,
+            delivery_notes: deliveryAddressSnapshot.deliveryNotes,
+          }
+        : null,
+      p_delivery_fee: deliveryFee,
     })
     .single<AtomicOrderInsertRow>()
 
@@ -1189,7 +1355,9 @@ export async function createStorefrontOrder(
       branchName: branchResult.data.name,
       status: "pending_payment",
       fulfillmentType: input.fulfillmentType,
-      totalAmount: Number(subtotal.toFixed(2)),
+      totalAmount: Number((subtotal + deliveryFee).toFixed(2)),
+      deliveryFee,
+      hasDeliveryAddress: Boolean(deliveryAddressSnapshot),
       itemCount: input.items.length,
       customerId: input.customerId ?? null,
     },
@@ -1325,6 +1493,8 @@ type AdminOrderDetailRow = {
   customer_email: string | null
   subtotal_amount: number
   total_amount: number
+  delivery_fee: number
+  delivery_address_snapshot: DeliveryAddressSnapshotRow
   placed_at: string
   notes: string | null
   branches: {
@@ -1398,7 +1568,7 @@ export type AdminOverviewMetrics = {
 export async function getAdminOrders(supabase: SupabaseClient, tenantId: string): Promise<readonly AdminOrderSummary[]> {
   const ordersResult = await supabase
     .from("orders")
-    .select("id, order_number, customer_name, status, assigned_tenant_membership_id, payment_status, channel, total_amount, placed_at, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
+    .select("id, order_number, customer_name, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, total_amount, placed_at, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
     .eq("tenant_id", tenantId)
     .order("placed_at", { ascending: false })
     .returns<AdminOrderRow[]>()
@@ -1442,6 +1612,7 @@ export async function getAdminOrders(supabase: SupabaseClient, tenantId: string)
     hasPaymentReceipt: Boolean(order.payments?.[0]?.receipt_image_path),
     paymentReceiptImagePath: order.payments?.[0]?.receipt_image_path ?? null,
     channel: order.channel,
+    fulfillmentType: order.fulfillment_type,
     placedAt: order.placed_at,
     totalAmount: Number(order.total_amount),
   }))
@@ -2291,7 +2462,9 @@ export async function getAdminOrderDetail(
 ): Promise<AdminOrderDetail | null> {
   const orderResult = await supabase
     .from("orders")
-    .select("id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)")
+    .select(
+      "id, order_number, status, assigned_tenant_membership_id, payment_status, channel, fulfillment_type, customer_name, customer_phone, customer_email, subtotal_amount, total_amount, delivery_fee, delivery_address_snapshot, placed_at, notes, branches(name), payments(payment_method, receipt_image_path, rejection_reason)"
+    )
     .eq("tenant_id", tenantId)
     .eq("id", orderId)
     .limit(1)
@@ -2391,6 +2564,8 @@ export async function getAdminOrderDetail(
     branchName: orderResult.data.branches?.name ?? "Sucursal",
     subtotalAmount: Number(orderResult.data.subtotal_amount),
     totalAmount: Number(orderResult.data.total_amount),
+    deliveryFee: Number(orderResult.data.delivery_fee),
+    deliveryAddress: mapDeliveryAddressSnapshot(orderResult.data.delivery_address_snapshot),
     placedAt: orderResult.data.placed_at,
     notes: orderResult.data.notes,
     paymentReceiptSubmissions: (receiptSubmissionsResult.data ?? []).map(mapPaymentReceiptSubmission),
@@ -2423,7 +2598,7 @@ export async function getCustomerOrderDetail(
 
   const orderByCustomerIdResult = await supabase
     .from("orders")
-    .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
+    .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, delivery_fee, delivery_address_snapshot, placed_at, customer_name, customer_phone, customer_email, notes")
     .eq("tenant_id", tenantResult.data.id)
     .eq("customer_id", customerId)
     .eq("id", orderId)
@@ -2436,7 +2611,7 @@ export async function getCustomerOrderDetail(
     : normalizedCustomerEmail
       ? await supabase
           .from("orders")
-          .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, placed_at, customer_name, customer_phone, customer_email, notes")
+          .select("id, order_number, status, payment_status, fulfillment_type, total_amount, subtotal_amount, delivery_fee, delivery_address_snapshot, placed_at, customer_name, customer_phone, customer_email, notes")
           .eq("tenant_id", tenantResult.data.id)
           .is("customer_id", null)
           .eq("customer_email", normalizedCustomerEmail)
@@ -2534,6 +2709,8 @@ export async function getCustomerOrderDetail(
     fulfillmentType: orderResult.data.fulfillment_type,
     totalAmount: Number(orderResult.data.total_amount),
     subtotalAmount: Number(orderResult.data.subtotal_amount),
+    deliveryFee: Number(orderResult.data.delivery_fee),
+    deliveryAddress: mapDeliveryAddressSnapshot(orderResult.data.delivery_address_snapshot),
     placedAt: orderResult.data.placed_at,
     customerName: orderResult.data.customer_name,
     customerPhone: orderResult.data.customer_phone,

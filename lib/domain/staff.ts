@@ -34,6 +34,9 @@ export type StaffBranchOption = {
   readonly countryCode: string | null
   readonly latitude: number | null
   readonly longitude: number | null
+  readonly deliveryEnabled: boolean
+  readonly deliveryFee: number
+  readonly deliveryRadiusKm: number | null
 }
 
 export type StaffMutationResult = {

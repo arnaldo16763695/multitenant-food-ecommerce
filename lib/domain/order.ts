@@ -51,6 +51,25 @@ export type CreateOrderInput = {
   readonly customer: CheckoutCustomerInput
   readonly items: readonly CheckoutBagItemInput[]
   readonly fulfillmentType: "pickup" | "delivery"
+  // Required when fulfillmentType is "delivery" -- the service loads the full address row
+  // server-side (scoped to the resolved customer) and never trusts a client-supplied snapshot.
+  readonly deliveryAddressId?: string | null
+}
+
+// Snapshotted onto the order at creation time, not a live FK -- historical orders must stay
+// correct even if the customer later edits or deletes the saved address (same rationale as
+// customer_name/customer_phone already being snapshotted rather than joined).
+export type OrderDeliveryAddressSnapshot = {
+  readonly label: string
+  readonly addressLine1: string
+  readonly addressLine2: string | null
+  readonly city: string | null
+  readonly state: string | null
+  readonly postalCode: string | null
+  readonly country: string
+  readonly latitude: number | null
+  readonly longitude: number | null
+  readonly deliveryNotes: string | null
 }
 
 export type CreateOrderResult = {
@@ -84,6 +103,7 @@ export type AdminOrderSummary = {
   readonly paymentReceiptImagePath?: string | null
   readonly paymentReceiptSignedUrl?: string | null
   readonly channel: string
+  readonly fulfillmentType: "pickup" | "delivery"
   readonly placedAt: string
   readonly totalAmount: number
 }
@@ -165,6 +185,8 @@ export type CustomerOrderDetail = {
   readonly fulfillmentType: "pickup" | "delivery"
   readonly totalAmount: number
   readonly subtotalAmount: number
+  readonly deliveryFee: number
+  readonly deliveryAddress: OrderDeliveryAddressSnapshot | null
   readonly placedAt: string
   readonly customerName: string
   readonly customerPhone: string | null
@@ -219,6 +241,8 @@ export type AdminOrderDetail = {
   readonly branchName: string
   readonly subtotalAmount: number
   readonly totalAmount: number
+  readonly deliveryFee: number
+  readonly deliveryAddress: OrderDeliveryAddressSnapshot | null
   readonly placedAt: string
   readonly notes: string | null
   readonly paymentReceiptSubmissions: readonly PaymentReceiptSubmissionSummary[]

@@ -27,6 +27,23 @@ type BranchRow = {
   country_code: string | null
   latitude: number | null
   longitude: number | null
+  delivery_enabled: boolean
+  delivery_fee: number
+  delivery_radius_km: number | null
+}
+
+type BranchRowWithoutDelivery = {
+  id: string
+  name: string
+  is_active: boolean
+  hero_image_url: string | null
+  address_line_1: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country_code: string | null
+  latitude: number | null
+  longitude: number | null
 }
 
 type LegacyBranchRow = {
@@ -37,6 +54,22 @@ type LegacyBranchRow = {
 }
 
 type BranchMembershipBranchRow = {
+  id: string
+  name: string
+  hero_image_url: string | null
+  address_line_1: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country_code: string | null
+  latitude: number | null
+  longitude: number | null
+  delivery_enabled: boolean
+  delivery_fee: number
+  delivery_radius_km: number | null
+}
+
+type BranchMembershipBranchRowWithoutDelivery = {
   id: string
   name: string
   hero_image_url: string | null
@@ -59,7 +92,14 @@ function isMissingBranchLocationColumnError(errorMessage: string) {
   return errorMessage.includes("branches.address_line_1")
 }
 
-function mapBranchOption(branch: BranchRow | LegacyBranchRow): StaffBranchOption {
+// Same rationale as isMissingBranchLocationColumnError: the branch_delivery_settings migration
+// may not have run yet in every environment when this code deploys, so fall back to a select
+// without the delivery columns rather than 500ing the branches/staff/kitchen pages.
+function isMissingBranchDeliveryColumnError(errorMessage: string) {
+  return errorMessage.includes("branches.delivery_enabled")
+}
+
+function mapBranchOption(branch: BranchRow | BranchRowWithoutDelivery | LegacyBranchRow): StaffBranchOption {
   return {
     id: branch.id,
     name: branch.name,
@@ -72,12 +112,15 @@ function mapBranchOption(branch: BranchRow | LegacyBranchRow): StaffBranchOption
     countryCode: "country_code" in branch ? branch.country_code : null,
     latitude: "latitude" in branch ? branch.latitude : null,
     longitude: "longitude" in branch ? branch.longitude : null,
+    deliveryEnabled: "delivery_enabled" in branch ? branch.delivery_enabled : false,
+    deliveryFee: "delivery_fee" in branch ? branch.delivery_fee : 0,
+    deliveryRadiusKm: "delivery_radius_km" in branch ? branch.delivery_radius_km : null,
   }
 }
 
 function mapMembershipBranchOption(assignment: {
   branch_id: string
-  branches: BranchMembershipBranchRow | LegacyBranchMembershipBranchRow | null
+  branches: BranchMembershipBranchRow | BranchMembershipBranchRowWithoutDelivery | LegacyBranchMembershipBranchRow | null
 }): StaffBranchOption {
   return {
     id: assignment.branch_id,
@@ -91,6 +134,9 @@ function mapMembershipBranchOption(assignment: {
     countryCode: assignment.branches && "country_code" in assignment.branches ? assignment.branches.country_code : null,
     latitude: assignment.branches && "latitude" in assignment.branches ? assignment.branches.latitude : null,
     longitude: assignment.branches && "longitude" in assignment.branches ? assignment.branches.longitude : null,
+    deliveryEnabled: assignment.branches && "delivery_enabled" in assignment.branches ? assignment.branches.delivery_enabled : false,
+    deliveryFee: assignment.branches && "delivery_fee" in assignment.branches ? assignment.branches.delivery_fee : 0,
+    deliveryRadiusKm: assignment.branches && "delivery_radius_km" in assignment.branches ? assignment.branches.delivery_radius_km : null,
   }
 }
 
@@ -161,10 +207,44 @@ async function getBranchNamesByIds(supabase: SupabaseClient, branchIds: readonly
 export async function getStaffBranches(supabase: SupabaseClient, tenantId: string): Promise<readonly StaffBranchOption[]> {
   const branchesResult = await supabase
     .from("branches")
-    .select("id, name, is_active, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
+    .select("id, name, is_active, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude, delivery_enabled, delivery_fee, delivery_radius_km")
     .eq("tenant_id", tenantId)
     .order("name", { ascending: true })
     .returns<BranchRow[]>()
+
+  if (branchesResult.error) {
+    if (isMissingBranchDeliveryColumnError(branchesResult.error.message)) {
+      return getStaffBranchesWithoutDelivery(supabase, tenantId)
+    }
+
+    if (isMissingBranchLocationColumnError(branchesResult.error.message)) {
+      const legacyBranchesResult = await supabase
+        .from("branches")
+        .select("id, name, is_active, hero_image_url")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true })
+        .returns<LegacyBranchRow[]>()
+
+      if (legacyBranchesResult.error) {
+        throw new Error(legacyBranchesResult.error.message)
+      }
+
+      return (legacyBranchesResult.data ?? []).map(mapBranchOption)
+    }
+
+    throw new Error(branchesResult.error.message)
+  }
+
+  return (branchesResult.data ?? []).map(mapBranchOption)
+}
+
+async function getStaffBranchesWithoutDelivery(supabase: SupabaseClient, tenantId: string): Promise<readonly StaffBranchOption[]> {
+  const branchesResult = await supabase
+    .from("branches")
+    .select("id, name, is_active, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
+    .eq("tenant_id", tenantId)
+    .order("name", { ascending: true })
+    .returns<BranchRowWithoutDelivery[]>()
 
   if (branchesResult.error) {
     if (isMissingBranchLocationColumnError(branchesResult.error.message)) {
@@ -212,23 +292,61 @@ export async function getActiveBranchesForMembership(
 ): Promise<readonly StaffBranchOption[]> {
   const branchMembershipsResult = await supabase
     .from("branch_memberships")
+    .select(
+      "branch_id, branches!inner(id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude, delivery_enabled, delivery_fee, delivery_radius_km)"
+    )
+    .eq("tenant_membership_id", membershipId)
+    .eq("is_active", true)
+    .returns<{
+      branch_id: string
+      branches: BranchMembershipBranchRow | null
+    }[]>()
+
+  if (branchMembershipsResult.error) {
+    if (isMissingBranchDeliveryColumnError(branchMembershipsResult.error.message)) {
+      return getActiveBranchesForMembershipWithoutDelivery(supabase, membershipId)
+    }
+
+    if (isMissingBranchLocationColumnError(branchMembershipsResult.error.message)) {
+      const legacyBranchMembershipsResult = await supabase
+        .from("branch_memberships")
+        .select("branch_id, branches!inner(id, name, hero_image_url)")
+        .eq("tenant_membership_id", membershipId)
+        .eq("is_active", true)
+        .returns<{
+          branch_id: string
+          branches: LegacyBranchMembershipBranchRow | null
+        }[]>()
+
+      if (legacyBranchMembershipsResult.error) {
+        throw new Error(legacyBranchMembershipsResult.error.message)
+      }
+
+      return (legacyBranchMembershipsResult.data ?? [])
+        .map(mapMembershipBranchOption)
+        .sort((left, right) => left.name.localeCompare(right.name))
+    }
+
+    throw new Error(branchMembershipsResult.error.message)
+  }
+
+  return (branchMembershipsResult.data ?? [])
+    .map(mapMembershipBranchOption)
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+async function getActiveBranchesForMembershipWithoutDelivery(
+  supabase: SupabaseClient,
+  membershipId: string
+): Promise<readonly StaffBranchOption[]> {
+  const branchMembershipsResult = await supabase
+    .from("branch_memberships")
     .select("branch_id, branches!inner(id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude)")
     .eq("tenant_membership_id", membershipId)
     .eq("is_active", true)
     .returns<{
       branch_id: string
-      branches: {
-        id: string
-        name: string
-        hero_image_url: string | null
-        address_line_1: string | null
-        city: string | null
-        state: string | null
-        postal_code: string | null
-        country_code: string | null
-        latitude: number | null
-        longitude: number | null
-      } | null
+      branches: BranchMembershipBranchRowWithoutDelivery | null
     }[]>()
 
   if (branchMembershipsResult.error) {

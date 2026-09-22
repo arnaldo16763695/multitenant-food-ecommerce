@@ -36,6 +36,9 @@ type BranchStorefrontItem = {
   readonly countryCode: string | null
   readonly latitude: number | null
   readonly longitude: number | null
+  readonly deliveryEnabled: boolean
+  readonly deliveryFee: number
+  readonly deliveryRadiusKm: number | null
   readonly orderingMode: BranchOrderingMode
   readonly weeklyWindows: readonly {
     readonly id: string
@@ -80,6 +83,9 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   const [countryCode, setCountryCode] = React.useState("")
   const [latitude, setLatitude] = React.useState("")
   const [longitude, setLongitude] = React.useState("")
+  const [deliveryEnabled, setDeliveryEnabled] = React.useState(false)
+  const [deliveryFee, setDeliveryFee] = React.useState("")
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = React.useState("")
   const [heroPreviewUrl, setHeroPreviewUrl] = React.useState<string | null>(null)
   const [selectedHeroFile, setSelectedHeroFile] = React.useState<File | null>(null)
   const [errorMessage, setErrorMessage] = React.useState("")
@@ -96,6 +102,9 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
     setCountryCode(branch.countryCode ?? "")
     setLatitude(branch.latitude?.toString() ?? "")
     setLongitude(branch.longitude?.toString() ?? "")
+    setDeliveryEnabled(branch.deliveryEnabled)
+    setDeliveryFee(branch.deliveryFee ? branch.deliveryFee.toString() : "")
+    setDeliveryRadiusKm(branch.deliveryRadiusKm?.toString() ?? "")
     setHeroPreviewUrl(branch.heroImageUrl ?? null)
     setSelectedHeroFile(null)
     setErrorMessage("")
@@ -112,6 +121,9 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
     setCountryCode("")
     setLatitude("")
     setLongitude("")
+    setDeliveryEnabled(false)
+    setDeliveryFee("")
+    setDeliveryRadiusKm("")
     setHeroPreviewUrl(null)
     setSelectedHeroFile(null)
     setErrorMessage("")
@@ -177,6 +189,11 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       formData.set("countryCode", countryCode.trim().toUpperCase())
       formData.set("latitude", latitude.trim())
       formData.set("longitude", longitude.trim())
+      if (deliveryEnabled) {
+        formData.set("deliveryEnabled", "on")
+      }
+      formData.set("deliveryFee", deliveryFee.trim())
+      formData.set("deliveryRadiusKm", deliveryRadiusKm.trim())
 
       const result = await updateBranchStorefrontHeroAction(tenantSlug, selectedBranch.id, formData)
 
@@ -374,6 +391,33 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                   <label className="grid gap-2 text-sm">
                     <span className="font-medium text-card-foreground">Longitud</span>
                     <Input value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="-100.316113" inputMode="decimal" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={deliveryEnabled} onChange={(event) => setDeliveryEnabled(event.target.checked)} className="size-4 rounded border-input" />
+                  <span className="font-medium text-card-foreground">Delivery habilitado</span>
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Requiere que la sucursal tenga latitud y longitud configuradas arriba. Ningún pedido se acepta a domicilio hasta que actives esto.
+                </p>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Tarifa de delivery</span>
+                    <Input value={deliveryFee} onChange={(event) => setDeliveryFee(event.target.value)} placeholder="0" inputMode="decimal" />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="font-medium text-card-foreground">Radio máximo de entrega (km)</span>
+                    <Input
+                      value={deliveryRadiusKm}
+                      onChange={(event) => setDeliveryRadiusKm(event.target.value)}
+                      placeholder="5"
+                      inputMode="decimal"
+                      disabled={!deliveryEnabled}
+                    />
                   </label>
                 </div>
               </div>

@@ -24,6 +24,11 @@ type StorefrontBranch = {
   readonly closureLabel: string | null
   readonly nextTransitionAt: string | null
   readonly nextTransitionLabel: string | null
+  readonly deliveryEnabled: boolean
+  readonly deliveryFee: number
+  readonly deliveryRadiusKm: number | null
+  readonly latitude: number | null
+  readonly longitude: number | null
 }
 
 type TenantProduct = {
@@ -85,6 +90,11 @@ type BranchRow = {
   id: string
   name: string
   hero_image_url: string | null
+  delivery_enabled: boolean
+  delivery_fee: number
+  delivery_radius_km: number | null
+  latitude: number | null
+  longitude: number | null
 }
 
 type ProductRow = {
@@ -197,6 +207,11 @@ function getDemoStorefrontData(): PublicStorefrontData {
     closureLabel: null,
     nextTransitionAt: null,
     nextTransitionLabel: null,
+    deliveryEnabled: false,
+    deliveryFee: 0,
+    deliveryRadiusKm: null,
+    latitude: null,
+    longitude: null,
   }
 
   return {
@@ -316,8 +331,48 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     logoImageUrl: tenantResult.data.logo_image_url,
   }
 
-  const [branchesResult, categoriesResult, productsResult, productVariantsResult, modifierGroupsResult, productModifierGroupsResult, modifierGroupOptionsResult] = await Promise.all([
-    supabase.from("branches").select("id, name, hero_image_url").eq("tenant_id", tenant.id).eq("is_active", true).order("name", { ascending: true }).returns<BranchRow[]>(),
+  // Delivery columns are brand new (branch_delivery_settings migration) -- fall back to a select
+  // without them rather than 500ing the whole public storefront if that migration hasn't run yet
+  // wherever this deploys, same defensive pattern as getStaffBranches in lib/services/staff.ts.
+  const branchesResult = await supabase
+    .from("branches")
+    .select("id, name, hero_image_url, delivery_enabled, delivery_fee, delivery_radius_km, latitude, longitude")
+    .eq("tenant_id", tenant.id)
+    .eq("is_active", true)
+    .order("name", { ascending: true })
+    .returns<BranchRow[]>()
+
+  const branches = branchesResult.error
+    ? (
+        await supabase
+          .from("branches")
+          .select("id, name, hero_image_url")
+          .eq("tenant_id", tenant.id)
+          .eq("is_active", true)
+          .order("name", { ascending: true })
+          .returns<{ id: string; name: string; hero_image_url: string | null }[]>()
+      ).data?.map((branch) => ({
+        id: branch.id,
+        name: branch.name,
+        heroImageUrl: branch.hero_image_url,
+        deliveryEnabled: false,
+        deliveryFee: 0,
+        deliveryRadiusKm: null,
+        latitude: null,
+        longitude: null,
+      })) ?? []
+    : (branchesResult.data ?? []).map((branch) => ({
+        id: branch.id,
+        name: branch.name,
+        heroImageUrl: branch.hero_image_url,
+        deliveryEnabled: branch.delivery_enabled,
+        deliveryFee: Number(branch.delivery_fee),
+        deliveryRadiusKm: branch.delivery_radius_km,
+        latitude: branch.latitude,
+        longitude: branch.longitude,
+      }))
+
+  const [categoriesResult, productsResult, productVariantsResult, modifierGroupsResult, productModifierGroupsResult, modifierGroupOptionsResult] = await Promise.all([
     supabase.from("categories").select("id, name").eq("tenant_id", tenant.id).returns<CategoryRow[]>(),
     supabase
       .from("products")
@@ -331,12 +386,6 @@ export async function getPublicStorefrontBySlug(tenantSlug: string, preferredBra
     supabase.from("product_modifier_groups").select("product_id, modifier_group_id").returns<ProductModifierGroupRow[]>(),
     supabase.from("modifier_group_options").select("id, modifier_group_id, name, price_delta, default_selected, sort_order").eq("is_active", true).returns<ModifierGroupOptionRow[]>(),
   ])
-
-  const branches = (branchesResult.data ?? []).map((branch) => ({
-    id: branch.id,
-    name: branch.name,
-    heroImageUrl: branch.hero_image_url,
-  }))
 
   const branchOperationalStatusMap = await getBranchOperationalStatusMap(
     supabase,

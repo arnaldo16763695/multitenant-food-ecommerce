@@ -13,6 +13,7 @@ import {
 } from "@/app/app/[tenantSlug]/admin/orders/actions"
 import { formatManualPaymentMethod, formatOrderStatus, formatPaymentStatus, type AdminOrderSummary, type OrderStatus, type PaymentStatus } from "@/lib/domain/order"
 
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -494,6 +495,7 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
               <TableHead className="h-10 px-3 text-xs">Pedido</TableHead>
               <TableHead className="h-10 px-3 text-xs">Cliente</TableHead>
               <TableHead className="h-10 px-3 text-xs">Sucursal</TableHead>
+              <TableHead className="h-10 px-3 text-xs">Entrega</TableHead>
               <TableHead className="h-10 px-3 text-xs">Pago</TableHead>
               <TableHead className="h-10 px-3 text-xs">Comprobante</TableHead>
               <TableHead className="h-10 px-3 text-xs">Estado</TableHead>
@@ -517,6 +519,9 @@ export function AdminOrdersTable({ tenantSlug, orders }: AdminOrdersTableProps) 
                   <TableCell className="px-3 py-2 font-semibold text-card-foreground">#{order.orderNumber}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">{order.customerName}</TableCell>
                   <TableCell className="px-3 py-2 text-muted-foreground">{order.branchName}</TableCell>
+                  <TableCell className="px-3 py-2">
+                    <Badge variant="outline">{order.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}</Badge>
+                  </TableCell>
                   <TableCell className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <select

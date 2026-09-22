@@ -84,6 +84,10 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
         name: "Orders",
         description: "Pedidos del cliente autenticado.",
       },
+      {
+        name: "Addresses",
+        description: "Libreta de direcciones del cliente autenticado, para pedidos con delivery.",
+      },
     ],
     components: {
       securitySchemes: {
@@ -683,6 +687,65 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             modifierSelections: {
               type: "array",
               items: buildSchemaRef("ModifierSelectionInput"),
+            },
+          },
+        },
+        CustomerAddress: {
+          type: "object",
+          required: ["id", "customerId", "label", "addressLine1", "country", "isDefault", "hasCoordinates"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            customerId: { type: "string", format: "uuid" },
+            label: { type: "string" },
+            addressLine1: { type: "string" },
+            addressLine2: buildNullableSchema({ type: "string" }),
+            city: buildNullableSchema({ type: "string" }),
+            state: buildNullableSchema({ type: "string" }),
+            postalCode: buildNullableSchema({ type: "string" }),
+            country: { type: "string" },
+            latitude: buildNullableSchema({ type: "number" }),
+            longitude: buildNullableSchema({ type: "number" }),
+            deliveryNotes: buildNullableSchema({ type: "string" }),
+            isDefault: { type: "boolean" },
+            hasCoordinates: {
+              type: "boolean",
+              description: "True only when latitude/longitude were captured via device geolocation. An address without coordinates cannot be used for a delivery order.",
+            },
+          },
+        },
+        CustomerAddressInput: {
+          type: "object",
+          required: ["label", "addressLine1"],
+          properties: {
+            label: { type: "string" },
+            addressLine1: { type: "string" },
+            addressLine2: { type: "string" },
+            city: { type: "string" },
+            state: { type: "string" },
+            postalCode: { type: "string" },
+            country: { type: "string", default: "MX" },
+            latitude: { type: "number", description: "From the device's geolocation API. Omit if the customer denied location permission." },
+            longitude: { type: "number" },
+            deliveryNotes: { type: "string" },
+            isDefault: { type: "boolean", default: false },
+          },
+        },
+        CustomerAddressMutationResult: {
+          type: "object",
+          required: ["ok"],
+          properties: {
+            ok: { type: "boolean" },
+            error: { type: "string" },
+            address: buildSchemaRef("CustomerAddress"),
+          },
+        },
+        CustomerAddressesResponse: {
+          type: "object",
+          required: ["addresses"],
+          properties: {
+            addresses: {
+              type: "array",
+              items: buildSchemaRef("CustomerAddress"),
             },
           },
         },
@@ -1603,7 +1666,8 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
                     phone: { type: "string" },
                     email: { type: "string", format: "email" },
                     notes: { type: "string" },
-                    fulfillmentType: { type: "string", enum: ["pickup"], default: "pickup" },
+                    fulfillmentType: { type: "string", enum: ["pickup", "delivery"], default: "pickup" },
+                    deliveryAddressId: { type: "string", format: "uuid", description: "Required when fulfillmentType is delivery. Must belong to the authenticated customer." },
                     paymentMethod: { type: "string", enum: ["mobile_payment", "bank_transfer"] },
                     paymentProof: { type: "string", format: "binary" },
                     items: {
@@ -1644,6 +1708,162 @@ export function buildMobileOpenApiDocument(origin: string): OpenApiDocument {
             },
             500: {
               description: "Storage upload or order attachment failed.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/customer/addresses": {
+        get: {
+          tags: ["Addresses"],
+          operationId: "listMobileCustomerAddresses",
+          summary: "List the authenticated customer's saved addresses",
+          security: buildBearerSecurity(),
+          responses: {
+            200: {
+              description: "Saved addresses.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("CustomerAddressesResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+        post: {
+          tags: ["Addresses"],
+          operationId: "createMobileCustomerAddress",
+          summary: "Save a new address for the authenticated customer",
+          security: buildBearerSecurity(),
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: buildSchemaRef("CustomerAddressInput"),
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "Address saved successfully.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("CustomerAddressMutationResult"),
+                },
+              },
+            },
+            400: {
+              description: "Invalid payload or mutation rejected.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+      },
+      "/customer/addresses/{addressId}": {
+        patch: {
+          tags: ["Addresses"],
+          operationId: "updateMobileCustomerAddress",
+          summary: "Update one of the authenticated customer's saved addresses",
+          security: buildBearerSecurity(),
+          parameters: [
+            {
+              name: "addressId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: buildSchemaRef("CustomerAddressInput"),
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "Address updated successfully.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("CustomerAddressMutationResult"),
+                },
+              },
+            },
+            400: {
+              description: "Invalid payload or mutation rejected.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+          },
+        },
+        delete: {
+          tags: ["Addresses"],
+          operationId: "deleteMobileCustomerAddress",
+          summary: "Delete one of the authenticated customer's saved addresses",
+          security: buildBearerSecurity(),
+          parameters: [
+            {
+              name: "addressId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Address deleted successfully.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("CustomerAddressMutationResult"),
+                },
+              },
+            },
+            400: {
+              description: "Mutation rejected.",
+              content: {
+                "application/json": {
+                  schema: buildSchemaRef("ErrorResponse"),
+                },
+              },
+            },
+            401: {
+              description: "Unauthorized.",
               content: {
                 "application/json": {
                   schema: buildSchemaRef("ErrorResponse"),

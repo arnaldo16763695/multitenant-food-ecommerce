@@ -7,10 +7,13 @@ import { CheckCircle2, Copy, LoaderCircle, ShoppingBag, Upload } from "lucide-re
 
 import type { CustomerAccountContext } from "@/lib/auth/customer"
 import type { ShoppingBagItem } from "@/lib/domain/bag"
+import type { BranchDeliverySettings } from "@/lib/domain/branch-delivery"
+import type { CustomerAddress } from "@/lib/domain/customer-address"
 import { formatManualPaymentMethod, type ManualPaymentMethod, type TenantManualPaymentSettings } from "@/lib/domain/order"
 import { useHydrateShoppingBagBranch, useShoppingBagItems, useShoppingBagStore, useShoppingBagSubtotal } from "@/lib/storefront/bag-store"
 import { formatModifierSelectionLabel, isExclusionGroup } from "@/lib/storefront/modifier-display"
 
+import { CustomerAddressForm } from "@/components/account/customer-address-form"
 import { StorefrontHeader } from "@/components/marketing/storefront-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +28,7 @@ type StorefrontCheckoutViewProps = {
     readonly closureLabel: string | null
     readonly nextTransitionLabel: string | null
   } | null
+  readonly branchDeliverySettings?: BranchDeliverySettings | null
   readonly customerDefaults?: {
     fullName?: string | null
     email?: string | null
@@ -33,6 +37,7 @@ type StorefrontCheckoutViewProps = {
   readonly manualPaymentSettings?: TenantManualPaymentSettings | null
   readonly customerSession?: Pick<CustomerAccountContext, "user" | "customer"> | null
   readonly initialBagItems?: readonly ShoppingBagItem[]
+  readonly initialAddresses?: readonly CustomerAddress[]
 }
 
 type AvailableManualPaymentMethod = {
@@ -41,13 +46,30 @@ type AvailableManualPaymentMethod = {
   readonly instructions: string
 }
 
-export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, branchOperationalStatus = null, customerDefaults, manualPaymentSettings, customerSession, initialBagItems = [] }: StorefrontCheckoutViewProps) {
+export function StorefrontCheckoutView({
+  tenantSlug,
+  branchId,
+  branchLabel,
+  branchOperationalStatus = null,
+  branchDeliverySettings = null,
+  customerDefaults,
+  manualPaymentSettings,
+  customerSession,
+  initialBagItems = [],
+  initialAddresses = [],
+}: StorefrontCheckoutViewProps) {
   const activeBranchId = branchId ?? ""
-  const fulfillmentType = "pickup"
   const items = useShoppingBagItems(tenantSlug, activeBranchId, initialBagItems)
   const subtotal = useShoppingBagSubtotal(tenantSlug, activeBranchId, initialBagItems)
   const clearBranchBag = useShoppingBagStore((state) => state.clearBranchBag)
   useHydrateShoppingBagBranch(tenantSlug, activeBranchId, initialBagItems)
+  const deliveryOfferedByBranch = Boolean(branchDeliverySettings?.deliveryEnabled)
+  const [fulfillmentType, setFulfillmentType] = React.useState<"pickup" | "delivery">("pickup")
+  const [addresses, setAddresses] = React.useState<readonly CustomerAddress[]>(initialAddresses)
+  const [selectedAddressId, setSelectedAddressId] = React.useState<string | null>(addresses.find((address) => address.isDefault)?.id ?? addresses[0]?.id ?? null)
+  const [isAddingAddress, setIsAddingAddress] = React.useState(false)
+  const deliveryFee = fulfillmentType === "delivery" ? (branchDeliverySettings?.deliveryFee ?? 0) : 0
+  const grandTotal = subtotal.value + deliveryFee
   const availablePaymentMethods = React.useMemo<readonly AvailableManualPaymentMethod[]>(() => {
     const methods: AvailableManualPaymentMethod[] = []
 
@@ -168,6 +190,20 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
       return
     }
 
+    if (fulfillmentType === "delivery") {
+      if (!selectedAddressId) {
+        setErrorMessage("Selecciona una dirección de entrega.")
+        return
+      }
+
+      const selectedAddress = addresses.find((address) => address.id === selectedAddressId)
+
+      if (!selectedAddress?.hasCoordinates) {
+        setErrorMessage("Esa dirección no tiene ubicación compartida. Compártela o elige otra para continuar con delivery.")
+        return
+      }
+    }
+
     try {
       setIsSubmitting(true)
 
@@ -179,6 +215,9 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
       formData.set("phone", phone)
       formData.set("notes", notes)
       formData.set("fulfillmentType", fulfillmentType)
+      if (fulfillmentType === "delivery" && selectedAddressId) {
+        formData.set("deliveryAddressId", selectedAddressId)
+      }
       formData.set("paymentMethod", selectedPaymentMethod.key)
       formData.set("paymentProof", paymentProofFile)
 
@@ -227,7 +266,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
           <Card className="rounded-[2rem] border-stone-200/80 bg-white/85 shadow-[0_18px_50px_rgba(120,53,15,0.08)] backdrop-blur">
             <CardHeader>
               <CardTitle>Datos para confirmar tu pedido</CardTitle>
-              <CardDescription>Este MVP opera solo con pickup. Usamos esta información para confirmar tu pedido y ubicarte si hace falta.</CardDescription>
+              <CardDescription>Usamos esta información para confirmar tu pedido y ubicarte si hace falta.</CardDescription>
             </CardHeader>
             <CardContent>
               {!branchAcceptingOrders ? (
@@ -339,7 +378,90 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
 
                   <div className="rounded-[1.25rem] border border-stone-200 bg-white p-4 text-sm text-stone-600">
                     <p className="font-semibold text-stone-950">Entrega del pedido</p>
-                    <p className="mt-2 leading-6">Por ahora todos los pedidos se registran como <span className="font-semibold text-stone-950">pickup en sucursal</span>. Delivery queda fuera de este MVP.</p>
+
+                    {deliveryOfferedByBranch ? (
+                      <>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => setFulfillmentType("pickup")}
+                            className={`rounded-xl border px-4 py-3 text-left transition cursor-pointer ${
+                              fulfillmentType === "pickup" ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white hover:border-stone-300"
+                            }`}
+                          >
+                            <span className="font-semibold">Pickup en sucursal</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFulfillmentType("delivery")}
+                            className={`rounded-xl border px-4 py-3 text-left transition cursor-pointer ${
+                              fulfillmentType === "delivery" ? "border-orange-500 bg-orange-50 text-stone-950" : "border-stone-200 bg-white hover:border-stone-300"
+                            }`}
+                          >
+                            <span className="font-semibold">Delivery</span>
+                            {branchDeliverySettings?.deliveryFee ? (
+                              <span className="ml-1 text-xs text-stone-500">(+$ {branchDeliverySettings.deliveryFee.toFixed(2)})</span>
+                            ) : (
+                              <span className="ml-1 text-xs text-stone-500">(gratis)</span>
+                            )}
+                          </button>
+                        </div>
+
+                        {fulfillmentType === "delivery" ? (
+                          <div className="mt-4 space-y-3">
+                            {addresses.length > 0 ? (
+                              <div className="grid gap-2">
+                                {addresses.map((address) => {
+                                  const isSelected = selectedAddressId === address.id
+                                  const addressLine = [address.addressLine1, address.addressLine2, address.city, address.state].filter(Boolean).join(" · ")
+
+                                  return (
+                                    <button
+                                      key={address.id}
+                                      type="button"
+                                      disabled={!address.hasCoordinates}
+                                      onClick={() => setSelectedAddressId(address.id)}
+                                      className={`rounded-xl border px-4 py-3 text-left transition ${
+                                        !address.hasCoordinates
+                                          ? "cursor-not-allowed border-stone-200 bg-stone-50 opacity-60"
+                                          : isSelected
+                                            ? "cursor-pointer border-orange-500 bg-orange-50 text-stone-950"
+                                            : "cursor-pointer border-stone-200 bg-white hover:border-stone-300"
+                                      }`}
+                                    >
+                                      <p className="font-semibold text-stone-950">{address.label}</p>
+                                      <p className="mt-0.5 text-xs text-stone-500">{addressLine}</p>
+                                      {!address.hasCoordinates ? (
+                                        <p className="mt-1 text-xs font-medium text-amber-700">Sin ubicación compartida — no se puede usar para delivery.</p>
+                                      ) : null}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+
+                            {isAddingAddress ? (
+                              <CustomerAddressForm
+                                onSaved={(address) => {
+                                  setAddresses((current) => [address, ...current])
+                                  setSelectedAddressId(address.id)
+                                  setIsAddingAddress(false)
+                                }}
+                                onCancel={() => setIsAddingAddress(false)}
+                              />
+                            ) : (
+                              <Button type="button" variant="outline" className="w-full rounded-full" onClick={() => setIsAddingAddress(true)}>
+                                Agregar nueva dirección
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="mt-2 leading-6">
+                        Por ahora este pedido se registra como <span className="font-semibold text-stone-950">pickup en sucursal</span>.
+                      </p>
+                    )}
                   </div>
 
                   <label className="grid gap-2 text-sm">
@@ -363,7 +485,15 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
 
                   <Button
                     className={`h-10 rounded-full ${primaryStorefrontButtonClassName}`}
-                    disabled={isSubmitting || items.length === 0 || !branchId || !selectedPaymentMethod || !paymentProofFile || !branchAcceptingOrders}
+                    disabled={
+                      isSubmitting ||
+                      items.length === 0 ||
+                      !branchId ||
+                      !selectedPaymentMethod ||
+                      !paymentProofFile ||
+                      !branchAcceptingOrders ||
+                      (fulfillmentType === "delivery" && !addresses.find((address) => address.id === selectedAddressId)?.hasCoordinates)
+                    }
                     type="submit"
                   >
                     {isSubmitting ? <LoaderCircle className="animate-spin" /> : <ShoppingBag />}
@@ -430,7 +560,7 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-stone-500">Entrega</span>
-                  <span className="font-semibold text-stone-950">Pickup</span>
+                  <span className="font-semibold text-stone-950">{fulfillmentType === "delivery" ? "Delivery" : "Pickup"}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <span className="text-stone-500">Sucursal</span>
@@ -443,6 +573,16 @@ export function StorefrontCheckoutView({ tenantSlug, branchId, branchLabel, bran
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <span className="text-stone-500">Subtotal</span>
                   <span className="font-semibold text-stone-950">{subtotal.label}</span>
+                </div>
+                {fulfillmentType === "delivery" ? (
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-stone-500">Costo de envío</span>
+                    <span className="font-semibold text-stone-950">$ {deliveryFee.toFixed(2)}</span>
+                  </div>
+                ) : null}
+                <div className="mt-3 flex items-center justify-between gap-3 border-t border-stone-200 pt-3">
+                  <span className="font-semibold text-stone-950">Total</span>
+                  <span className="text-base font-semibold text-stone-950">$ {grandTotal.toFixed(2)}</span>
                 </div>
               </div>
 

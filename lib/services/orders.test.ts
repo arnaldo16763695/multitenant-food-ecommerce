@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { CheckoutBagItemModifierInput } from "@/lib/domain/order"
-import { ensureKitchenAssignmentAccess, getOwnedPendingPaymentOrder, updateAdminOrderStatus, validateAndPriceItemModifiers } from "@/lib/services/orders"
+import { ensureKitchenAssignmentAccess, getOwnedPendingPaymentOrder, updateAdminOrderStatus, validateAndPriceItemModifiers, validateDeliveryOrderPlacement } from "@/lib/services/orders"
 
 const { dispatchOrderNotification } = vi.hoisted(() => ({ dispatchOrderNotification: vi.fn() }))
 
@@ -431,5 +431,69 @@ describe("getOwnedPendingPaymentOrder", () => {
     const result = await getOwnedPendingPaymentOrder(createOwnedPendingPaymentOrderStub({ id: "tenant-1" }, orderRow), "demo-brand", "customer-1", "order-1")
 
     expect(result).toEqual({ ok: true, tenantId: "tenant-1", order: orderRow })
+  })
+})
+
+describe("validateDeliveryOrderPlacement", () => {
+  const enabledBranch = { deliveryEnabled: true, deliveryFeeAmount: 5, deliveryRadiusKm: 5, latitude: 25.686614, longitude: -100.316113 }
+
+  it("rejects when the branch does not offer delivery", () => {
+    const result = validateDeliveryOrderPlacement({
+      branch: { ...enabledBranch, deliveryEnabled: false },
+      address: { latitude: 25.686614, longitude: -100.316113 },
+    })
+
+    expect(result).toEqual({ ok: false, error: "Esta sucursal no ofrece delivery por ahora. Cambia a pickup para continuar." })
+  })
+
+  it("rejects when the address has no coordinates", () => {
+    const result = validateDeliveryOrderPlacement({
+      branch: enabledBranch,
+      address: { latitude: null, longitude: null },
+    })
+
+    expect(result).toEqual({ ok: false, error: "Esta dirección no tiene ubicación guardada. Compártela al editarla para poder usarla en delivery." })
+  })
+
+  it("rejects when the branch itself has no coordinates configured", () => {
+    const result = validateDeliveryOrderPlacement({
+      branch: { ...enabledBranch, latitude: null, longitude: null },
+      address: { latitude: 25.686614, longitude: -100.316113 },
+    })
+
+    expect(result).toEqual({ ok: false, error: "Esta sucursal no tiene ubicación configurada; no podemos calcular delivery." })
+  })
+
+  it("accepts an address at the same coordinates as the branch", () => {
+    const result = validateDeliveryOrderPlacement({
+      branch: enabledBranch,
+      address: { latitude: 25.686614, longitude: -100.316113 },
+    })
+
+    expect(result).toEqual({ ok: true, distanceKm: 0 })
+  })
+
+  it("rejects an address far outside the branch's configured radius", () => {
+    // Mexico City, roughly 700+ km from the Monterrey-area branch used above -- comfortably
+    // outside a 5 km radius regardless of the exact haversine result.
+    const result = validateDeliveryOrderPlacement({
+      branch: enabledBranch,
+      address: { latitude: 19.432608, longitude: -99.133209 },
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain("fuera del radio de entrega")
+    }
+  })
+
+  it("accepts an address just inside the branch's configured radius", () => {
+    // ~0.01 degrees of latitude is roughly 1.1 km -- comfortably inside a 5 km radius.
+    const result = validateDeliveryOrderPlacement({
+      branch: enabledBranch,
+      address: { latitude: 25.696614, longitude: -100.316113 },
+    })
+
+    expect(result.ok).toBe(true)
   })
 })

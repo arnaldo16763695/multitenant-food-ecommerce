@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { StorefrontCheckoutView } from "@/components/marketing/storefront-checkout-view"
 import { getCustomerAccountContext } from "@/lib/auth/customer"
 import { getPublicStorefrontBySlug } from "@/lib/data/public-storefront"
+import { getCustomerAddresses } from "@/lib/services/customer-addresses"
 import { getCustomerBagItems } from "@/lib/services/customer-bag"
 import { getTenantManualPaymentSettingsBySlug } from "@/lib/services/orders"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
@@ -30,6 +31,7 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
   const supabase = createSupabaseAdminClient()
   const initialBagItems = storefront?.activeBranch?.id && supabase ? await getCustomerBagItems(supabase, tenantSlug, storefront.activeBranch.id, customerContext.customer.id) : []
   const paymentSettings = supabase ? await getTenantManualPaymentSettingsBySlug(supabase, tenantSlug) : null
+  const initialAddresses = supabase ? await getCustomerAddresses(supabase, customerContext.customer.id) : []
 
   return (
     <StorefrontCheckoutView
@@ -45,6 +47,15 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
             }
           : null
       }
+      branchDeliverySettings={
+        storefront?.activeBranch
+          ? {
+              deliveryEnabled: storefront.activeBranch.deliveryEnabled,
+              deliveryFee: storefront.activeBranch.deliveryFee,
+              deliveryRadiusKm: storefront.activeBranch.deliveryRadiusKm,
+            }
+          : null
+      }
       customerSession={customerContext}
       customerDefaults={{
         fullName: customerContext?.customer.fullName,
@@ -53,6 +64,7 @@ export default async function StorefrontCheckoutPage({ params, searchParams }: S
       }}
       manualPaymentSettings={paymentSettings}
       initialBagItems={initialBagItems}
+      initialAddresses={initialAddresses}
     />
   )
 }
