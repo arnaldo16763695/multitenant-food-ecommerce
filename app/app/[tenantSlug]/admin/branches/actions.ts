@@ -56,6 +56,10 @@ function getBranchLocationConstraintMessage(errorMessage: string) {
     return "Define un radio de entrega mayor a 0 km para activar delivery."
   }
 
+  if (errorMessage.includes("delivery_enabled") || errorMessage.includes("delivery_fee") || errorMessage.includes("delivery_radius_km")) {
+    return "No pudimos guardar la configuración de delivery -- falta aplicar una actualización del sistema. El resto de los datos de la sucursal no se guardaron; intenta de nuevo más tarde."
+  }
+
   return null
 }
 
@@ -102,29 +106,47 @@ export async function updateBranchStorefrontHeroAction(
     throw new Error("Supabase admin client is not configured.")
   }
 
+  type BranchStorefrontRow = {
+    id: string
+    tenant_id: string
+    name: string
+    hero_image_url: string | null
+    address_line_1: string | null
+    city: string | null
+    state: string | null
+    postal_code: string | null
+    country_code: string | null
+    latitude: number | null
+    longitude: number | null
+    delivery_enabled: boolean
+    delivery_fee: number
+    delivery_radius_km: number | null
+  }
+
   const branchResult = await adminClient
     .from("branches")
     .select("id, tenant_id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude, delivery_enabled, delivery_fee, delivery_radius_km")
     .eq("id", branchId)
     .limit(1)
-    .maybeSingle<{
-      id: string
-      tenant_id: string
-      name: string
-      hero_image_url: string | null
-      address_line_1: string | null
-      city: string | null
-      state: string | null
-      postal_code: string | null
-      country_code: string | null
-      latitude: number | null
-      longitude: number | null
-      delivery_enabled: boolean
-      delivery_fee: number
-      delivery_radius_km: number | null
-    }>()
+    .maybeSingle<BranchStorefrontRow>()
 
-  if (branchResult.error || !branchResult.data || branchResult.data.tenant_id !== access.membership.tenantId) {
+  let branch: BranchStorefrontRow | null = branchResult.data
+
+  // branch_delivery_settings migration hasn't run yet wherever this deploys -- fall back so hero
+  // image/address saves (the vast majority of edits through this same dialog) aren't blocked;
+  // delivery fields just won't be persisted until that migration is applied.
+  if (branchResult.error?.message.includes("delivery_enabled")) {
+    const fallbackResult = await adminClient
+      .from("branches")
+      .select("id, tenant_id, name, hero_image_url, address_line_1, city, state, postal_code, country_code, latitude, longitude")
+      .eq("id", branchId)
+      .limit(1)
+      .maybeSingle<Omit<BranchStorefrontRow, "delivery_enabled" | "delivery_fee" | "delivery_radius_km">>()
+
+    branch = fallbackResult.data ? { ...fallbackResult.data, delivery_enabled: false, delivery_fee: 0, delivery_radius_km: null } : null
+  }
+
+  if (!branch || branch.tenant_id !== access.membership.tenantId) {
     return { ok: false, error: "No pudimos encontrar la sucursal indicada." }
   }
 
@@ -237,7 +259,7 @@ export async function updateBranchStorefrontHeroAction(
     }
   }
 
-  const currentHeroPath = getCatalogMediaPathFromUrl(branchResult.data.hero_image_url)
+  const currentHeroPath = getCatalogMediaPathFromUrl(branch.hero_image_url)
   const nextHeroPath = getCatalogMediaPathFromUrl(heroImageUrl)
 
   if (currentHeroPath && currentHeroPath !== nextHeroPath) {
@@ -257,19 +279,19 @@ export async function updateBranchStorefrontHeroAction(
     entityType: "branch",
     entityId: branchId,
     action: "branch.storefront_updated",
-    summary: `Se actualizó la configuración storefront de la sucursal ${branchResult.data.name}.`,
+    summary: `Se actualizó la configuración storefront de la sucursal ${branch.name}.`,
     beforeData: {
-      heroImageUrl: branchResult.data.hero_image_url,
-      addressLine1: branchResult.data.address_line_1,
-      city: branchResult.data.city,
-      state: branchResult.data.state,
-      postalCode: branchResult.data.postal_code,
-      countryCode: branchResult.data.country_code,
-      latitude: branchResult.data.latitude,
-      longitude: branchResult.data.longitude,
-      deliveryEnabled: branchResult.data.delivery_enabled,
-      deliveryFee: branchResult.data.delivery_fee,
-      deliveryRadiusKm: branchResult.data.delivery_radius_km,
+      heroImageUrl: branch.hero_image_url,
+      addressLine1: branch.address_line_1,
+      city: branch.city,
+      state: branch.state,
+      postalCode: branch.postal_code,
+      countryCode: branch.country_code,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
+      deliveryEnabled: branch.delivery_enabled,
+      deliveryFee: branch.delivery_fee,
+      deliveryRadiusKm: branch.delivery_radius_km,
     },
     afterData: {
       heroImageUrl: heroImageUrl || null,
@@ -286,7 +308,7 @@ export async function updateBranchStorefrontHeroAction(
     },
     metadata: {
       branchId,
-      branchName: branchResult.data.name,
+      branchName: branch.name,
     },
   })
 

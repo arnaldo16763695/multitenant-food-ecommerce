@@ -960,11 +960,34 @@ export async function createStorefrontOrder(
     .eq("is_active", true)
     .maybeSingle<BranchRow>()
 
-  if (branchResult.error || !branchResult.data) {
+  let branch: BranchRow | null = branchResult.data
+
+  if (branchResult.error) {
+    if (!branchResult.error.message.includes("branches.delivery_enabled")) {
+      return { ok: false, error: "No encontramos la sucursal activa seleccionada para este pedido." }
+    }
+
+    // branch_delivery_settings migration hasn't run yet wherever this deploys -- fall back to a
+    // select without those columns so pickup orders (which don't need them) keep working. A
+    // delivery order for this branch will then correctly get rejected below via
+    // deliveryEnabled: false, same defensive pattern as getStaffBranches in
+    // lib/services/staff.ts.
+    const fallbackBranchResult = await supabase
+      .from("branches")
+      .select("id, name, latitude, longitude")
+      .eq("tenant_id", tenantResult.data.id)
+      .eq("id", input.branchId)
+      .eq("is_active", true)
+      .maybeSingle<{ id: string; name: string; latitude: number | null; longitude: number | null }>()
+
+    branch = fallbackBranchResult.data ? { ...fallbackBranchResult.data, delivery_enabled: false, delivery_fee: 0, delivery_radius_km: null } : null
+  }
+
+  if (!branch) {
     return { ok: false, error: "No encontramos la sucursal activa seleccionada para este pedido." }
   }
 
-  const branchOperationalStatus = (await getBranchOperationalStatusMap(supabase, [branchResult.data.id])).get(branchResult.data.id)
+  const branchOperationalStatus = (await getBranchOperationalStatusMap(supabase, [branch.id])).get(branch.id)
 
   if (branchOperationalStatus && !branchOperationalStatus.acceptingOrders) {
     return {
@@ -1004,11 +1027,11 @@ export async function createStorefrontOrder(
 
     const placementResult = validateDeliveryOrderPlacement({
       branch: {
-        deliveryEnabled: branchResult.data.delivery_enabled,
-        deliveryFeeAmount: Number(branchResult.data.delivery_fee),
-        deliveryRadiusKm: branchResult.data.delivery_radius_km,
-        latitude: branchResult.data.latitude,
-        longitude: branchResult.data.longitude,
+        deliveryEnabled: branch.delivery_enabled,
+        deliveryFeeAmount: Number(branch.delivery_fee),
+        deliveryRadiusKm: branch.delivery_radius_km,
+        latitude: branch.latitude,
+        longitude: branch.longitude,
       },
       address: { latitude: addressResult.data.latitude, longitude: addressResult.data.longitude },
     })
@@ -1017,7 +1040,7 @@ export async function createStorefrontOrder(
       return { ok: false, error: placementResult.error }
     }
 
-    deliveryFee = Number(branchResult.data.delivery_fee)
+    deliveryFee = Number(branch.delivery_fee)
     deliveryAddressSnapshot = {
       label: addressResult.data.label,
       addressLine1: addressResult.data.address_line_1,
@@ -1307,35 +1330,43 @@ export async function createStorefrontOrder(
 
   const subtotal = orderItemsPayload.reduce((total, item) => total + item.line_total, 0)
 
-  const orderResult = await supabase
-    .rpc("create_storefront_order_atomic", {
-      p_tenant_id: tenantResult.data.id,
-      p_branch_id: input.branchId,
-      p_customer_id: input.customerId ?? null,
-      p_fulfillment_type: input.fulfillmentType,
-      p_customer_name: input.customer.fullName.trim(),
-      p_customer_phone: input.customer.phone.trim(),
-      p_customer_email: input.customer.email.trim() || null,
-      p_customer_notes: input.customer.notes?.trim() || null,
-      p_subtotal: subtotal,
-      p_items: orderItemsPayload,
-      p_delivery_address_snapshot: deliveryAddressSnapshot
-        ? {
-            label: deliveryAddressSnapshot.label,
-            address_line_1: deliveryAddressSnapshot.addressLine1,
-            address_line_2: deliveryAddressSnapshot.addressLine2,
-            city: deliveryAddressSnapshot.city,
-            state: deliveryAddressSnapshot.state,
-            postal_code: deliveryAddressSnapshot.postalCode,
-            country: deliveryAddressSnapshot.country,
-            latitude: deliveryAddressSnapshot.latitude,
-            longitude: deliveryAddressSnapshot.longitude,
-            delivery_notes: deliveryAddressSnapshot.deliveryNotes,
-          }
-        : null,
-      p_delivery_fee: deliveryFee,
-    })
-    .single<AtomicOrderInsertRow>()
+  // p_delivery_address_snapshot/p_delivery_fee are new, optional (Postgres-side defaulted)
+  // parameters on create_storefront_order_atomic. Only send them for an actual delivery order --
+  // omitting them for pickup keeps this call compatible with the pre-migration 10-parameter RPC
+  // signature, so pickup checkout (the only path that worked before this feature) can't be broken
+  // by this code deploying ahead of the order_delivery_address_snapshot migration.
+  const rpcParams: Record<string, unknown> = {
+    p_tenant_id: tenantResult.data.id,
+    p_branch_id: input.branchId,
+    p_customer_id: input.customerId ?? null,
+    p_fulfillment_type: input.fulfillmentType,
+    p_customer_name: input.customer.fullName.trim(),
+    p_customer_phone: input.customer.phone.trim(),
+    p_customer_email: input.customer.email.trim() || null,
+    p_customer_notes: input.customer.notes?.trim() || null,
+    p_subtotal: subtotal,
+    p_items: orderItemsPayload,
+  }
+
+  if (input.fulfillmentType === "delivery") {
+    rpcParams.p_delivery_address_snapshot = deliveryAddressSnapshot
+      ? {
+          label: deliveryAddressSnapshot.label,
+          address_line_1: deliveryAddressSnapshot.addressLine1,
+          address_line_2: deliveryAddressSnapshot.addressLine2,
+          city: deliveryAddressSnapshot.city,
+          state: deliveryAddressSnapshot.state,
+          postal_code: deliveryAddressSnapshot.postalCode,
+          country: deliveryAddressSnapshot.country,
+          latitude: deliveryAddressSnapshot.latitude,
+          longitude: deliveryAddressSnapshot.longitude,
+          delivery_notes: deliveryAddressSnapshot.deliveryNotes,
+        }
+      : null
+    rpcParams.p_delivery_fee = deliveryFee
+  }
+
+  const orderResult = await supabase.rpc("create_storefront_order_atomic", rpcParams).single<AtomicOrderInsertRow>()
 
   if (orderResult.error || !orderResult.data) {
     return { ok: false, error: orderResult.error?.message ?? "No pudimos crear la orden." }
@@ -1343,7 +1374,7 @@ export async function createStorefrontOrder(
 
   await writeAuditEvent(supabase, {
     tenantId: tenantResult.data.id,
-    branchId: branchResult.data.id,
+    branchId: branch.id,
     actor: input.auditActor ?? { profileId: null, membershipId: null, name: input.customer.fullName.trim() || null, role: null, surface: "storefront" },
     entityType: "order",
     entityId: orderResult.data.order_id,
@@ -1351,8 +1382,8 @@ export async function createStorefrontOrder(
     summary: `Se creó la ${getOrderAuditLabel(orderResult.data.order_number)} desde ${input.auditActor?.surface === "mobile_api" ? "mobile" : "storefront"}.`,
     afterData: {
       orderNumber: orderResult.data.order_number,
-      branchId: branchResult.data.id,
-      branchName: branchResult.data.name,
+      branchId: branch.id,
+      branchName: branch.name,
       status: "pending_payment",
       fulfillmentType: input.fulfillmentType,
       totalAmount: Number((subtotal + deliveryFee).toFixed(2)),
@@ -1364,7 +1395,7 @@ export async function createStorefrontOrder(
     metadata: {
       orderId: orderResult.data.order_id,
       orderNumber: orderResult.data.order_number,
-      branchName: branchResult.data.name,
+      branchName: branch.name,
       channel: input.auditActor?.surface === "mobile_api" ? "mobile_api" : "storefront",
     },
   })
