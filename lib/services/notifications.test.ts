@@ -164,6 +164,35 @@ describe("dispatchOrderNotification", () => {
     )
   })
 
+  it("persists the email error message in metadata when the send fails", async () => {
+    sendOrderNotificationEmail.mockRejectedValueOnce(new Error("The mail.ajedev.com domain is not verified"))
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    const { client, updateSpy } = createDispatchStub({})
+
+    await dispatchOrderNotification(client, baseInput)
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email_status: "failed",
+        metadata: expect.objectContaining({ emailError: "The mail.ajedev.com domain is not verified" }),
+      })
+    )
+  })
+
+  it("marks email skipped (not sent) when the sender only logged a console fallback", async () => {
+    sendOrderNotificationEmail.mockResolvedValueOnce({ deliveredBy: "console" })
+    const { client, updateSpy } = createDispatchStub({})
+
+    await dispatchOrderNotification(client, baseInput)
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email_status: "skipped",
+        metadata: expect.not.objectContaining({ emailError: expect.anything() }),
+      })
+    )
+  })
+
   it("never sends WhatsApp for a guest order (no customerId)", async () => {
     const { client } = createDispatchStub({})
 

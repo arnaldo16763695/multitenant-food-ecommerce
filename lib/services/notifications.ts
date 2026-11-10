@@ -91,7 +91,7 @@ export async function dispatchOrderNotification(
     }
     const orderUrl = `${getAppUrl()}/app/${tenantSlug}/orders/${input.orderId}`
 
-    const emailStatus = await deliverEmail(input, ctx, orderUrl)
+    const { status: emailStatus, error: emailError } = await deliverEmail(input, ctx, orderUrl)
     const { status: whatsappStatus, error: whatsappError } = await deliverWhatsapp(admin, input, ctx)
 
     if (rowId) {
@@ -103,6 +103,7 @@ export async function dispatchOrderNotification(
           metadata: {
             tenantSlug,
             orderNumber: input.orderNumber,
+            ...(emailError ? { emailError } : {}),
             ...(whatsappError ? { whatsappError } : {}),
           },
         })
@@ -117,15 +118,15 @@ async function deliverEmail(
   input: DispatchOrderNotificationInput,
   ctx: Parameters<typeof buildOrderNotificationEmailContent>[1],
   orderUrl: string
-): Promise<ChannelStatus> {
+): Promise<{ status: ChannelStatus; error?: string }> {
   if (!input.customerEmail) {
-    return "skipped"
+    return { status: "skipped" }
   }
 
   try {
     const content = buildOrderNotificationEmailContent(input.type, ctx)
 
-    await sendOrderNotificationEmail({
+    const result = await sendOrderNotificationEmail({
       email: input.customerEmail,
       customerName: input.customerName,
       subject: content.subject,
@@ -137,10 +138,13 @@ async function deliverEmail(
       fallbackTag: `order-notification-${input.type}`,
     })
 
-    return "sent"
+    // No Resend config -> the sender logged a console fallback and did not actually deliver.
+    return { status: result.deliveredBy === "resend" ? "sent" : "skipped" }
   } catch (error) {
     console.error("Notification dispatch: email send failed", error)
-    return "failed"
+    // Persisted in the delivery row's metadata so a provider rejection (e.g. an unverified
+    // sending domain) is diagnosable from the table without digging through runtime logs.
+    return { status: "failed", error: error instanceof Error ? error.message : String(error) }
   }
 }
 
