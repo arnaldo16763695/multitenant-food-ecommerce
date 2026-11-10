@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ImagePlus, LoaderCircle, Save, Trash2 } from "lucide-react"
+import { ImagePlus, LoaderCircle, MapPin, Save, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { updateBranchStorefrontHeroAction } from "@/app/app/[tenantSlug]/admin/branches/actions"
@@ -75,6 +75,7 @@ type AdminBranchStorefrontSettingsProps = {
 export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branches }: AdminBranchStorefrontSettingsProps) {
   const router = useRouter()
   const [selectedBranch, setSelectedBranch] = React.useState<BranchStorefrontItem | null>(null)
+  const [activeDialog, setActiveDialog] = React.useState<"hero" | "location" | null>(null)
   const [heroImageUrl, setHeroImageUrl] = React.useState("")
   const [addressLine1, setAddressLine1] = React.useState("")
   const [city, setCity] = React.useState("")
@@ -92,8 +93,9 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
   const [successMessage, setSuccessMessage] = React.useState("")
   const [isSaving, startSaving] = React.useTransition()
 
-  function openDialog(branch: BranchStorefrontItem) {
+  function openDialog(branch: BranchStorefrontItem, dialog: "hero" | "location") {
     setSelectedBranch(branch)
+    setActiveDialog(dialog)
     setHeroImageUrl(branch.heroImageUrl ?? "")
     setAddressLine1(branch.addressLine1 ?? "")
     setCity(branch.city ?? "")
@@ -113,6 +115,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
 
   function closeDialog() {
     setSelectedBranch(null)
+    setActiveDialog(null)
     setHeroImageUrl("")
     setAddressLine1("")
     setCity("")
@@ -152,10 +155,12 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
     setSuccessMessage("")
   }
 
-  function saveBranchHero() {
+  function saveBranchSettings() {
     if (!selectedBranch) {
       return
     }
+
+    const savedDialog = activeDialog
 
     setErrorMessage("")
     setSuccessMessage("")
@@ -212,7 +217,7 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
       setLongitude(longitude.trim())
       setHeroPreviewUrl(nextHeroImageUrl || null)
       setSelectedHeroFile(null)
-      setSuccessMessage("Configuracion de sucursal actualizada.")
+      setSuccessMessage(savedDialog === "location" ? "Ubicación y delivery actualizados." : "Hero actualizado.")
       router.refresh()
     })
   }
@@ -305,11 +310,15 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                 <div className="flex flex-col justify-between gap-3">
                   <BranchStorefrontLinkActions url={storefrontUrl} />
                   <div className="grid gap-2">
-                    <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch)} type="button" variant="outline">
+                    <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch, "hero")} type="button" variant="outline">
                       <ImagePlus />
                       Editar hero
                     </Button>
                     <AdminBranchScheduleEditor tenantSlug={tenantSlug} branch={branch} />
+                    <Button className="h-8 rounded-lg px-3 text-sm" onClick={() => openDialog(branch, "location")} type="button" variant="outline">
+                      <MapPin />
+                      Configurar ubicación
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -318,10 +327,10 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(selectedBranch)} onOpenChange={(nextOpen) => (!nextOpen ? closeDialog() : undefined)}>
+      <Dialog open={activeDialog === "hero" && Boolean(selectedBranch)} onOpenChange={(nextOpen) => (!nextOpen ? closeDialog() : undefined)}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto rounded-[1.25rem] p-6 sm:p-7">
           <DialogHeader>
-            <DialogTitle>Hero por sucursal</DialogTitle>
+            <DialogTitle>Hero de sucursal</DialogTitle>
             <DialogDescription>
               {selectedBranch
                 ? `Configura la portada pública de ${selectedBranch.name}. Si la dejas vacía, el storefront usará el hero general del tenant.`
@@ -352,75 +361,6 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                 <span className="font-medium text-card-foreground">Subir nueva imagen</span>
                 <Input accept="image/png,image/jpeg,image/webp" onChange={handleHeroFileChange} type="file" />
               </label>
-
-              <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
-                <p className="text-sm font-semibold text-foreground">Ubicacion para mobile</p>
-
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium text-card-foreground">Direccion</span>
-                  <Input value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} placeholder="Av. Principal 123" />
-                </label>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Ciudad</span>
-                    <Input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Monterrey" />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Estado</span>
-                    <Input value={state} onChange={(event) => setState(event.target.value)} placeholder="Nuevo Leon" />
-                  </label>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Codigo postal</span>
-                    <Input value={postalCode} onChange={(event) => setPostalCode(event.target.value)} placeholder="64000" />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Pais</span>
-                    <Input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} placeholder="MX" maxLength={2} />
-                  </label>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Latitud</span>
-                    <Input value={latitude} onChange={(event) => setLatitude(event.target.value)} placeholder="25.686614" inputMode="decimal" />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Longitud</span>
-                    <Input value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="-100.316113" inputMode="decimal" />
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={deliveryEnabled} onChange={(event) => setDeliveryEnabled(event.target.checked)} className="size-4 rounded border-input" />
-                  <span className="font-medium text-card-foreground">Delivery habilitado</span>
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Requiere que la sucursal tenga latitud y longitud configuradas arriba. Ningún pedido se acepta a domicilio hasta que actives esto.
-                </p>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Tarifa de delivery</span>
-                    <Input value={deliveryFee} onChange={(event) => setDeliveryFee(event.target.value)} placeholder="0" inputMode="decimal" />
-                  </label>
-                  <label className="grid gap-2 text-sm">
-                    <span className="font-medium text-card-foreground">Radio máximo de entrega (km)</span>
-                    <Input
-                      value={deliveryRadiusKm}
-                      onChange={(event) => setDeliveryRadiusKm(event.target.value)}
-                      placeholder="5"
-                      inputMode="decimal"
-                      disabled={!deliveryEnabled}
-                    />
-                  </label>
-                </div>
-              </div>
 
               {errorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
               {successMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
@@ -461,9 +401,104 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
           </div>
 
           <DialogFooter>
-            <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving} onClick={saveBranchHero} type="button">
+            <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving} onClick={saveBranchSettings} type="button">
               {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
               Guardar hero de sucursal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activeDialog === "location" && Boolean(selectedBranch)} onOpenChange={(nextOpen) => (!nextOpen ? closeDialog() : undefined)}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-[1.25rem] p-6 sm:p-7">
+          <DialogHeader>
+            <DialogTitle>Ubicación y delivery</DialogTitle>
+            <DialogDescription>
+              {selectedBranch
+                ? `Dirección, coordenadas GPS y delivery de ${selectedBranch.name}. Se usa para "sucursales cercanas" en mobile y para calcular el radio de delivery.`
+                : "Dirección, coordenadas GPS y delivery de esta sucursal."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
+              <p className="text-sm font-semibold text-foreground">Dirección y ubicación</p>
+
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium text-card-foreground">Direccion</span>
+                <Input value={addressLine1} onChange={(event) => setAddressLine1(event.target.value)} placeholder="Av. Principal 123" />
+              </label>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Ciudad</span>
+                  <Input value={city} onChange={(event) => setCity(event.target.value)} placeholder="Monterrey" />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Estado</span>
+                  <Input value={state} onChange={(event) => setState(event.target.value)} placeholder="Nuevo Leon" />
+                </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Codigo postal</span>
+                  <Input value={postalCode} onChange={(event) => setPostalCode(event.target.value)} placeholder="64000" />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Pais</span>
+                  <Input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} placeholder="MX" maxLength={2} />
+                </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Latitud</span>
+                  <Input value={latitude} onChange={(event) => setLatitude(event.target.value)} placeholder="25.686614" inputMode="decimal" />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Longitud</span>
+                  <Input value={longitude} onChange={(event) => setLongitude(event.target.value)} placeholder="-100.316113" inputMode="decimal" />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid gap-3 rounded-[1rem] border border-border bg-secondary/20 p-3">
+              <p className="text-sm font-semibold text-foreground">Delivery</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={deliveryEnabled} onChange={(event) => setDeliveryEnabled(event.target.checked)} className="size-4 rounded border-input" />
+                <span className="font-medium text-card-foreground">Delivery habilitado</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Requiere que la sucursal tenga latitud y longitud configuradas arriba. Ningún pedido se acepta a domicilio hasta que actives esto.
+              </p>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Tarifa de delivery</span>
+                  <Input value={deliveryFee} onChange={(event) => setDeliveryFee(event.target.value)} placeholder="0" inputMode="decimal" />
+                </label>
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-card-foreground">Radio máximo de entrega (km)</span>
+                  <Input
+                    value={deliveryRadiusKm}
+                    onChange={(event) => setDeliveryRadiusKm(event.target.value)}
+                    placeholder="5"
+                    inputMode="decimal"
+                    disabled={!deliveryEnabled}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {errorMessage ? <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+            {successMessage ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+          </div>
+
+          <DialogFooter>
+            <Button className="h-8 rounded-lg px-3 text-sm" disabled={isSaving} onClick={saveBranchSettings} type="button">
+              {isSaving ? <LoaderCircle className="animate-spin" /> : <Save />}
+              Guardar ubicación y delivery
             </Button>
           </DialogFooter>
         </DialogContent>
