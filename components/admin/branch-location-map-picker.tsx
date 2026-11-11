@@ -26,7 +26,7 @@ type GeocodeResult = {
 // map isn't just a blank ocean tile on first open.
 const DEFAULT_CENTER: readonly [number, number] = [19.4326, -99.1332]
 const DEFAULT_ZOOM = 5
-const PINNED_ZOOM = 15
+const PINNED_ZOOM = 17
 
 export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLocationSelected }: BranchLocationMapPickerProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -68,9 +68,14 @@ export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLoc
 
       const map = L.map(containerRef.current).setView(initialCenter, hasInitialCoordinates ? PINNED_ZOOM : DEFAULT_ZOOM)
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
+      // CartoDB Voyager (free, no API key) instead of the raw OSM tiles: it labels
+      // neighborhoods/zones and streets much more legibly, which is the whole point of this
+      // picker -- the raw OSM style left admins unable to tell where they actually were.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 20,
+        subdomains: "abcd",
       }).addTo(map)
 
       if (hasInitialCoordinates) {
@@ -214,7 +219,7 @@ export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLoc
         </div>
       ) : null}
 
-      <div ref={containerRef} className="h-64 w-full overflow-hidden rounded-[1rem] border border-border" />
+      <div ref={containerRef} className="h-96 w-full overflow-hidden rounded-[1rem] border border-border" />
       <p className="text-xs text-muted-foreground">Haz click en el mapa (o arrastra el marcador) para fijar la ubicación de la sucursal.</p>
     </div>
   )
