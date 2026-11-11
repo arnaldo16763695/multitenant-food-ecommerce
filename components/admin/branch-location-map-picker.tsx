@@ -26,7 +26,27 @@ type GeocodeResult = {
 // map isn't just a blank ocean tile on first open.
 const DEFAULT_CENTER: readonly [number, number] = [19.4326, -99.1332]
 const DEFAULT_ZOOM = 5
+const CURRENT_LOCATION_ZOOM = 13
 const PINNED_ZOOM = 17
+
+// Best-effort browser geolocation to center the map near the admin on first open, when the
+// branch has no coordinates yet. Never rejects -- unsupported, denied, or timed-out all just
+// fall back to the caller using DEFAULT_CENTER, same as the delivery address picker's browser
+// geolocation (see components/account/customer-address-form.tsx).
+function getCurrentBrowserPosition(): Promise<readonly [number, number] | null> {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve(null)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve([position.coords.latitude, position.coords.longitude]),
+      () => resolve(null),
+      { timeout: 5000, maximumAge: 60000 },
+    )
+  })
+}
 
 export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLocationSelected }: BranchLocationMapPickerProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -64,9 +84,30 @@ export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLoc
       })
 
       const hasInitialCoordinates = latitude != null && longitude != null
-      const initialCenter: [number, number] = hasInitialCoordinates ? [latitude, longitude] : [...DEFAULT_CENTER]
 
-      const map = L.map(containerRef.current).setView(initialCenter, hasInitialCoordinates ? PINNED_ZOOM : DEFAULT_ZOOM)
+      let initialCenter: [number, number]
+      let initialZoom: number
+
+      if (hasInitialCoordinates) {
+        initialCenter = [latitude, longitude]
+        initialZoom = PINNED_ZOOM
+      } else {
+        const currentPosition = await getCurrentBrowserPosition()
+
+        if (isCancelled || !containerRef.current) {
+          return
+        }
+
+        if (currentPosition) {
+          initialCenter = [...currentPosition]
+          initialZoom = CURRENT_LOCATION_ZOOM
+        } else {
+          initialCenter = [...DEFAULT_CENTER]
+          initialZoom = DEFAULT_ZOOM
+        }
+      }
+
+      const map = L.map(containerRef.current).setView(initialCenter, initialZoom)
 
       // CartoDB's free basemap tiles now require an API key (their "API KEY REQUIRED"
       // watermark showed up in production), so this stays on plain OpenStreetMap tiles --
