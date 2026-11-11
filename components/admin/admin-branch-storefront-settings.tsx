@@ -10,6 +10,7 @@ import type { BranchOrderingMode, BranchScheduleExceptionMode } from "@/lib/doma
 import { getCatalogMediaPathFromUrl } from "@/lib/supabase/storage"
 
 import { AdminBranchScheduleEditor } from "@/components/admin/admin-branch-schedule-editor"
+import { BranchLocationMapPicker } from "@/components/admin/branch-location-map-picker"
 import { BranchStorefrontLinkActions } from "@/components/admin/branch-storefront-link-actions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -450,6 +451,16 @@ export function AdminBranchStorefrontSettings({ tenantSlug, publicAppUrl, branch
                   <Input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase())} placeholder="MX" maxLength={2} />
                 </label>
               </div>
+
+              <BranchLocationMapPicker
+                tenantSlug={tenantSlug}
+                latitude={latitude.trim() ? Number(latitude) : null}
+                longitude={longitude.trim() ? Number(longitude) : null}
+                onLocationSelected={(nextLatitude, nextLongitude) => {
+                  setLatitude(nextLatitude.toFixed(6))
+                  setLongitude(nextLongitude.toFixed(6))
+                }}
+              />
 
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="grid gap-2 text-sm">
