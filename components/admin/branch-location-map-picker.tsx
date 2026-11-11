@@ -7,6 +7,8 @@ import { LoaderCircle, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
+import "leaflet/dist/leaflet.css"
+
 type BranchLocationMapPickerProps = {
   readonly tenantSlug: string
   readonly latitude: number | null
