@@ -68,14 +68,13 @@ export function BranchLocationMapPicker({ tenantSlug, latitude, longitude, onLoc
 
       const map = L.map(containerRef.current).setView(initialCenter, hasInitialCoordinates ? PINNED_ZOOM : DEFAULT_ZOOM)
 
-      // CartoDB Voyager (free, no API key) instead of the raw OSM tiles: it labels
-      // neighborhoods/zones and streets much more legibly, which is the whole point of this
-      // picker -- the raw OSM style left admins unable to tell where they actually were.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 20,
-        subdomains: "abcd",
+      // CartoDB's free basemap tiles now require an API key (their "API KEY REQUIRED"
+      // watermark showed up in production), so this stays on plain OpenStreetMap tiles --
+      // the one tile source that's reliably free with no key. The higher PINNED_ZOOM and
+      // taller map container compensate for its less detailed zone/neighborhood labeling.
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
       }).addTo(map)
 
       if (hasInitialCoordinates) {
